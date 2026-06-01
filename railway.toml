@@ -1,8 +1,6 @@
 [build]
 builder = "RAILPACK"
+buildCommand = "npm install && pip install -r requirements.txt && cd processor && npm install"
 
 [deploy]
 startCommand = "python3 bot/bot.py"
-
-[variables]
-RAILPACK_INSTALL_CMD = "npm install && pip install -r requirements.txt && cd processor && npm install"
