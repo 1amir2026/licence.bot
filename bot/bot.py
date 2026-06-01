@@ -42,7 +42,10 @@ def is_admin(user_id: int):
 async def start(message: types.Message):
     if is_admin(message.from_user.id):
         keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="🔑 ساخت لایسنس جدید")]],
+            keyboard=[
+                [KeyboardButton(text="🔑 ساخت لایسنس جدید")],
+                [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")]
+            ],
             resize_keyboard=True
         )
         await message.answer("👋 سلام ادمین!\n\nبرای ساخت لایسنس جدید دکمه زیر را بزن:", reply_markup=keyboard)
@@ -87,7 +90,10 @@ async def check_license(message: types.Message):
         session.commit()
 
         keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")]],
+            keyboard=[
+                [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
+                [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")]
+            ],
             resize_keyboard=True
         )
 
@@ -107,6 +113,15 @@ async def ask_for_pack(message: types.Message):
     await message.answer(
         "📤 لطفاً فایل ریسورس پک خود را ارسال کنید.\n"
         "فقط فرمت‌های .zip یا .mcpack قابل قبول هستند."
+    )
+
+
+# ---------------------- REQUEST 3D ITEM ----------------------
+@dp.message(F.text == "🧊 ساخت آیتم سه‌بعدی ماینکرافت")
+async def ask_for_texture(message: types.Message):
+    await message.answer(
+        "🎨 لطفاً تکسچر مربعی (PNG/JPG) را ارسال کنید.\n"
+        "مثلاً 256x256 یا 128x128."
     )
 
 
@@ -134,7 +149,7 @@ async def run_node_processor(input_path: str, output_path: str,
         )
 
 
-# ---------------------- FILE HANDLER ----------------------
+# ---------------------- FILE HANDLER (PACK) ----------------------
 @dp.message(F.document)
 async def handle_pack_file(message: types.Message):
     doc = message.document
@@ -169,6 +184,40 @@ async def handle_pack_file(message: types.Message):
     await message.answer_document(
         FSInputFile(output_path),
         caption="✅ پردازش انجام شد! این هم UI نهایی:"
+    )
+
+
+# ---------------------- HANDLE TEXTURE FOR 3D ITEM ----------------------
+@dp.message(F.photo)
+async def handle_texture(message: types.Message):
+    await message.answer("🔄 تکسچر دریافت شد. در حال ساخت مدل سه‌بعدی...")
+
+    photo = message.photo[-1]
+    file = await bot.get_file(photo.file_id)
+
+    texture_path = os.path.join(INPUT_DIR, "texture.png")
+    output_path = os.path.join(OUTPUT_DIR, "item.glb")
+
+    await bot.download_file(file.file_path, texture_path)
+
+    try:
+        await run_node_processor(
+            input_path=texture_path,
+            output_path=output_path,
+            xp_percent=0.0,
+            upscale_rate=1
+        )
+    except Exception as e:
+        await message.answer(f"❌ خطا در ساخت مدل سه‌بعدی:\n{e}")
+        return
+
+    if not os.path.exists(output_path):
+        await message.answer("❌ خروجی glb پیدا نشد.")
+        return
+
+    await message.answer_document(
+        FSInputFile(output_path),
+        caption="✅ مدل سه‌بعدی آماده شد!"
     )
 
 
