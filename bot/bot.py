@@ -223,6 +223,8 @@ async def run_item3d(input_path: str, output_path: str):
 @dp.message(F.document)
 async def handle_pack_file(message: types.Message):
 
+    print("PACK HANDLER")
+    
     if user_modes.get(message.from_user.id) != "resource_pack":
         return
 
