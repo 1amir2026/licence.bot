@@ -139,11 +139,35 @@ async def handle_minecraft_document(message: types.Message):
         await message.answer("❌ فقط فایل PNG قابل قبول است.")
         return
 
-    await message.answer(
-        "✅ فایل PNG دریافت شد.\n"
-        "در مرحله بعدی به OBJ و GLB تبدیل خواهد شد."
+    await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
+
+    input_path = os.path.join(INPUT_DIR, doc.file_name)
+
+    obj_name = os.path.splitext(doc.file_name)[0] + ".obj"
+    output_path = os.path.join(OUTPUT_DIR, obj_name)
+
+    await bot.download(doc, destination=input_path)
+
+    try:
+        await run_item3d(
+            input_path=input_path,
+            output_path=output_path
+        )
+
+    except Exception as e:
+        await message.answer(f"❌ خطا:\n{e}")
+        return
+
+    if not os.path.exists(output_path):
+        await message.answer("❌ فایل OBJ ساخته نشد.")
+        return
+
+    await message.answer_document(
+        FSInputFile(output_path),
+        caption="🧊 مدل سه‌بعدی آماده شد."
     )
 
+    user_modes.pop(message.from_user.id, None)
 # ---------------------- NODE PROCESSOR ----------------------
 async def run_node_processor(input_path: str, output_path: str,
                              xp_percent: float = 0.7, upscale_rate: int = 1):
