@@ -162,15 +162,19 @@ async def handle_minecraft_document(message: types.Message):
         await message.answer("❌ فایل OBJ ساخته نشد.")
         return
 
-zip_path = output_path.replace(".obj", ".zip")
+    zip_path = output_path.replace(".obj", ".zip")
 
-print("OBJ EXISTS:", os.path.exists(output_path))
-print("ZIP EXISTS:", os.path.exists(zip_path))
+    print("OBJ EXISTS:", os.path.exists(output_path))
+    print("ZIP EXISTS:", os.path.exists(zip_path))
 
-await message.answer_document(
-    FSInputFile(zip_path),
-    caption="🧊 مدل سه‌بعدی آماده شد."
-)
+    if not os.path.exists(zip_path):
+        await message.answer("❌ فایل ZIP ساخته نشد.")
+        return
+
+    await message.answer_document(
+        FSInputFile(zip_path),
+        caption="🧊 مدل سه‌بعدی آماده شد."
+    )
 
     user_modes.pop(message.from_user.id, None)
 # ---------------------- NODE PROCESSOR ----------------------
