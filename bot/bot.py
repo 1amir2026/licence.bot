@@ -19,6 +19,7 @@ user_modes = {}
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROCESSOR_DIR = os.path.join(BASE_DIR, "..", "processor")
 NODE_SCRIPT = os.path.join(PROCESSOR_DIR, "processor.mjs")
+ITEM3D_SCRIPT = os.path.join(PROCESSOR_DIR, "item3d.mjs")
 
 INPUT_DIR = os.path.join(PROCESSOR_DIR, "input")
 OUTPUT_DIR = os.path.join(PROCESSOR_DIR, "output")
