@@ -126,14 +126,20 @@ async def minecraft_3d(message: types.Message):
     )
 
 
-@dp.message(F.photo)
-async def handle_minecraft_photo(message: types.Message):
+@dp.message(F.document)
+async def handle_minecraft_document(message: types.Message):
 
     if user_modes.get(message.from_user.id) != "minecraft_3d":
         return
 
+    doc = message.document
+
+    if not doc.file_name.lower().endswith(".png"):
+        await message.answer("❌ فقط فایل PNG قابل قبول است.")
+        return
+
     await message.answer(
-        "✅ تصویر دریافت شد.\n"
+        "✅ فایل PNG دریافت شد.\n"
         "در مرحله بعدی به OBJ و GLB تبدیل خواهد شد."
     )
 
