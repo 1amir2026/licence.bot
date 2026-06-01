@@ -44,11 +44,12 @@ async def start(message: types.Message):
         keyboard = ReplyKeyboardMarkup(
             keyboard=[
                 [KeyboardButton(text="🔑 ساخت لایسنس جدید")],
+                [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
                 [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")]
             ],
             resize_keyboard=True
         )
-        await message.answer("👋 سلام ادمین!\n\nبرای ساخت لایسنس جدید دکمه زیر را بزن:", reply_markup=keyboard)
+        await message.answer("👋 سلام ادمین!", reply_markup=keyboard)
     else:
         await message.answer(
             "👋 سلام!\n\n"
@@ -69,7 +70,7 @@ async def create_license(message: types.Message):
     session.commit()
     session.close()
 
-    await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n`{key}`\n\nکپی کن و بفرست.")
+    await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n`{key}`")
 
 
 # ---------------------- USER: LICENSE CHECK ----------------------
@@ -97,10 +98,7 @@ async def check_license(message: types.Message):
             resize_keyboard=True
         )
 
-        await message.answer(
-            "✅ لایسنس فعال شد!\n\nبه پنل خوش آمدید 🎉",
-            reply_markup=keyboard
-        )
+        await message.answer("✅ لایسنس فعال شد!", reply_markup=keyboard)
     else:
         await message.answer("❌ لایسنس نامعتبر یا قبلاً استفاده شده.")
 
@@ -126,16 +124,18 @@ async def ask_for_texture(message: types.Message):
 
 
 # ---------------------- NODE PROCESSOR ----------------------
-async def run_node_processor(input_path: str, output_path: str,
-                             xp_percent: float = 0.7, upscale_rate: int = 1):
+async def run_node_processor(input_path: str, output_path: str, mode: str):
+    """
+    mode = "pack"  → پردازش پک
+    mode = "3d"    → ساخت مدل سه‌بعدی
+    """
 
     proc = await asyncio.create_subprocess_exec(
         "node",
         NODE_SCRIPT,
         input_path,
         output_path,
-        str(xp_percent),
-        str(upscale_rate),
+        mode,  # ← مود جدید
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=PROCESSOR_DIR
@@ -155,8 +155,7 @@ async def handle_pack_file(message: types.Message):
     doc = message.document
 
     if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcpack")):
-        await message.answer("❌ فقط فایل‌های ZIP یا MCPACK قابل قبول هستند.")
-        return
+        return  # این فایل برای 3D نیست
 
     await message.answer("🔄 فایل دریافت شد. در حال پردازش...")
 
@@ -167,23 +166,14 @@ async def handle_pack_file(message: types.Message):
     await bot.download(doc, destination=input_path)
 
     try:
-        await run_node_processor(
-            input_path=input_path,
-            output_path=output_path,
-            xp_percent=0.7,
-            upscale_rate=1
-        )
+        await run_node_processor(input_path, output_path, mode="pack")
     except Exception as e:
         await message.answer(f"❌ خطا در پردازش پک:\n{e}")
         return
 
-    if not os.path.exists(output_path):
-        await message.answer("❌ پردازش انجام نشد. خروجی پیدا نشد.")
-        return
-
     await message.answer_document(
         FSInputFile(output_path),
-        caption="✅ پردازش انجام شد! این هم UI نهایی:"
+        caption="✅ پردازش انجام شد!"
     )
 
 
@@ -201,18 +191,9 @@ async def handle_texture(message: types.Message):
     await bot.download_file(file.file_path, texture_path)
 
     try:
-        await run_node_processor(
-            input_path=texture_path,
-            output_path=output_path,
-            xp_percent=0.0,
-            upscale_rate=1
-        )
+        await run_node_processor(texture_path, output_path, mode="3d")
     except Exception as e:
         await message.answer(f"❌ خطا در ساخت مدل سه‌بعدی:\n{e}")
-        return
-
-    if not os.path.exists(output_path):
-        await message.answer("❌ خروجی glb پیدا نشد.")
         return
 
     await message.answer_document(
