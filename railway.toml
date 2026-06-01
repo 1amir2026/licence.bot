@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [phases.setup]
-nixPkgs = ["nodejs_20", "python311"]
+nixPkgs = ["nodejs_18", "python311"]
 
 [phases.install]
 cmds = [
@@ -12,4 +12,3 @@ cmds = [
 
 [start]
 cmd = "python3 bot/bot.py"
-
