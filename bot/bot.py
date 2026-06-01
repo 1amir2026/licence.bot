@@ -42,14 +42,10 @@ def is_admin(user_id: int):
 async def start(message: types.Message):
     if is_admin(message.from_user.id):
         keyboard = ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="🔑 ساخت لایسنس جدید")],
-                [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
-                [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")]
-            ],
+            keyboard=[[KeyboardButton(text="🔑 ساخت لایسنس جدید")]],
             resize_keyboard=True
         )
-        await message.answer("👋 سلام ادمین!", reply_markup=keyboard)
+        await message.answer("👋 سلام ادمین!\n\nبرای ساخت لایسنس جدید دکمه زیر را بزن:", reply_markup=keyboard)
     else:
         await message.answer(
             "👋 سلام!\n\n"
@@ -70,7 +66,7 @@ async def create_license(message: types.Message):
     session.commit()
     session.close()
 
-    await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n`{key}`")
+    await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n`{key}`\n\nکپی کن و بفرست.")
 
 
 # ---------------------- USER: LICENSE CHECK ----------------------
@@ -91,14 +87,14 @@ async def check_license(message: types.Message):
         session.commit()
 
         keyboard = ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
-                [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")]
-            ],
+            keyboard=[[KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")]],
             resize_keyboard=True
         )
 
-        await message.answer("✅ لایسنس فعال شد!", reply_markup=keyboard)
+        await message.answer(
+            "✅ لایسنس فعال شد!\n\nبه پنل خوش آمدید 🎉",
+            reply_markup=keyboard
+        )
     else:
         await message.answer("❌ لایسنس نامعتبر یا قبلاً استفاده شده.")
 
@@ -114,28 +110,17 @@ async def ask_for_pack(message: types.Message):
     )
 
 
-# ---------------------- REQUEST 3D ITEM ----------------------
-@dp.message(F.text == "🧊 ساخت آیتم سه‌بعدی ماینکرافت")
-async def ask_for_texture(message: types.Message):
-    await message.answer(
-        "🎨 لطفاً تکسچر مربعی (PNG/JPG) را ارسال کنید.\n"
-        "مثلاً 256x256 یا 128x128."
-    )
-
-
 # ---------------------- NODE PROCESSOR ----------------------
-async def run_node_processor(input_path: str, output_path: str, mode: str):
-    """
-    mode = "pack"  → پردازش پک
-    mode = "3d"    → ساخت مدل سه‌بعدی
-    """
+async def run_node_processor(input_path: str, output_path: str,
+                             xp_percent: float = 0.7, upscale_rate: int = 1):
 
     proc = await asyncio.create_subprocess_exec(
         "node",
         NODE_SCRIPT,
         input_path,
         output_path,
-        mode,  # ← مود جدید
+        str(xp_percent),
+        str(upscale_rate),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=PROCESSOR_DIR
@@ -149,13 +134,14 @@ async def run_node_processor(input_path: str, output_path: str, mode: str):
         )
 
 
-# ---------------------- FILE HANDLER (PACK) ----------------------
+# ---------------------- FILE HANDLER ----------------------
 @dp.message(F.document)
 async def handle_pack_file(message: types.Message):
     doc = message.document
 
     if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcpack")):
-        return  # این فایل برای 3D نیست
+        await message.answer("❌ فقط فایل‌های ZIP یا MCPACK قابل قبول هستند.")
+        return
 
     await message.answer("🔄 فایل دریافت شد. در حال پردازش...")
 
@@ -166,39 +152,23 @@ async def handle_pack_file(message: types.Message):
     await bot.download(doc, destination=input_path)
 
     try:
-        await run_node_processor(input_path, output_path, mode="pack")
+        await run_node_processor(
+            input_path=input_path,
+            output_path=output_path,
+            xp_percent=0.7,
+            upscale_rate=1
+        )
     except Exception as e:
         await message.answer(f"❌ خطا در پردازش پک:\n{e}")
         return
 
-    await message.answer_document(
-        FSInputFile(output_path),
-        caption="✅ پردازش انجام شد!"
-    )
-
-
-# ---------------------- HANDLE TEXTURE FOR 3D ITEM ----------------------
-@dp.message(F.photo)
-async def handle_texture(message: types.Message):
-    await message.answer("🔄 تکسچر دریافت شد. در حال ساخت مدل سه‌بعدی...")
-
-    photo = message.photo[-1]
-    file = await bot.get_file(photo.file_id)
-
-    texture_path = os.path.join(INPUT_DIR, "texture.png")
-    output_path = os.path.join(OUTPUT_DIR, "item.glb")
-
-    await bot.download_file(file.file_path, texture_path)
-
-    try:
-        await run_node_processor(texture_path, output_path, mode="3d")
-    except Exception as e:
-        await message.answer(f"❌ خطا در ساخت مدل سه‌بعدی:\n{e}")
+    if not os.path.exists(output_path):
+        await message.answer("❌ پردازش انجام نشد. خروجی پیدا نشد.")
         return
 
     await message.answer_document(
         FSInputFile(output_path),
-        caption="✅ مدل سه‌بعدی آماده شد!"
+        caption="✅ پردازش انجام شد! این هم UI نهایی:"
     )
 
 
