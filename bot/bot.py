@@ -167,7 +167,25 @@ async def run_node_processor(input_path: str, output_path: str,
             f"Node processor failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
         )
 
+async def run_item3d(input_path: str, output_path: str):
 
+    proc = await asyncio.create_subprocess_exec(
+        "node",
+        ITEM3D_SCRIPT,
+        input_path,
+        output_path,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=PROCESSOR_DIR
+    )
+
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"Item3D failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
+        )
+        
 # ---------------------- FILE HANDLER ----------------------
 @dp.message(F.document)
 async def handle_pack_file(message: types.Message):
