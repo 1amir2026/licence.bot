@@ -1,5 +1,7 @@
 import fs from "fs";
+import path from "path";
 import sharp from "sharp";
+import archiver from "archiver";
 
 const DEPTH = 0.2;
 const input = process.argv[2];
@@ -57,9 +59,54 @@ for (let y = 0; y < info.height; y++) {
   }
 }
 
+const baseName = path.basename(output, ".obj");
+
+const objContent =
+`mtllib ${baseName}.mtl
+usemtl Material
+
+` +
+vertices.join("\n") +
+"\n" +
+faces.join("\n");
+
+fs.writeFileSync(output, objContent);
+
+// ساخت MTL
+const mtlPath = output.replace(".obj", ".mtl");
+
 fs.writeFileSync(
-  output,
-  vertices.join("\n") + "\n" + faces.join("\n")
+  mtlPath,
+`newmtl Material
+Ka 1.000 1.000 1.000
+Kd 1.000 1.000 1.000
+Ks 0.000 0.000 0.000
+d 1.0
+illum 2
+map_Kd ${baseName}.png
+`
 );
 
-console.log("OBJ created:", output);
+// کپی PNG
+const pngOutput = output.replace(".obj", ".png");
+
+fs.copyFileSync(input, pngOutput);
+
+// ساخت ZIP
+const zipPath = output.replace(".obj", ".zip");
+
+const archive = archiver("zip", {
+  zlib: { level: 9 }
+});
+
+const stream = fs.createWriteStream(zipPath);
+
+archive.pipe(stream);
+
+archive.file(output, { name: `${baseName}.obj` });
+archive.file(mtlPath, { name: `${baseName}.mtl` });
+archive.file(pngOutput, { name: `${baseName}.png` });
+
+await archive.finalize();
+
+console.log("ZIP created:", zipPath);
