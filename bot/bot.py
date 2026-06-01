@@ -197,6 +197,7 @@ async def handle_pack_file(message: types.Message):
         await message.answer("❌ پردازش انجام نشد. خروجی پیدا نشد.")
         return
 
+    user_modes.pop(message.from_user.id, None)
     await message.answer_document(
         FSInputFile(output_path),
         caption="✅ پردازش انجام شد! این هم UI نهایی:"
