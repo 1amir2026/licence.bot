@@ -1,6 +1,10 @@
 [build]
 builder = "RAILPACK"
 
+[build.env]
+NODE_VERSION = "18"
+PYTHON_VERSION = "3.13"
+
 [deploy]
 startCommand = "python3 bot/bot.py"
 
