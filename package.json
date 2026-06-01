@@ -1,5 +1,12 @@
 {
-  "name": "gui-maker-bot",
+  "name": "licence-bot",
   "version": "1.0.0",
-  "private": true
+  "description": "Bot with processor",
+  "private": true,
+  "dependencies": {
+    "node-noop": "1.0.0"
+  },
+  "scripts": {
+    "postinstall": "cd processor && npm install"
+  }
 }
