@@ -1,11 +1,17 @@
 {
   "name": "cacti-ui-processor",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "main": "processor.mjs",
+  "scripts": {
+    "start": "node processor.mjs",
+    "item3d": "node item3d.mjs"
+  },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.51",
-    "sharp": "^0.33.0",
-    "unzipper": "^0.10.14"
+    "sharp": "^0.33.5",
+    "unzipper": "^0.10.14",
+    "three": "^0.179.1",
+    "three-stdlib": "^2.36.0"
   }
 }
