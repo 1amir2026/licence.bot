@@ -130,6 +130,8 @@ async def minecraft_3d(message: types.Message):
 @dp.message(F.document)
 async def handle_minecraft_document(message: types.Message):
 
+    print("MINECRAFT HANDLER")
+    
     if user_modes.get(message.from_user.id) != "minecraft_3d":
         return
 
