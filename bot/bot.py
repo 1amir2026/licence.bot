@@ -113,6 +113,27 @@ async def ask_for_pack(message: types.Message):
         "فقط فرمت‌های .zip یا .mcpack قابل قبول هستند."
     )
 
+# ---------------------- MINECRAFT 3D ITEM ----------------------
+@dp.message(F.text == "🧊 ساخت آیتم سه‌بعدی ماینکرافت")
+async def minecraft_3d(message: types.Message):
+    user_modes[message.from_user.id] = "minecraft_3d"
+
+    await message.answer(
+        "🧊 تصویر PNG آیتم را ارسال کنید.\n\n"
+        "در نسخه فعلی فقط دریافت فایل تست می‌شود."
+    )
+
+
+@dp.message(F.photo)
+async def handle_minecraft_photo(message: types.Message):
+
+    if user_modes.get(message.from_user.id) != "minecraft_3d":
+        return
+
+    await message.answer(
+        "✅ تصویر دریافت شد.\n"
+        "در مرحله بعدی به OBJ و GLB تبدیل خواهد شد."
+    )
 
 # ---------------------- NODE PROCESSOR ----------------------
 async def run_node_processor(input_path: str, output_path: str,
