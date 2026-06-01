@@ -3,7 +3,7 @@ import path from "path";
 import sharp from "sharp";
 import archiver from "archiver";
 
-const DEPTH = 0.2;
+const DEPTH = 1.5;
 const input = process.argv[2];
 const output = process.argv[3];
 
