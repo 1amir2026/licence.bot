@@ -13,6 +13,7 @@ from database import Session, License
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
+user_modes = {}
 
 # مسیرهای مربوط به پردازشگر Node
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
