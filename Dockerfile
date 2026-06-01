@@ -1,11 +1,23 @@
 FROM node:18-bullseye
 
-RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
+# نصب Python
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip python-is-python3 && \
+    apt-get clean
 
 WORKDIR /app
+
+# کپی کل پروژه
 COPY . .
 
-RUN pip3 install -r requirements.txt
+# نصب پکیج‌های Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# نصب پکیج‌های Node.js
 RUN cd processor && npm install
 
-CMD ["python3", "bot/bot.py"]
+# پورت Railway
+ENV PORT=3000
+
+# اجرای برنامه Node.js
+CMD ["node", "index.js"]
