@@ -108,6 +108,8 @@ async def check_license(message: types.Message):
 # ---------------------- REQUEST PACK ----------------------
 @dp.message(F.text == "📦 دریافت ریسورس پک ریلیز تکسچر")
 async def ask_for_pack(message: types.Message):
+    user_modes[message.from_user.id] = "resource_pack"
+
     await message.answer(
         "📤 لطفاً فایل ریسورس پک خود را ارسال کنید.\n"
         "فقط فرمت‌های .zip یا .mcpack قابل قبول هستند."
