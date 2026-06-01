@@ -1,7 +1,7 @@
 import fs from "fs";
 import sharp from "sharp";
 
-const DEPTH = 4;
+const DEPTH = 0.2;
 const input = process.argv[2];
 const output = process.argv[3];
 
