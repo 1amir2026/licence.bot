@@ -164,6 +164,10 @@ async def run_node_processor(input_path: str, output_path: str,
 # ---------------------- FILE HANDLER ----------------------
 @dp.message(F.document)
 async def handle_pack_file(message: types.Message):
+
+    if user_modes.get(message.from_user.id) != "resource_pack":
+        return
+
     doc = message.document
 
     if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcpack")):
