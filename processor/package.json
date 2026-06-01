@@ -8,6 +8,7 @@
     "item3d": "node item3d.mjs"
   },
   "dependencies": {
+    "three": "^0.179.1",
     "archiver": "^7.0.1",
     "@napi-rs/canvas": "^0.1.51",
     "sharp": "^0.33.5",
