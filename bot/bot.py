@@ -162,6 +162,7 @@ async def handle_minecraft_document(message: types.Message):
         await message.answer("❌ فایل OBJ ساخته نشد.")
         return
 
+    zip_path = output_path.replace(".obj", ".zip")
     await message.answer_document(
         FSInputFile(output_path),
         caption="🧊 مدل سه‌بعدی آماده شد."
