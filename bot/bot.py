@@ -178,11 +178,6 @@ async def run_item3d(input_path: str, output_path: str):
             f"Item3D failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
         )
 
-    stdout, stderr = await proc.communicate()
-
-    if proc.returncode != 0:
-        raise RuntimeError(stderr.decode())
-
     return output_path
     
     stdout, stderr = await proc.communicate()
@@ -300,7 +295,15 @@ async def handle_document(message: types.Message):
         await bot.download_file(doc.file_id, destination=input_path)
 
         try:
-            await run_item3d(input_path, output_path)
+await job_queue.put(Job(
+    user_id=message.from_user.id,
+    input_path=input_path,
+    output_path=output_path,
+    mode="minecraft_3d"
+))
+
+await message.answer("⏳ در صف پردازش قرار گرفت...")
+return
         except Exception as e:
             await message.answer(f"❌ خطا:\n{e}")
             return
