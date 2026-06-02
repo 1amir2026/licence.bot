@@ -218,36 +218,27 @@ async def worker():
 # ---------------------- FILE HANDLER ----------------------
 @dp.message(F.document)
 async def handle_document(message: types.Message):
-
     mode = user_modes.get(message.from_user.id)
-
     doc = message.document
 
-    if not doc:
+    if not doc or not mode:
         return
 
     # ---------------- RESOURCE PACK ----------------
     if mode == "resource_pack":
+        if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcpack")):
+            await message.answer("❌ فقط ZIP یا MCPACK")
+            return
 
-    if not (
-        doc.file_name.endswith(".zip")
-        or doc.file_name.endswith(".mcpack")
-    ):
-        await message.answer("❌ فقط ZIP یا MCPACK")
-        return
+        await message.answer("🔄 در حال پردازش...")
 
-    await message.answer("🔄 در حال پردازش...")
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
+        output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
+        output_path = os.path.join(OUTPUT_DIR, output_name)
 
-    input_path = os.path.join(INPUT_DIR, doc.file_name)
-
-    output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
-    output_path = os.path.join(OUTPUT_DIR, output_name)
-
+        # دانلود فایل
         file = await bot.get_file(doc.file_id)
-        await bot.download_file(
-            file.file_path,
-            destination=input_path
-        )
+        await bot.download_file(file.file_path, destination=input_path)
 
         try:
             await run_node_processor(
@@ -256,55 +247,49 @@ async def handle_document(message: types.Message):
                 xp_percent=0.7,
                 upscale_rate=1
             )
-    except Exception as e:
-        await message.answer(f"❌ خطا:\n{e}")
-        return
+        except Exception as e:
+            await message.answer(f"❌ خطا:\n{e}")
+            return
 
-    if not os.path.exists(output_path):
-        await message.answer("❌ خروجی پیدا نشد")
-        return
+        if not os.path.exists(output_path):
+            await message.answer("❌ خروجی پیدا نشد")
+            return
 
-    user_modes.pop(message.from_user.id, None)
+        user_modes.pop(message.from_user.id, None)
 
-    await message.answer_document(
-        FSInputFile(output_path),
-        caption="✅ انجام شد"
-    )
-    return
-
-
-# ---------------- MINECRAFT 3D ----------------
-elif mode == "minecraft_3d":
-
-    if not doc.file_name.lower().endswith(".png"):
-        await message.answer("❌ فقط PNG")
-        return
-
-    await message.answer("🔄 در حال ساخت 3D...")
-
-    input_path = os.path.join(INPUT_DIR, doc.file_name)
-
-    output_path = os.path.join(
-        OUTPUT_DIR,
-        os.path.splitext(doc.file_name)[0] + ".glb"
-    )
-
-         file = await bot.get_file(doc.file_id)
-        await bot.download_file(
-            file.file_path,
-            destination=input_path
+        await message.answer_document(
+            FSInputFile(output_path),
+            caption="✅ انجام شد"
         )
 
-    try:
-        await job_queue.put(Job(
-            user_id=message.from_user.id,
-            input_path=input_path,
-            output_path=output_path,
-            mode="minecraft_3d"
-        ))
-    except Exception as e:
-        await message.answer(f"❌ خطا:\n{e}")
-        return
+    # ---------------- MINECRAFT 3D ITEM ----------------
+    elif mode == "minecraft_3d":
+        if not doc.file_name.lower().endswith(".png"):
+            await message.answer("❌ فقط PNG")
+            return
+
+        await message.answer("🔄 در حال ساخت 3D...")
+
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
+        output_path = os.path.join(
+            OUTPUT_DIR,
+            os.path.splitext(doc.file_name)[0] + ".glb"
+        )
+
+        # دانلود فایل
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(file.file_path, destination=input_path)
+
+        try:
+            await job_queue.put(Job(
+                user_id=message.from_user.id,
+                input_path=input_path,
+                output_path=output_path,
+                mode="minecraft_3d"
+            ))
+        except Exception as e:
+            await message.answer(f"❌ خطا:\n{e}")
+            return
 # ---------------------- MAIN ----------------------
 async def main():
     global job_queue
