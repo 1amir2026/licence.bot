@@ -142,7 +142,7 @@ async def minecraft_3d(message: types.Message):
     input_path = os.path.join(INPUT_DIR, doc.file_name)
 
     obj_name = os.path.splitext(doc.file_name)[0] + ".obj"
-    output_path = os.path.join(OUTPUT_DIR, obj_name)
+    output_path = os.path.join(OUTPUT_DIR, glb_name)
 
     await bot.download(doc, destination=input_path)
 
@@ -325,10 +325,10 @@ async def handle_document(message: types.Message):
             doc.file_name
         )
 
-        obj_name = (
-            os.path.splitext(doc.file_name)[0]
-            + ".obj"
-        )
+glb_name = (
+    os.path.splitext(doc.file_name)[0]
+    + ".glb"
+)
 
         output_path = os.path.join(
             OUTPUT_DIR,
