@@ -183,23 +183,29 @@ async def run_item3d(input_path: str, output_path: str):
         )
  # ---------------------- Blender ----------------------    
 async def run_blender(input_path: str, output_path: str):
+    blender_script = os.path.join(PROCESSOR_DIR, "blender_item.py")
+    
     proc = await asyncio.create_subprocess_exec(
         "blender",
         "--background",
         "--python",
-        "processor/blender_item.py",   # مسیر درست
-        "--",                          # جداکننده آرگومان‌ها
+        blender_script,
+        "--",
         input_path,
         output_path,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        cwd=PROCESSOR_DIR
     )
 
     stdout, stderr = await proc.communicate()
 
     if proc.returncode != 0:
-        error_msg = stderr.decode() or stdout.decode()
-        raise RuntimeError(f"Blender failed: {error_msg}")
+        error = stderr.decode() if stderr else stdout.decode()
+        raise RuntimeError(f"Blender failed:\n{error}")
+    
+    if not os.path.exists(output_path):
+        raise RuntimeError("Blender did not generate output file")
     
     return output_path
 # ---------------------- worker ----------------------
