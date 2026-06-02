@@ -5,7 +5,7 @@ import archiver from "archiver";
 
 const input = process.argv[2];
 const output = process.argv[3];
-const DEPTH = 0.4; // ضخامت کمتر برای آیتم‌های ماینکرافت
+const DEPTH = 0.4;
 
 const { data, info } = await sharp(input)
   .ensureAlpha()
@@ -16,16 +16,11 @@ let vertices = [];
 let uvs = [];
 let faces = [];
 let vIndex = 1;
-let uvIndex = 1;
 
 function isSolid(x, y) {
   if (x < 0 || y < 0 || x >= info.width || y >= info.height) return false;
   const i = (y * info.width + x) * 4;
-  return data[i + 3] > 30; // کمی tolerance برای alpha
-}
-
-function addFace(v1, v2, v3, v4, uv1, uv2, uv3, uv4) {
-  faces.push(`f ${v1}/${uv1} ${v2}/${uv2} ${v3}/${uv3} ${v4}/${uv4}`);
+  return data[i + 3] > 30;
 }
 
 for (let y = 0; y < info.height; y++) {
@@ -33,43 +28,48 @@ for (let y = 0; y < info.height; y++) {
     if (!isSolid(x, y)) continue;
 
     const px = x;
-    const py = info.height - y;
+    const py = info.height - y - 1; // flip Y
     const pz0 = 0;
     const pz1 = DEPTH;
 
     const vBase = vIndex;
-    const uvBase = uvIndex;
 
-    // 8 vertex برای هر куб
-    vertices.push(`v ${px} ${py} ${pz0}`);
-    vertices.push(`v ${px + 1} ${py} ${pz0}`);
+    // Vertices
+    vertices.push(`v ${px}     ${py}     ${pz0}`);
+    vertices.push(`v ${px + 1} ${py}     ${pz0}`);
     vertices.push(`v ${px + 1} ${py + 1} ${pz0}`);
-    vertices.push(`v ${px} ${py + 1} ${pz0}`);
+    vertices.push(`v ${px}     ${py + 1} ${pz0}`);
 
-    vertices.push(`v ${px} ${py} ${pz1}`);
-    vertices.push(`v ${px + 1} ${py} ${pz1}`);
+    vertices.push(`v ${px}     ${py}     ${pz1}`);
+    vertices.push(`v ${px + 1} ${py}     ${pz1}`);
     vertices.push(`v ${px + 1} ${py + 1} ${pz1}`);
-    vertices.push(`v ${px} ${py + 1} ${pz1}`);
+    vertices.push(`v ${px}     ${py + 1} ${pz1}`);
 
-    // UVs (مشترک برای همه فیس‌ها)
-    uvs.push(`vt 0 0`);
-    uvs.push(`vt 1 0`);
-    uvs.push(`vt 1 1`);
-    uvs.push(`vt 0 1`);
-    uvIndex += 4;
+    // UV برای این پیکسل خاص
+    const u1 = x / info.width;
+    const u2 = (x + 1) / info.width;
+    const v1 = (info.height - y - 1) / info.height;
+    const v2 = (info.height - y) / info.height;
 
-    // Faces با UV یکسان
-    const u1 = uvBase, u2 = uvBase+1, u3 = uvBase+2, u4 = uvBase+3;
+    uvs.push(`vt ${u1} ${v1}`);
+    uvs.push(`vt ${u2} ${v1}`);
+    uvs.push(`vt ${u2} ${v2}`);
+    uvs.push(`vt ${u1} ${v2}`);
 
-    // Front, Back, Left, Right, Top, Bottom
-    addFace(vBase, vBase+1, vBase+2, vBase+3, u1, u2, u3, u4);     // bottom
-    addFace(vBase+4, vBase+5, vBase+6, vBase+7, u1, u2, u3, u4);   // top
+    const uvBase = uvs.length - 3; // 4 uvs added
 
-    // فقط فیس‌هایی که همسایه خالی دارند
-    if (!isSolid(x-1, y)) addFace(vBase, vBase+4, vBase+7, vBase+3, u1, u1, u4, u4);
-    if (!isSolid(x+1, y)) addFace(vBase+1, vBase+2, vBase+6, vBase+5, u2, u3, u3, u2);
-    if (!isSolid(x, y-1)) addFace(vBase+3, vBase+2, vBase+6, vBase+7, u4, u3, u3, u4);
-    if (!isSolid(x, y+1)) addFace(vBase, vBase+1, vBase+5, vBase+4, u1, u2, u2, u1);
+    // Helper for faces
+    const f = (a,b,c,d, uva,uvb,uvc,uvd) => 
+      `f ${vBase+a}/${uvBase+uva} ${vBase+b}/${uvBase+uvb} ${vBase+c}/${uvBase+uvc} ${vBase+d}/${uvBase+uvd}`;
+
+    // Faces
+    faces.push(f(0,1,2,3, 0,1,2,3));     // bottom
+    faces.push(f(4,5,6,7, 0,1,2,3));     // top
+
+    if (!isSolid(x-1, y))   faces.push(f(0,4,7,3, 0,0,3,3));   // left
+    if (!isSolid(x+1, y))   faces.push(f(1,2,6,5, 1,2,2,1));   // right
+    if (!isSolid(x, y-1))   faces.push(f(3,2,6,7, 3,2,2,3));   // back
+    if (!isSolid(x, y+1))   faces.push(f(0,1,5,4, 0,1,1,0));   // front
 
     vIndex += 8;
   }
@@ -99,7 +99,7 @@ map_Kd ${baseName}.png
 
 fs.copyFileSync(input, output.replace(".obj", ".png"));
 
-// ZIP
+// Create ZIP
 const zipPath = output.replace(".obj", ".zip");
 const archive = archiver("zip", { zlib: { level: 9 } });
 const stream = fs.createWriteStream(zipPath);
@@ -111,4 +111,4 @@ archive.file(output.replace(".obj", ".png"), { name: `${baseName}.png` });
 
 await archive.finalize();
 
-console.log(`✅ Done: ${info.width}x${info.height} pixels → ${zipPath}`);
+console.log(`✅ Exported: ${info.width}x${info.height} → ${zipPath}`);
