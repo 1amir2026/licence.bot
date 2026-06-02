@@ -160,6 +160,27 @@ async def run_item3d(input_path: str, output_path: str):
         cwd=PROCESSOR_DIR
     )
 
+    async def run_blender(input_path: str, output_path: str):
+
+    proc = await asyncio.create_subprocess_exec(
+        "blender",
+        "--background",
+        "--python",
+        "processor/blender_item.py",
+        "--",
+        input_path,
+        output_path,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(stderr.decode())
+
+    return output_path
+    
     stdout, stderr = await proc.communicate()
 
     if proc.returncode != 0:
