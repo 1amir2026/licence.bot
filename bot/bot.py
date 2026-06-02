@@ -3,6 +3,8 @@ import os
 import random
 import string
 from datetime import datetime
+from asyncio import Queue
+import uuid
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -14,6 +16,8 @@ from database import Session, License
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 user_modes = {}
+
+job_queue = Queue()
 
 # مسیرهای مربوط به پردازشگر Node
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,6 +43,13 @@ def is_admin(user_id: int):
     return user_id == ADMIN_ID
 
 
+class Job:
+    def __init__(self, user_id, input_path, output_path, mode):
+        self.user_id = user_id
+        self.input_path = input_path
+        self.output_path = output_path
+        self.mode = mode
+        
 # ---------------------- START ----------------------
 @dp.message(Command("start"))
 async def start(message: types.Message):
@@ -201,7 +212,21 @@ async def run_blender(input_path: str, output_path: str):
         raise RuntimeError(stderr.decode())
 
     return output_path
-    
+
+# ---------------------- worker ----------------------
+async def worker():
+    while True:
+        job = await job_queue.get()
+
+        try:
+            if job.mode == "minecraft_3d":
+                await run_blender(job.input_path, job.output_path)
+
+        except Exception as e:
+            print("JOB ERROR:", e)
+
+        job_queue.task_done()
+        
 # ---------------------- FILE HANDLER ----------------------
 @dp.message(F.document)
 async def handle_document(message: types.Message):
@@ -293,7 +318,10 @@ async def handle_document(message: types.Message):
         return
 # ---------------------- MAIN ----------------------
 async def main():
-    print("🚀 بات شروع شد...")
+    print("🚀 Bot started")
+
+    asyncio.create_task(worker())  # 👈 این خیلی مهمه
+
     await dp.start_polling(bot)
 
 
