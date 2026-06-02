@@ -6,112 +6,145 @@ import archiver from "archiver";
 const input = process.argv[2];
 const output = process.argv[3];
 
-const DEPTH = 0.8; // ضخامت
+const DEPTH = 1.0;
+const ALPHA_THRESHOLD = 40;
 
-// خواندن تصویر
 const { data, info } = await sharp(input)
   .ensureAlpha()
   .raw()
   .toBuffer({ resolveWithObject: true });
 
-let vertices = [];
-let uvs = [];
-let faces = [];
-let vIndex = 1;
-let uvIndex = 1;
-
 function isSolid(x, y) {
-  if (x < 0 || y < 0 || x >= info.width || y >= info.height) return false;
+  if (x < 0 || y < 0 || x >= info.width || y >= info.height)
+    return false;
+
   const i = (y * info.width + x) * 4;
-  return data[i + 3] > 40;
+  return data[i + 3] > ALPHA_THRESHOLD;
 }
 
-function addFace(v1, v2, v3, v4, uv1, uv2, uv3, uv4) {
-  faces.push(`f ${v1}/${uv1} ${v2}/${uv2} ${v3}/${uv3} ${uv4}/${uv4}`);
+const vertices = [];
+const uvs = [];
+const faces = [];
+
+let vertexIndex = 1;
+let uvIndex = 1;
+
+function addVertex(x, y, z) {
+  vertices.push(`v ${x} ${y} ${z}`);
+}
+
+function addUV(u, v) {
+  uvs.push(`vt ${u} ${v}`);
+}
+
+function quadToTriangles(v1,v2,v3,v4, t1,t2,t3,t4) {
+
+  faces.push(
+    `f ${v1}/${t1} ${v2}/${t2} ${v3}/${t3}`
+  );
+
+  faces.push(
+    `f ${v1}/${t1} ${v3}/${t3} ${v4}/${t4}`
+  );
 }
 
 for (let y = 0; y < info.height; y++) {
+
   for (let x = 0; x < info.width; x++) {
-    if (!isSolid(x, y)) continue;
+
+    if (!isSolid(x, y))
+      continue;
 
     const px = x;
     const py = info.height - y - 1;
-    const pz0 = -DEPTH / 2;
-    const pz1 = DEPTH / 2;
 
-    const v0 = vIndex;
+    const z0 = -DEPTH / 2;
+    const z1 = DEPTH / 2;
 
-    // 8 vertex
-    vertices.push(`v ${px} ${py} ${pz0}`);
-    vertices.push(`v ${px+1} ${py} ${pz0}`);
-    vertices.push(`v ${px+1} ${py+1} ${pz0}`);
-    vertices.push(`v ${px} ${py+1} ${pz0}`);
+    const vb = vertexIndex;
+    const tb = uvIndex;
 
-    vertices.push(`v ${px} ${py} ${pz1}`);
-    vertices.push(`v ${px+1} ${py} ${pz1}`);
-    vertices.push(`v ${px+1} ${py+1} ${pz1}`);
-    vertices.push(`v ${px} ${py+1} ${pz1}`);
+    addVertex(px,     py,     z0); //0
+    addVertex(px + 1, py,     z0); //1
+    addVertex(px + 1, py + 1, z0); //2
+    addVertex(px,     py + 1, z0); //3
 
-    vIndex += 8;
+    addVertex(px,     py,     z1); //4
+    addVertex(px + 1, py,     z1); //5
+    addVertex(px + 1, py + 1, z1); //6
+    addVertex(px,     py + 1, z1); //7
 
-    // UV مخصوص top/bottom
     const u1 = x / info.width;
     const u2 = (x + 1) / info.width;
+
     const v1 = (info.height - y - 1) / info.height;
     const v2 = (info.height - y) / info.height;
 
-    const uv0 = uvIndex;
-    uvs.push(`vt ${u1} ${v1}`);
-    uvs.push(`vt ${u2} ${v1}`);
-    uvs.push(`vt ${u2} ${v2}`);
-    uvs.push(`vt ${u1} ${v2}`);
-    uvIndex += 4;
+    addUV(u1, v1);
+    addUV(u2, v1);
+    addUV(u2, v2);
+    addUV(u1, v2);
 
-    // top
-    faces.push(`f ${v0+4}/${uv0} ${v0+5}/${uv0+1} ${v0+6}/${uv0+2} ${v0+7}/${uv0+3}`);
+    quadToTriangles(
+      vb+4, vb+5, vb+6, vb+7,
+      tb, tb+1, tb+2, tb+3
+    );
 
-    // bottom
-    faces.push(`f ${v0+0}/${uv0} ${v0+1}/${uv0+1} ${v0+2}/${uv0+2} ${v0+3}/${uv0+3}`);
+    quadToTriangles(
+      vb+0, vb+3, vb+2, vb+1,
+      tb, tb+3, tb+2, tb+1
+    );
 
-    // side faces (UV مستقل)
-    function side(uvi, a,b,c,d) {
-      const u = uvi;
-      uvs.push(`vt 0 0`);
-      uvs.push(`vt 1 0`);
-      uvs.push(`vt 1 1`);
-      uvs.push(`vt 0 1`);
-      faces.push(`f ${a}/${u} ${b}/${u+1} ${c}/${u+2} ${d}/${u+3}`);
-      return u + 4;
+    if (!isSolid(x - 1, y)) {
+      quadToTriangles(
+        vb+0, vb+4, vb+7, vb+3,
+        tb, tb, tb+3, tb+3
+      );
     }
 
-    // left
-    if (!isSolid(x-1, y)) uvIndex = side(uvIndex, v0+0, v0+4, v0+7, v0+3);
+    if (!isSolid(x + 1, y)) {
+      quadToTriangles(
+        vb+1, vb+2, vb+6, vb+5,
+        tb+1, tb+2, tb+2, tb+1
+      );
+    }
 
-    // right
-    if (!isSolid(x+1, y)) uvIndex = side(uvIndex, v0+1, v0+2, v0+6, v0+5);
+    if (!isSolid(x, y - 1)) {
+      quadToTriangles(
+        vb+3, vb+7, vb+6, vb+2,
+        tb+3, tb+3, tb+2, tb+2
+      );
+    }
 
-    // down
-    if (!isSolid(x, y-1)) uvIndex = side(uvIndex, v0+3, v0+2, v0+6, v0+7);
+    if (!isSolid(x, y + 1)) {
+      quadToTriangles(
+        vb+0, vb+1, vb+5, vb+4,
+        tb, tb+1, tb+1, tb
+      );
+    }
 
-    // up
-    if (!isSolid(x, y+1)) uvIndex = side(uvIndex, v0+0, v0+1, v0+5, v0+4);
+    vertexIndex += 8;
+    uvIndex += 4;
   }
 }
 
 const baseName = path.basename(output, ".obj");
 
-// OBJ
-const objContent = `mtllib ${baseName}.mtl
+const objContent =
+`mtllib ${baseName}.mtl
 usemtl Material
 
 ${vertices.join("\n")}
+
 ${uvs.join("\n")}
-${faces.join("\n")}`;
+
+${faces.join("\n")}
+`;
 
 fs.writeFileSync(output, objContent);
 
-// MTL
-fs.writeFileSync(output.replace(".obj", ".mtl"), 
+fs.writeFileSync(
+  output.replace(".obj", ".mtl"),
 `newmtl Material
 Ka 1 1 1
 Kd 1 1 1
@@ -119,21 +152,40 @@ Ks 0 0 0
 d 1
 illum 2
 map_Kd ${baseName}.png
-`);
+`
+);
 
-// PNG
-fs.copyFileSync(input, output.replace(".obj", ".png"));
+fs.copyFileSync(
+  input,
+  output.replace(".obj", ".png")
+);
 
-// ZIP
 const zipPath = output.replace(".obj", ".zip");
-const archive = archiver("zip", { zlib: { level: 9 } });
+
+const archive = archiver("zip", {
+  zlib: { level: 9 }
+});
+
 const stream = fs.createWriteStream(zipPath);
+
 archive.pipe(stream);
 
-archive.file(output, { name: `${baseName}.obj` });
-archive.file(output.replace(".obj", ".mtl"), { name: `${baseName}.mtl` });
-archive.file(output.replace(".obj", ".png"), { name: `${baseName}.png` });
+archive.file(output, {
+  name: `${baseName}.obj`
+});
+
+archive.file(
+  output.replace(".obj", ".mtl"),
+  { name: `${baseName}.mtl` }
+);
+
+archive.file(
+  output.replace(".obj", ".png"),
+  { name: `${baseName}.png` }
+);
 
 await archive.finalize();
 
-console.log("✅ Exported (Watertight, No Gaps)");
+console.log(
+  `✅ Exported (${info.width}x${info.height})`
+);
