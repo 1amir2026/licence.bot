@@ -16,6 +16,11 @@ print(f"Processing: {input_png} → {output_glb}")
 # پاک کردن صحنه
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
+# Load MCPrep addon
+mcprep_addon_path = os.path.join(os.path.dirname(__file__), "..", "MCprep_addon")
+if os.path.exists(mcprep_addon_path):
+    bpy.ops.preferences.addon_enable(module="MCprep_addon")  # یا نام دقیق addon
+    
 # Import MCPrep logic (if available)
 mcprep_path = os.path.join(os.path.dirname(__file__), "mcprep")
 if os.path.exists(mcprep_path):
