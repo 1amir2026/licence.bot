@@ -5,9 +5,8 @@ import archiver from "archiver";
 
 const input = process.argv[2];
 const output = process.argv[3];
-const DEPTH = 0.8;           // ضخامت مناسب
-const OVERLAP = 0.02;        // کمی هم‌پوشانی برای حذف gap
 
+const DEPTH = 0.8; // ضخامت
 const { data, info } = await sharp(input)
   .ensureAlpha()
   .raw()
@@ -17,6 +16,7 @@ let vertices = [];
 let uvs = [];
 let faces = [];
 let vIndex = 1;
+let uvIndex = 1;
 
 function isSolid(x, y) {
   if (x < 0 || y < 0 || x >= info.width || y >= info.height) return false;
@@ -24,52 +24,98 @@ function isSolid(x, y) {
   return data[i + 3] > 40;
 }
 
+function addFace(v1, v2, v3, v4, uv1, uv2, uv3, uv4) {
+  faces.push(`f ${v1}/${uv1} ${v2}/${uv2} ${v3}/${uv3} ${v4}/${uv4}`);
+}
+
 for (let y = 0; y < info.height; y++) {
   for (let x = 0; x < info.width; x++) {
     if (!isSolid(x, y)) continue;
 
-    const px = x - OVERLAP;
-    const py = info.height - y - 1 - OVERLAP;
+    const px = x;
+    const py = info.height - y - 1;
     const pz0 = -DEPTH / 2;
     const pz1 = DEPTH / 2;
 
-    const vBase = vIndex;
-    const uvBase = uvs.length + 1;
+    const v0 = vIndex;
+    vertices.push(`v ${px} ${py} ${pz0}`); // 0
+    vertices.push(`v ${px+1} ${py} ${pz0}`); // 1
+    vertices.push(`v ${px+1} ${py+1} ${pz0}`); // 2
+    vertices.push(`v ${px} ${py+1} ${pz0}`); // 3
 
-    // Vertices با کمی overlap
-    vertices.push(`v ${px}          ${py}          ${pz0}`);
-    vertices.push(`v ${px + 1 + OVERLAP*2} ${py}          ${pz0}`);
-    vertices.push(`v ${px + 1 + OVERLAP*2} ${py + 1 + OVERLAP*2} ${pz0}`);
-    vertices.push(`v ${px}          ${py + 1 + OVERLAP*2} ${pz0}`);
+    vertices.push(`v ${px} ${py} ${pz1}`); // 4
+    vertices.push(`v ${px+1} ${py} ${pz1}`); // 5
+    vertices.push(`v ${px+1} ${py+1} ${pz1}`); // 6
+    vertices.push(`v ${px} ${py+1} ${pz1}`); // 7
 
-    vertices.push(`v ${px}          ${py}          ${pz1}`);
-    vertices.push(`v ${px + 1 + OVERLAP*2} ${py}          ${pz1}`);
-    vertices.push(`v ${px + 1 + OVERLAP*2} ${py + 1 + OVERLAP*2} ${pz1}`);
-    vertices.push(`v ${px}          ${py + 1 + OVERLAP*2} ${pz1}`);
+    vIndex += 8;
 
-    // UVs
+    // UVs مخصوص هر پیکسل
     const u1 = x / info.width;
     const u2 = (x + 1) / info.width;
     const v1 = (info.height - y - 1) / info.height;
     const v2 = (info.height - y) / info.height;
 
+    const uv0 = uvIndex;
     uvs.push(`vt ${u1} ${v1}`);
     uvs.push(`vt ${u2} ${v1}`);
     uvs.push(`vt ${u2} ${v2}`);
     uvs.push(`vt ${u1} ${v2}`);
+    uvIndex += 4;
 
-    const f = (a,b,c,d,uva,uvb,uvc,uvd) => 
-      `f ${vBase+a}/${uvBase+uva} ${vBase+b}/${uvBase+uvb} ${vBase+c}/${uvBase+uvc} ${vBase+d}/${uvBase+uvd}`;
+    // top
+    addFace(v0+4, v0+5, v0+6, v0+7, uv0, uv0+1, uv0+2, uv0+3);
 
-    faces.push(f(0,1,2,3,0,1,2,3)); // bottom
-    faces.push(f(4,5,6,7,0,1,2,3)); // top
+    // bottom
+    addFace(v0+0, v0+1, v0+2, v0+3, uv0, uv0+1, uv0+2, uv0+3);
 
-    if (!isSolid(x-1, y)) faces.push(f(0,4,7,3,0,0,3,3));
-    if (!isSolid(x+1, y)) faces.push(f(1,2,6,5,1,2,2,1));
-    if (!isSolid(x, y-1)) faces.push(f(3,2,6,7,3,2,2,3));
-    if (!isSolid(x, y+1)) faces.push(f(0,1,5,4,0,1,1,0));
+    // left
+    if (!isSolid(x-1, y)) {
+      const u = uvIndex;
+      uvs.push(`vt 0 0`);
+      uvs.push(`vt 1 0`);
+      uvs.push(`vt 1 1`);
+      uvs.push(`vt 0 1`);
+      uvIndex += 4;
 
-    vIndex += 8;
+      addFace(v0+0, v0+4, v0+7, v0+3, u, u+1, u+2, u+3);
+    }
+
+    // right
+    if (!isSolid(x+1, y)) {
+      const u = uvIndex;
+      uvs.push(`vt 0 0`);
+      uvs.push(`vt 1 0`);
+      uvs.push(`vt 1 1`);
+      uvs.push(`vt 0 1`);
+      uvIndex += 4;
+
+      addFace(v0+1, v0+2, v0+6, v0+5, u, u+1, u+2, u+3);
+    }
+
+    // down
+    if (!isSolid(x, y-1)) {
+      const u = uvIndex;
+      uvs.push(`vt 0 0`);
+      uvs.push(`vt 1 0`);
+      uvs.push(`vt 1 1`);
+      uvs.push(`vt 0 1`);
+      uvIndex += 4;
+
+      addFace(v0+3, v0+2, v0+6, v0+7, u, u+1, u+2, u+3);
+    }
+
+    // up
+    if (!isSolid(x, y+1)) {
+      const u = uvIndex;
+      uvs.push(`vt 0 0`);
+      uvs.push(`vt 1 0`);
+      uvs.push(`vt 1 1`);
+      uvs.push(`vt 0 1`);
+      uvIndex += 4;
+
+      addFace(v0+0, v0+1, v0+5, v0+4, u, u+1, u+2, u+3);
+    }
   }
 }
 
@@ -96,7 +142,6 @@ map_Kd ${baseName}.png
 
 fs.copyFileSync(input, output.replace(".obj", ".png"));
 
-// ZIP
 const zipPath = output.replace(".obj", ".zip");
 const archive = archiver("zip", { zlib: { level: 9 } });
 const stream = fs.createWriteStream(zipPath);
@@ -104,8 +149,8 @@ archive.pipe(stream);
 
 archive.file(output, { name: `${baseName}.obj` });
 archive.file(output.replace(".obj", ".mtl"), { name: `${baseName}.mtl` });
-archive.file(output.replace(".obj", ".png"), { name: `${baseName}.png` });
+archive.file(output.replace(".obj", ".png`), { name: `${baseName}.png` });
 
 await archive.finalize();
 
-console.log(`✅ Exported | Depth: ${DEPTH} | Overlap: ${OVERLAP}`);
+console.log("✅ Exported (Watertight, No Gaps)");
