@@ -125,39 +125,6 @@ async def minecraft_3d(message: types.Message):
     await message.answer(
         "🧊 فایل PNG آیتم را ارسال کنید."
     )
-
-        await message.answer("❌ فقط فایل PNG قابل قبول است.")
-        return
-
-    await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
-
-    input_path = os.path.join(INPUT_DIR, doc.file_name)
-
-    glb_name = os.path.splitext(doc.file_name)[0] + ".glb"
-    output_path = os.path.join(OUTPUT_DIR, glb_name)
-
-    await bot.download(doc, destination=input_path)
-
-    try:
-        await run_item3d(
-            input_path=input_path,
-            output_path=output_path
-        )
-
-    except Exception as e:
-        await message.answer(f"❌ خطا:\n{e}")
-        return
-
-    if not os.path.exists(output_path):
-        await message.answer("❌ فایل glb ساخته نشد.")
-        return
-
-await message.answer_document(
-    FSInputFile(output_path),
-    caption="🧊 فایل GLB آماده شد."
-)
-
-    user_modes.pop(message.from_user.id, None)
 # ---------------------- NODE PROCESSOR ----------------------
 async def run_node_processor(input_path: str, output_path: str,
                              xp_percent: float = 0.7, upscale_rate: int = 1):
@@ -292,54 +259,30 @@ elif mode == "minecraft_3d":
         return
 
     if not doc.file_name.lower().endswith(".png"):
-        await message.answer(
-            "❌ فقط فایل PNG قابل قبول است."
-        )
+        await message.answer("❌ فقط فایل PNG قابل قبول است.")
         return
 
-    await message.answer(
-        "🔄 در حال ساخت مدل سه‌بعدی..."
-    )
+    await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
 
-    input_path = os.path.join(
-        INPUT_DIR,
-        doc.file_name
-    )
+    input_path = os.path.join(INPUT_DIR, doc.file_name)
 
-    glb_name = (
-        os.path.splitext(doc.file_name)[0]
-        + ".glb"
-    )
+    glb_name = os.path.splitext(doc.file_name)[0] + ".glb"
+    output_path = os.path.join(OUTPUT_DIR, glb_name)
 
-    output_path = os.path.join(
-        OUTPUT_DIR,
-        glb_name
-    )
-
-    await bot.download(
-        doc,
-        destination=input_path
-    )
+    await bot.download(doc, destination=input_path)
 
     try:
-
         await run_item3d(
             input_path=input_path,
             output_path=output_path
         )
 
     except Exception as e:
-
-        await message.answer(
-            f"❌ خطا:\n{e}"
-        )
+        await message.answer(f"❌ خطا:\n{e}")
         return
 
     if not os.path.exists(output_path):
-
-        await message.answer(
-            "❌ فایل GLB ساخته نشد."
-        )
+        await message.answer("❌ فایل GLB ساخته نشد.")
         return
 
     await message.answer_document(
@@ -347,13 +290,8 @@ elif mode == "minecraft_3d":
         caption="🧊 فایل GLB آماده شد."
     )
 
-    user_modes.pop(
-        message.from_user.id,
-        None
-    )
-
+    user_modes.pop(message.from_user.id, None)
     return
-
 # ---------------------- MAIN ----------------------
 async def main():
     print("🚀 بات شروع شد...")
