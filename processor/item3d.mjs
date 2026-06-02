@@ -26,6 +26,70 @@ function isSolid(x, y) {
     return false;
   }
 
+  function addCube(x, y) {
+
+  const z0 = 0;
+  const z1 = DEPTH;
+
+  const start = index;
+
+  const v = [
+    [x, y, z0],
+    [x + 1, y, z0],
+    [x + 1, y + 1, z0],
+    [x, y + 1, z0],
+
+    [x, y, z1],
+    [x + 1, y, z1],
+    [x + 1, y + 1, z1],
+    [x, y + 1, z1]
+  ];
+
+  v.forEach(p =>
+    vertices.push(`v ${p[0]} ${p[1]} ${p[2]}`)
+  );
+
+  // جلو
+  faces.push(
+    `f ${start} ${start + 1} ${start + 2} ${start + 3}`
+  );
+
+  // پشت
+  faces.push(
+    `f ${start + 4} ${start + 5} ${start + 6} ${start + 7}`
+  );
+
+  // چپ
+  if (!isSolid(x - 1, info.height - y - 1)) {
+    faces.push(
+      `f ${start} ${start + 4} ${start + 7} ${start + 3}`
+    );
+  }
+
+  // راست
+  if (!isSolid(x + 1, info.height - y - 1)) {
+    faces.push(
+      `f ${start + 1} ${start + 5} ${start + 6} ${start + 2}`
+    );
+  }
+
+  // بالا
+  if (!isSolid(x, info.height - y - 2)) {
+    faces.push(
+      `f ${start + 3} ${start + 2} ${start + 6} ${start + 7}`
+    );
+  }
+
+  // پایین
+  if (!isSolid(x, info.height - y)) {
+    faces.push(
+      `f ${start} ${start + 1} ${start + 5} ${start + 4}`
+    );
+  }
+
+  index += 8;
+}
+
   const i = (y * info.width + x) * 4;
   return data[i + 3] > 0;
 }
