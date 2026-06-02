@@ -5,7 +5,8 @@ import archiver from "archiver";
 
 const input = process.argv[2];
 const output = process.argv[3];
-const DEPTH = 1.7;        // ← ضخامت مناسب‌تر (می‌تونی تغییر بدی)
+const DEPTH = 0.8;           // ضخامت مناسب
+const OVERLAP = 0.02;        // کمی هم‌پوشانی برای حذف gap
 
 const { data, info } = await sharp(input)
   .ensureAlpha()
@@ -27,26 +28,26 @@ for (let y = 0; y < info.height; y++) {
   for (let x = 0; x < info.width; x++) {
     if (!isSolid(x, y)) continue;
 
-    const px = x;
-    const py = info.height - y - 1;   // flip Y coordinate
-    const pz0 = 0;
-    const pz1 = DEPTH;
+    const px = x - OVERLAP;
+    const py = info.height - y - 1 - OVERLAP;
+    const pz0 = -DEPTH / 2;
+    const pz1 = DEPTH / 2;
 
     const vBase = vIndex;
     const uvBase = uvs.length + 1;
 
-    // 8 Vertices
-    vertices.push(`v ${px}     ${py}     ${pz0}`);
-    vertices.push(`v ${px + 1} ${py}     ${pz0}`);
-    vertices.push(`v ${px + 1} ${py + 1} ${pz0}`);
-    vertices.push(`v ${px}     ${py + 1} ${pz0}`);
+    // Vertices با کمی overlap
+    vertices.push(`v ${px}          ${py}          ${pz0}`);
+    vertices.push(`v ${px + 1 + OVERLAP*2} ${py}          ${pz0}`);
+    vertices.push(`v ${px + 1 + OVERLAP*2} ${py + 1 + OVERLAP*2} ${pz0}`);
+    vertices.push(`v ${px}          ${py + 1 + OVERLAP*2} ${pz0}`);
 
-    vertices.push(`v ${px}     ${py}     ${pz1}`);
-    vertices.push(`v ${px + 1} ${py}     ${pz1}`);
-    vertices.push(`v ${px + 1} ${py + 1} ${pz1}`);
-    vertices.push(`v ${px}     ${py + 1} ${pz1}`);
+    vertices.push(`v ${px}          ${py}          ${pz1}`);
+    vertices.push(`v ${px + 1 + OVERLAP*2} ${py}          ${pz1}`);
+    vertices.push(`v ${px + 1 + OVERLAP*2} ${py + 1 + OVERLAP*2} ${pz1}`);
+    vertices.push(`v ${px}          ${py + 1 + OVERLAP*2} ${pz1}`);
 
-    // UVs دقیق برای هر پیکسل
+    // UVs
     const u1 = x / info.width;
     const u2 = (x + 1) / info.width;
     const v1 = (info.height - y - 1) / info.height;
@@ -57,19 +58,16 @@ for (let y = 0; y < info.height; y++) {
     uvs.push(`vt ${u2} ${v2}`);
     uvs.push(`vt ${u1} ${v2}`);
 
-    // Faces
-    const f = (a,b,c,d, uva,uvb,uvc,uvd) => 
+    const f = (a,b,c,d,uva,uvb,uvc,uvd) => 
       `f ${vBase+a}/${uvBase+uva} ${vBase+b}/${uvBase+uvb} ${vBase+c}/${uvBase+uvc} ${vBase+d}/${uvBase+uvd}`;
 
-    // Bottom and Top
-    faces.push(f(0,1,2,3, 0,1,2,3));
-    faces.push(f(4,5,6,7, 0,1,2,3));
+    faces.push(f(0,1,2,3,0,1,2,3)); // bottom
+    faces.push(f(4,5,6,7,0,1,2,3)); // top
 
-    // Side faces (فقط اگر همسایه خالی باشد)
-    if (!isSolid(x-1, y))   faces.push(f(0,4,7,3, 0,0,3,3));   // left
-    if (!isSolid(x+1, y))   faces.push(f(1,2,6,5, 1,2,2,1));   // right
-    if (!isSolid(x, y-1))   faces.push(f(3,2,6,7, 3,2,2,3));   // back
-    if (!isSolid(x, y+1))   faces.push(f(0,1,5,4, 0,1,1,0));   // front
+    if (!isSolid(x-1, y)) faces.push(f(0,4,7,3,0,0,3,3));
+    if (!isSolid(x+1, y)) faces.push(f(1,2,6,5,1,2,2,1));
+    if (!isSolid(x, y-1)) faces.push(f(3,2,6,7,3,2,2,3));
+    if (!isSolid(x, y+1)) faces.push(f(0,1,5,4,0,1,1,0));
 
     vIndex += 8;
   }
@@ -86,7 +84,6 @@ ${faces.join("\n")}`;
 
 fs.writeFileSync(output, objContent);
 
-// MTL File
 fs.writeFileSync(output.replace(".obj", ".mtl"), 
 `newmtl Material
 Ka 1 1 1
@@ -111,4 +108,4 @@ archive.file(output.replace(".obj", ".png"), { name: `${baseName}.png` });
 
 await archive.finalize();
 
-console.log(`✅ Exported | Depth: ${DEPTH} | ${info.width}x${info.height}`);
+console.log(`✅ Exported | Depth: ${DEPTH} | Overlap: ${OVERLAP}`);
