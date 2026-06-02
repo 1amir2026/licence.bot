@@ -268,7 +268,7 @@ elif mode == "minecraft_3d":
     glb_name = os.path.splitext(doc.file_name)[0] + ".glb"
     output_path = os.path.join(OUTPUT_DIR, glb_name)
 
-    await bot.download(doc, destination=input_path)
+await bot.download_file(doc.file_id, destination=input_path)
 
     try:
         await run_item3d(
