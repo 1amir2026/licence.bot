@@ -55,27 +55,33 @@ async def run_node_processor(input_path: str, output_path: str, xp_percent: floa
         raise RuntimeError(f"Node processor failed: {stderr.decode()}")
 
 
-async def run_item3d(input_path: str, output_obj: str):
-    """اجرای مستقیم item3d.mjs"""
+# ====================== BLENDER PROCESSOR ======================
+async def run_blender(input_path: str, output_path: str):
+    blender_script = os.path.join(PROCESSOR_DIR, "blender_item.py")
+    
     proc = await asyncio.create_subprocess_exec(
-        "node", ITEM3D_SCRIPT, input_path, output_obj,
+        "blender",
+        "--background",
+        "--python",
+        blender_script,
+        "--",
+        input_path,
+        output_path,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=PROCESSOR_DIR
     )
+
     stdout, stderr = await proc.communicate()
 
     if proc.returncode != 0:
-        raise RuntimeError(f"Item3D failed:\n{stderr.decode()}")
-
-    # خروجی اصلی ZIP است
-    zip_path = output_obj.replace(".obj", ".zip")
-    if os.path.exists(zip_path):
-        return zip_path
-    elif os.path.exists(output_obj):
-        return output_obj
-    else:
-        raise RuntimeError("No output file was generated")
+        error = stderr.decode() if stderr else stdout.decode()
+        raise RuntimeError(f"Blender failed:\n{error}")
+    
+    if not os.path.exists(output_path):
+        raise RuntimeError("Blender did not generate the GLB file")
+    
+    return output_path
 
 
 # ====================== COMMANDS ======================
@@ -188,30 +194,33 @@ async def handle_document(message: types.Message):
         except Exception as e:
             await message.answer(f"❌ خطا:\n{e}")
 
-    # ---------------- MINECRAFT 3D ITEM ----------------
+    # ---------------- MINECRAFT 3D ITEM (Blender) ----------------
     elif mode == "minecraft_3d":
         if not doc.file_name.lower().endswith(".png"):
             await message.answer("❌ فقط فایل PNG مجاز است")
             return
 
-        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
+        await message.answer("🔄 در حال ساخت مدل سه‌بعدی با Blender...")
 
         input_path = os.path.join(INPUT_DIR, doc.file_name)
-        output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + ".obj")
+        output_glb = os.path.join(
+            OUTPUT_DIR,
+            os.path.splitext(doc.file_name)[0] + ".glb"
+        )
 
         file = await bot.get_file(doc.file_id)
         await bot.download_file(file.file_path, destination=input_path)
 
         try:
-            output_file = await run_item3d(input_path, output_obj)
+            output_file = await run_blender(input_path, output_glb)
             user_modes.pop(message.from_user.id, None)
 
             await message.answer_document(
                 FSInputFile(output_file),
-                caption="✅ مدل سه‌بعدی با موفقیت ساخته شد!\n(شامل OBJ + MTL + PNG)"
+                caption="✅ مدل سه‌بعدی ساخته شد!\n(کیفیت بالا - بدون فاصله)"
             )
 
-            # پاکسازی فایل ورودی
+            # پاکسازی
             if os.path.exists(input_path):
                 os.remove(input_path)
 
@@ -221,7 +230,7 @@ async def handle_document(message: types.Message):
 
 # ====================== MAIN ======================
 async def main():
-    print("🚀 Bot started successfully")
+    print("🚀 Bot started successfully (with Blender support)")
     await dp.start_polling(bot)
 
 
