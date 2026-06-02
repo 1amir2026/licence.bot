@@ -17,8 +17,6 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 user_modes = {}
 
-job_queue = Queue()
-
 # مسیرهای مربوط به پردازشگر Node
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROCESSOR_DIR = os.path.join(BASE_DIR, "..", "processor")
@@ -205,6 +203,7 @@ async def run_blender(input_path: str, output_path: str):
     return output_path
 # ---------------------- worker ----------------------
 async def worker():
+    global job_queue
     while True:
         job = await job_queue.get()
 
@@ -246,7 +245,8 @@ async def handle_document(message: types.Message):
         output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
         output_path = os.path.join(OUTPUT_DIR, output_name)
 
-        await bot.download(doc, destination=input_path)
+file = await bot.get_file(doc.file_id)
+await bot.download_file(file.file_path, destination=input_path)
 
         try:
             await run_node_processor(
@@ -286,7 +286,8 @@ async def handle_document(message: types.Message):
             os.path.splitext(doc.file_name)[0] + ".glb"
         )
 
-        await bot.download_file(doc.file_id, destination=input_path)
+file = await bot.get_file(doc.file_id)
+await bot.download_file(file.file_path, destination=input_path)
 
 try:
     await job_queue.put(Job(
@@ -319,9 +320,13 @@ except Exception as e:
         return
 # ---------------------- MAIN ----------------------
 async def main():
+    global job_queue
+
+    job_queue = asyncio.Queue()  # 👈 اینجا داخل loop
+
     print("🚀 Bot started")
 
-    asyncio.create_task(worker())  # 👈 این خیلی مهمه
+    asyncio.create_task(worker())
 
     await dp.start_polling(bot)
 
