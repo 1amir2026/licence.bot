@@ -1,23 +1,35 @@
 FROM node:18-bullseye
 
-# نصب Python
-RUN apt-get update && \
-    apt-get install -y python3 python3-pip python-is-python3 && \
-    apt-get clean
+# ---------------- system deps ----------------
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python-is-python3 \
+    blender \
+    ffmpeg \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
+# ---------------- workdir ----------------
 WORKDIR /app
 
-# کپی کل پروژه
+# ---------------- copy project ----------------
 COPY . .
 
-# نصب پکیج‌های Python
-RUN pip install --no-cache-dir -r requirements.txt
+# ---------------- python deps ----------------
+RUN pip3 install --no-cache-dir -r requirements.txt
 
-# نصب پکیج‌های Node.js
+# ---------------- node deps ----------------
 RUN cd processor && npm install
 
-# پورت Railway
+# ---------------- env ----------------
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# ---------------- IMPORTANT ----------------
+# اگر Railway / Render داری، پورت ممکنه لازم نباشه
 ENV PORT=3000
 
-# اجرای برنامه Node.js
-CMD ["node", "index.js"]
+# ---------------- start python bot ----------------
+CMD ["python3", "bot/bot.py"]
