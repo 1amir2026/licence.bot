@@ -173,122 +173,85 @@ async def handle_document(message: types.Message):
 
     mode = user_modes.get(message.from_user.id)
 
+    doc = message.document
+
+    if not doc:
+        return
+
     # ---------------- RESOURCE PACK ----------------
     if mode == "resource_pack":
 
         print("PACK HANDLER")
 
-        doc = message.document
-
         if not (
             doc.file_name.endswith(".zip")
             or doc.file_name.endswith(".mcpack")
         ):
-            await message.answer(
-                "❌ فقط فایل‌های ZIP یا MCPACK قابل قبول هستند."
-            )
+            await message.answer("❌ فقط ZIP یا MCPACK")
             return
 
-        await message.answer(
-            "🔄 فایل دریافت شد. در حال پردازش..."
-        )
+        await message.answer("🔄 در حال پردازش...")
 
-        input_path = os.path.join(
-            INPUT_DIR,
-            doc.file_name
-        )
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
 
-        output_name = (
-            os.path.splitext(doc.file_name)[0]
-            + "_ui.png"
-        )
+        output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
+        output_path = os.path.join(OUTPUT_DIR, output_name)
 
-        output_path = os.path.join(
-            OUTPUT_DIR,
-            output_name
-        )
-
-        await bot.download(
-            doc,
-            destination=input_path
-        )
+        await bot.download(doc, destination=input_path)
 
         try:
-
             await run_node_processor(
                 input_path=input_path,
                 output_path=output_path,
                 xp_percent=0.7,
                 upscale_rate=1
             )
-
-        except Exception as e:
-
-            await message.answer(
-                f"❌ خطا در پردازش پک:\n{e}"
-            )
-            return
-
-        if not os.path.exists(output_path):
-
-            await message.answer(
-                "❌ پردازش انجام نشد. خروجی پیدا نشد."
-            )
-            return
-
-        user_modes.pop(
-            message.from_user.id,
-            None
-        )
-
-        await message.answer_document(
-            FSInputFile(output_path),
-            caption="✅ پردازش انجام شد! این هم UI نهایی:"
-        )
-
-        return
-
-# ---------------- MINECRAFT 3D ----------------
-    elif mode == "minecraft_3d":
-
-        doc = message.document
-
-        if not doc:
-            return
-
-        if not doc.file_name.lower().endswith(".png"):
-            await message.answer("❌ فقط فایل PNG قابل قبول است.")
-            return
-
-        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
-
-        input_path = os.path.join(INPUT_DIR, doc.file_name)
-
-        glb_name = os.path.splitext(doc.file_name)[0] + ".glb"
-        output_path = os.path.join(OUTPUT_DIR, glb_name)
-
-        await bot.download_file(
-            doc.file_id,
-            destination=input_path
-        )
-
-        try:
-            await run_item3d(
-                input_path=input_path,
-                output_path=output_path
-            )
-
         except Exception as e:
             await message.answer(f"❌ خطا:\n{e}")
             return
 
         if not os.path.exists(output_path):
-            await message.answer("❌ فایل GLB ساخته نشد.")
+            await message.answer("❌ خروجی پیدا نشد")
+            return
+
+        user_modes.pop(message.from_user.id, None)
+
+        await message.answer_document(
+            FSInputFile(output_path),
+            caption="✅ انجام شد"
+        )
+        return
+
+    # ---------------- MINECRAFT 3D ----------------
+    elif mode == "minecraft_3d":
+
+        if not doc.file_name.lower().endswith(".png"):
+            await message.answer("❌ فقط PNG")
+            return
+
+        await message.answer("🔄 در حال ساخت 3D...")
+
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
+        output_path = os.path.join(
+            OUTPUT_DIR,
+            os.path.splitext(doc.file_name)[0] + ".glb"
+        )
+
+        await bot.download_file(doc.file_id, destination=input_path)
+
+        try:
+            await run_item3d(input_path, output_path)
+        except Exception as e:
+            await message.answer(f"❌ خطا:\n{e}")
+            return
+
+        if not os.path.exists(output_path):
+            await message.answer("❌ GLB ساخته نشد")
             return
 
         await message.answer_document(
             FSInputFile(output_path),
-            caption="🧊 فایل GLB آماده شد."
+            caption="🧊 آماده شد"
         )
 
         user_modes.pop(message.from_user.id, None)
