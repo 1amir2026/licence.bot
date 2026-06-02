@@ -251,45 +251,45 @@ async def handle_document(message: types.Message):
     # ---------------- MINECRAFT 3D ----------------
     elif mode == "minecraft_3d":
 
-    doc = message.document
+        doc = message.document
 
-    if not doc:
-        return
+        if not doc:
+            return
 
-    if not doc.file_name.lower().endswith(".png"):
-        await message.answer("❌ فقط فایل PNG قابل قبول است.")
-        return
+        if not doc.file_name.lower().endswith(".png"):
+            await message.answer("❌ فقط فایل PNG قابل قبول است.")
+            return
 
-    await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
+        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
 
-    input_path = os.path.join(INPUT_DIR, doc.file_name)
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
 
-    glb_name = os.path.splitext(doc.file_name)[0] + ".glb"
-    output_path = os.path.join(OUTPUT_DIR, glb_name)
+        glb_name = os.path.splitext(doc.file_name)[0] + ".glb"
+        output_path = os.path.join(OUTPUT_DIR, glb_name)
 
-    await bot.download(doc, destination=input_path)
+        await bot.download(doc, destination=input_path)
 
-    try:
-        await run_item3d(
-            input_path=input_path,
-            output_path=output_path
+        try:
+            await run_item3d(
+                input_path=input_path,
+                output_path=output_path
+            )
+
+        except Exception as e:
+            await message.answer(f"❌ خطا:\n{e}")
+            return
+
+        if not os.path.exists(output_path):
+            await message.answer("❌ فایل GLB ساخته نشد.")
+            return
+
+        await message.answer_document(
+            FSInputFile(output_path),
+            caption="🧊 فایل GLB آماده شد."
         )
 
-    except Exception as e:
-        await message.answer(f"❌ خطا:\n{e}")
+        user_modes.pop(message.from_user.id, None)
         return
-
-    if not os.path.exists(output_path):
-        await message.answer("❌ فایل GLB ساخته نشد.")
-        return
-
-    await message.answer_document(
-        FSInputFile(output_path),
-        caption="🧊 فایل GLB آماده شد."
-    )
-
-    user_modes.pop(message.from_user.id, None)
-    return
 # ---------------------- MAIN ----------------------
 async def main():
     print("🚀 بات شروع شد...")
