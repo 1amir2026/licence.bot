@@ -5,7 +5,7 @@ import archiver from "archiver";
 
 const input = process.argv[2];
 const output = process.argv[3];
-const DEPTH = 2.5;        // ← ضخامت مناسب‌تر (می‌تونی تغییر بدی)
+const DEPTH = 1.7;        // ← ضخامت مناسب‌تر (می‌تونی تغییر بدی)
 
 const { data, info } = await sharp(input)
   .ensureAlpha()
