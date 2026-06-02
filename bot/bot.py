@@ -78,14 +78,14 @@ async def check_license(message: types.Message):
         return
 
     session = Session()
-    license_obj = session.query(License).filter_by(
+    license_glb = session.query(License).filter_by(
         key=message.text.strip(), used=False
     ).first()
 
-    if license_obj:
-        license_obj.used = True
-        license_obj.user_id = message.from_user.id
-        license_obj.used_at = datetime.utcnow()
+    if license_glb:
+        license_glb.used = True
+        license_glb.user_id = message.from_user.id
+        license_glb.used_at = datetime.utcnow()
         session.commit()
 
         keyboard = ReplyKeyboardMarkup(
@@ -126,14 +126,6 @@ async def minecraft_3d(message: types.Message):
         "🧊 فایل PNG آیتم را ارسال کنید."
     )
 
-    print("MINECRAFT HANDLER")
-    
-    if user_modes.get(message.from_user.id) != "minecraft_3d":
-        return
-
-    doc = message.document
-
-    if not doc.file_name.lower().endswith(".png"):
         await message.answer("❌ فقط فایل PNG قابل قبول است.")
         return
 
@@ -141,7 +133,7 @@ async def minecraft_3d(message: types.Message):
 
     input_path = os.path.join(INPUT_DIR, doc.file_name)
 
-    obj_name = os.path.splitext(doc.file_name)[0] + ".obj"
+    glb_name = os.path.splitext(doc.file_name)[0] + ".glb"
     output_path = os.path.join(OUTPUT_DIR, glb_name)
 
     await bot.download(doc, destination=input_path)
@@ -157,22 +149,13 @@ async def minecraft_3d(message: types.Message):
         return
 
     if not os.path.exists(output_path):
-        await message.answer("❌ فایل OBJ ساخته نشد.")
+        await message.answer("❌ فایل glb ساخته نشد.")
         return
 
-    zip_path = output_path.replace(".obj", ".zip")
-
-    print("OBJ EXISTS:", os.path.exists(output_path))
-    print("ZIP EXISTS:", os.path.exists(zip_path))
-
-    if not os.path.exists(zip_path):
-        await message.answer("❌ فایل ZIP ساخته نشد.")
-        return
-
-    await message.answer_document(
-        FSInputFile(zip_path),
-        caption="🧊 مدل سه‌بعدی آماده شد."
-    )
+await message.answer_document(
+    FSInputFile(output_path),
+    caption="🧊 فایل GLB آماده شد."
+)
 
     user_modes.pop(message.from_user.id, None)
 # ---------------------- NODE PROCESSOR ----------------------
@@ -225,7 +208,7 @@ async def handle_document(message: types.Message):
     mode = user_modes.get(message.from_user.id)
 
     # ---------------- RESOURCE PACK ----------------
-    if mode == "resource_pack":
+if mode == "resource_pack":
 
         print("PACK HANDLER")
 
@@ -301,100 +284,76 @@ async def handle_document(message: types.Message):
 
     # ---------------- MINECRAFT 3D ----------------
        # ---------------- MINECRAFT 3D ----------------
-    elif mode == "minecraft_3d":
+elif mode == "minecraft_3d":
 
-        print("MINECRAFT HANDLER")
+    doc = message.document
 
-        doc = message.document
-
-        if not doc:
-            return
-
-        if not doc.file_name.lower().endswith(".png"):
-            await message.answer(
-                "❌ فقط فایل PNG قابل قبول است."
-            )
-            return
-
-        await message.answer(
-            "🔄 در حال ساخت مدل سه‌بعدی..."
-        )
-
-        input_path = os.path.join(
-            INPUT_DIR,
-            doc.file_name
-        )
-
-glb_name = (
-    os.path.splitext(doc.file_name)[0]
-    + ".glb"
-)
-
-        output_path = os.path.join(
-            OUTPUT_DIR,
-            obj_name
-        )
-
-        await bot.download(
-            doc,
-            destination=input_path
-        )
-
-        try:
-
-            await run_item3d(
-                input_path=input_path,
-                output_path=output_path
-            )
-
-        except Exception as e:
-
-            await message.answer(
-                f"❌ خطا:\n{e}"
-            )
-            return
-
-        zip_path = output_path.replace(
-            ".obj",
-            ".zip"
-        )
-
-        print(
-            "OBJ EXISTS:",
-            os.path.exists(output_path)
-        )
-
-        print(
-            "ZIP EXISTS:",
-            os.path.exists(zip_path)
-        )
-
-        if not os.path.exists(zip_path):
-
-            await message.answer(
-                "❌ فایل ZIP ساخته نشد."
-            )
-            return
-
-        await message.answer_document(
-            FSInputFile(zip_path),
-            caption="🧊 مدل سه‌بعدی آماده شد."
-        )
-
-        user_modes.pop(
-            message.from_user.id,
-            None
-        )
-
+    if not doc:
         return
-        
-    # ---------------- NO MODE ----------------
-    else:
+
+    if not doc.file_name.lower().endswith(".png"):
+        await message.answer(
+            "❌ فقط فایل PNG قابل قبول است."
+        )
+        return
+
+    await message.answer(
+        "🔄 در حال ساخت مدل سه‌بعدی..."
+    )
+
+    input_path = os.path.join(
+        INPUT_DIR,
+        doc.file_name
+    )
+
+    glb_name = (
+        os.path.splitext(doc.file_name)[0]
+        + ".glb"
+    )
+
+    output_path = os.path.join(
+        OUTPUT_DIR,
+        glb_name
+    )
+
+    await bot.download(
+        doc,
+        destination=input_path
+    )
+
+    try:
+
+        await run_item3d(
+            input_path=input_path,
+            output_path=output_path
+        )
+
+    except Exception as e:
 
         await message.answer(
-            "❌ ابتدا یکی از گزینه‌ها را انتخاب کنید."
+            f"❌ خطا:\n{e}"
         )
-        
+        return
+
+    if not os.path.exists(output_path):
+
+        await message.answer(
+            "❌ فایل GLB ساخته نشد."
+        )
+        return
+
+    await message.answer_document(
+        FSInputFile(output_path),
+        caption="🧊 فایل GLB آماده شد."
+    )
+
+    user_modes.pop(
+        message.from_user.id,
+        None
+    )
+
+    return
+
 # ---------------------- MAIN ----------------------
 async def main():
     print("🚀 بات شروع شد...")
