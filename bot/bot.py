@@ -249,7 +249,8 @@ async def handle_document(message: types.Message):
         return
 
     # ---------------- MINECRAFT 3D ----------------
-    elif mode == "minecraft_3d":
+# ---------------- MINECRAFT 3D ----------------
+elif mode == "minecraft_3d":
 
     doc = message.document
 
