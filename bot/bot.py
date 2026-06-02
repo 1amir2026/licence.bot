@@ -33,201 +33,201 @@ LICENSE_REGEX = r"^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$"
 
 
 def generate_license():
-	chars = string.ascii_uppercase + string.digits
-	return '-'.join(''.join(random.choices(chars, k=4)) for _ in range(4))
+    chars = string.ascii_uppercase + string.digits
+    return '-'.join(''.join(random.choices(chars, k=4)) for _ in range(4))
 
 
 def is_admin(user_id: int):
-	return user_id == ADMIN_ID
+    return user_id == ADMIN_ID
 
 
 class Job:
-	def __init__(self, user_id, input_path, output_path, mode):
-		self.user_id = user_id
-		self.input_path = input_path
-		self.output_path = output_path
-		self.mode = mode
-		
+    def __init__(self, user_id, input_path, output_path, mode):
+        self.user_id = user_id
+        self.input_path = input_path
+        self.output_path = output_path
+        self.mode = mode
+        
 # ---------------------- START ----------------------
 @dp.message(Command("start"))
 async def start(message: types.Message):
-	if is_admin(message.from_user.id):
-		keyboard = ReplyKeyboardMarkup(
-			keyboard=[[KeyboardButton(text="🔑 ساخت لایسنس جدید")]],
-			resize_keyboard=True
-		)
-		await message.answer("👋 سلام ادمین!\n\nبرای ساخت لایسنس جدید دکمه زیر را بزن:", reply_markup=keyboard)
-	else:
-		await message.answer(
-			"👋 سلام!\n\n"
-			"برای دریافت لایسنس به ادمین مراجعه کنید:\n"
-			"@Amirmah198"
-		)
+    if is_admin(message.from_user.id):
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="🔑 ساخت لایسنس جدید")]],
+            resize_keyboard=True
+        )
+        await message.answer("👋 سلام ادمین!\n\nبرای ساخت لایسنس جدید دکمه زیر را بزن:", reply_markup=keyboard)
+    else:
+        await message.answer(
+            "👋 سلام!\n\n"
+            "برای دریافت لایسنس به ادمین مراجعه کنید:\n"
+            "@Amirmah198"
+        )
 
 
 # ---------------------- ADMIN: CREATE LICENSE ----------------------
 @dp.message(F.text == "🔑 ساخت لایسنس جدید")
 async def create_license(message: types.Message):
-	if not is_admin(message.from_user.id):
-		return
+    if not is_admin(message.from_user.id):
+        return
 
-	key = generate_license()
-	session = Session()
-	session.add(License(key=key))
-	session.commit()
-	session.close()
+    key = generate_license()
+    session = Session()
+    session.add(License(key=key))
+    session.commit()
+    session.close()
 
-	await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n`{key}`\n\nکپی کن و بفرست.")
+    await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n`{key}`\n\nکپی کن و بفرست.")
 
 
 # ---------------------- USER: LICENSE CHECK ----------------------
 @dp.message(F.text.regexp(LICENSE_REGEX))
 async def check_license(message: types.Message):
-	if is_admin(message.from_user.id):
-		return
+    if is_admin(message.from_user.id):
+        return
 
-	session = Session()
-	license_glb = session.query(License).filter_by(
-		key=message.text.strip(), used=False
-	).first()
+    session = Session()
+    license_glb = session.query(License).filter_by(
+        key=message.text.strip(), used=False
+    ).first()
 
-	if license_glb:
-		license_glb.used = True
-		license_glb.user_id = message.from_user.id
-		license_glb.used_at = datetime.utcnow()
-		session.commit()
+    if license_glb:
+        license_glb.used = True
+        license_glb.user_id = message.from_user.id
+        license_glb.used_at = datetime.utcnow()
+        session.commit()
 
-		keyboard = ReplyKeyboardMarkup(
-			keyboard=[
-				[KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
-				[KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")]
-			],
-			resize_keyboard=True
-		)
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
+                [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")]
+            ],
+            resize_keyboard=True
+        )
 
-		await message.answer(
-			"✅ لایسنس فعال شد!\n\nبه پنل خوش آمدید 🎉",
-			reply_markup=keyboard
-		)
-	else:
-		await message.answer("❌ لایسنس نامعتبر یا قبلاً استفاده شده.")
+        await message.answer(
+            "✅ لایسنس فعال شد!\n\nبه پنل خوش آمدید 🎉",
+            reply_markup=keyboard
+        )
+    else:
+        await message.answer("❌ لایسنس نامعتبر یا قبلاً استفاده شده.")
 
-	session.close()
+    session.close()
 
 
 # ---------------------- REQUEST PACK ----------------------
 @dp.message(F.text == "📦 دریافت ریسورس پک ریلیز تکسچر")
 async def ask_for_pack(message: types.Message):
-	user_modes[message.from_user.id] = "resource_pack"
+    user_modes[message.from_user.id] = "resource_pack"
 
-	await message.answer(
-		"📤 لطفاً فایل ریسورس پک خود را ارسال کنید.\n"
-		"فقط فرمت‌های .zip یا .mcpack قابل قبول هستند."
-	)
+    await message.answer(
+        "📤 لطفاً فایل ریسورس پک خود را ارسال کنید.\n"
+        "فقط فرمت‌های .zip یا .mcpack قابل قبول هستند."
+    )
 
 # ---------------------- MINECRAFT 3D ITEM ----------------------
 @dp.message(F.text == "🧊 ساخت آیتم سه‌بعدی ماینکرافت")
 async def minecraft_3d(message: types.Message):
 
-	user_modes[message.from_user.id] = "minecraft_3d"
+    user_modes[message.from_user.id] = "minecraft_3d"
 
-	await message.answer(
-		"🧊 فایل PNG آیتم را ارسال کنید."
-	)
+    await message.answer(
+        "🧊 فایل PNG آیتم را ارسال کنید."
+    )
 # ---------------------- NODE PROCESSOR ----------------------
 async def run_node_processor(input_path: str, output_path: str,
-							 xp_percent: float = 0.7, upscale_rate: int = 1):
+                             xp_percent: float = 0.7, upscale_rate: int = 1):
 
-	proc = await asyncio.create_subprocess_exec(
-		"node",
-		NODE_SCRIPT,
-		input_path,
-		output_path,
-		str(xp_percent),
-		str(upscale_rate),
-		stdout=asyncio.subprocess.PIPE,
-		stderr=asyncio.subprocess.PIPE,
-		cwd=PROCESSOR_DIR
-	)
+    proc = await asyncio.create_subprocess_exec(
+        "node",
+        NODE_SCRIPT,
+        input_path,
+        output_path,
+        str(xp_percent),
+        str(upscale_rate),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=PROCESSOR_DIR
+    )
 
-	stdout, stderr = await proc.communicate()
+    stdout, stderr = await proc.communicate()
 
-	if proc.returncode != 0:
-		raise RuntimeError(
-			f"Node processor failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
-		)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"Node processor failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
+        )
 
 async def run_item3d(input_path: str, output_path: str):
-	proc = await asyncio.create_subprocess_exec(
-		"node",
-		ITEM3D_SCRIPT,
-		input_path,
-		output_path,
-		stdout=asyncio.subprocess.PIPE,
-		stderr=asyncio.subprocess.PIPE,
-		cwd=PROCESSOR_DIR
-	)
+    proc = await asyncio.create_subprocess_exec(
+        "node",
+        ITEM3D_SCRIPT,
+        input_path,
+        output_path,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=PROCESSOR_DIR
+    )
 
-	stdout, stderr = await proc.communicate()
+    stdout, stderr = await proc.communicate()
 
-	if proc.returncode != 0:
-		raise RuntimeError(stderr.decode())
+    if proc.returncode != 0:
+        raise RuntimeError(stderr.decode())
 
-	return output_path
-	
-	stdout, stderr = await proc.communicate()
+    return output_path
+    
+    stdout, stderr = await proc.communicate()
 
-	if proc.returncode != 0:
-		raise RuntimeError(
-			f"Item3D failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
-		)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"Item3D failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
+        )
  # ---------------------- Blender ----------------------    
 async def run_blender(input_path: str, output_path: str):
-	proc = await asyncio.create_subprocess_exec(
-		"blender",
-		"--background",
-		"--python",
-		"processor/blender_item.py",
-		"--",
-		input_path,
-		output_path,
-		stdout=asyncio.subprocess.PIPE,
-		stderr=asyncio.subprocess.PIPE,
-	)
+    proc = await asyncio.create_subprocess_exec(
+        "blender",
+        "--background",
+        "--python",
+        "processor/blender_item.py",
+        "--",
+        input_path,
+        output_path,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
 
-	stdout, stderr = await proc.communicate()
+    stdout, stderr = await proc.communicate()
 
-	if proc.returncode != 0:
-		raise RuntimeError(stderr.decode())
+    if proc.returncode != 0:
+        raise RuntimeError(stderr.decode())
 
-	return output_path
+    return output_path
 # ---------------------- worker ----------------------
 async def worker():
-	global job_queue
-	while True:
-		job = await job_queue.get()
+    global job_queue
+    while True:
+        job = await job_queue.get()
 
-		try:
-			if job.mode == "minecraft_3d":
-				await run_blender(job.input_path, job.output_path)
+        try:
+            if job.mode == "minecraft_3d":
+                await run_blender(job.input_path, job.output_path)
 
-		except Exception as e:
-			print("JOB ERROR:", e)
+        except Exception as e:
+            print("JOB ERROR:", e)
 
-		job_queue.task_done()
+        job_queue.task_done()
 # ---------------------- FILE HANDLER ----------------------
 @dp.message(F.document)
 async def handle_document(message: types.Message):
 
-	mode = user_modes.get(message.from_user.id)
+    mode = user_modes.get(message.from_user.id)
 
-	doc = message.document
+    doc = message.document
 
-	if not doc:
-		return
+    if not doc:
+        return
 
-	# ---------------- RESOURCE PACK ----------------
-if mode == "resource_pack":
+    # ---------------- RESOURCE PACK ----------------
+    if mode == "resource_pack":
 
     if not (
         doc.file_name.endswith(".zip")
@@ -307,16 +307,16 @@ elif mode == "minecraft_3d":
         return
 # ---------------------- MAIN ----------------------
 async def main():
-	global job_queue
+    global job_queue
 
-	job_queue = asyncio.Queue()  # 👈 اینجا داخل loop
+    job_queue = asyncio.Queue()  # 👈 اینجا داخل loop
 
-	print("🚀 Bot started")
+    print("🚀 Bot started")
 
-	asyncio.create_task(worker())
+    asyncio.create_task(worker())
 
-	await dp.start_polling(bot)
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
-	asyncio.run(main())
+    asyncio.run(main())
