@@ -55,33 +55,27 @@ async def run_node_processor(input_path: str, output_path: str, xp_percent: floa
         raise RuntimeError(f"Node processor failed: {stderr.decode()}")
 
 
-# ====================== BLENDER PROCESSOR ======================
-async def run_blender(input_path: str, output_path: str):
-    blender_script = os.path.join(PROCESSOR_DIR, "blender_item.py")
-    
+async def run_item3d(input_path: str, output_obj: str):
+    """اجرای مستقیم item3d.mjs"""
     proc = await asyncio.create_subprocess_exec(
-        "blender",
-        "--background",
-        "--python",
-        blender_script,
-        "--",
-        input_path,
-        output_path,
+        "node", ITEM3D_SCRIPT, input_path, output_obj,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=PROCESSOR_DIR
     )
-
     stdout, stderr = await proc.communicate()
 
     if proc.returncode != 0:
-        error = stderr.decode() if stderr else stdout.decode()
-        raise RuntimeError(f"Blender failed:\n{error}")
-    
-    if not os.path.exists(output_path):
-        raise RuntimeError("Blender did not generate the GLB file")
-    
-    return output_path
+        raise RuntimeError(f"Item3D failed:\n{stderr.decode()}")
+
+    # خروجی اصلی ZIP است
+    zip_path = output_obj.replace(".obj", ".zip")
+    if os.path.exists(zip_path):
+        return zip_path
+    elif os.path.exists(output_obj):
+        return output_obj
+    else:
+        raise RuntimeError("No output file was generated")
 
 
 # ====================== COMMANDS ======================
@@ -92,10 +86,10 @@ async def start(message: types.Message):
             keyboard=[[KeyboardButton(text="🔑 ساخت لایسنس جدید")]],
             resize_keyboard=True
         )
-        await message.answer("👋 سلام ادمین!\n\nبرای ساخت لایسنس جدید دکمه زیر را بزن:", reply_markup=keyboard)
+        await message.answer("👋 سلام شوهر خوبم!\n\nبرای ساخت لایسنس جدید دکمه زیر را بزن:", reply_markup=keyboard)
     else:
         await message.answer(
-            "👋 سلام!\n\n"
+            "سلام! اگر از قبل لایسنس دارید نادیده بگیرید.\n\n"
             "برای دریافت لایسنس به ادمین مراجعه کنید:\n"
             "@Amirmah198"
         )
@@ -189,38 +183,35 @@ async def handle_document(message: types.Message):
 
             await message.answer_document(
                 FSInputFile(output_path),
-                caption="✅ ریسورس پک پردازش شد!"
+                caption="✅ ریسورس پک پردازش و UI ساخته شد!"
             )
         except Exception as e:
             await message.answer(f"❌ خطا:\n{e}")
 
-    # ---------------- MINECRAFT 3D ITEM (Blender) ----------------
+    # ---------------- MINECRAFT 3D ITEM ----------------
     elif mode == "minecraft_3d":
         if not doc.file_name.lower().endswith(".png"):
             await message.answer("❌ فقط فایل PNG مجاز است")
             return
 
-        await message.answer("🔄 در حال ساخت مدل سه‌بعدی با Blender...")
+        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
 
         input_path = os.path.join(INPUT_DIR, doc.file_name)
-        output_glb = os.path.join(
-            OUTPUT_DIR,
-            os.path.splitext(doc.file_name)[0] + ".glb"
-        )
+        output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + ".obj")
 
         file = await bot.get_file(doc.file_id)
         await bot.download_file(file.file_path, destination=input_path)
 
         try:
-            output_file = await run_blender(input_path, output_glb)
+            output_file = await run_item3d(input_path, output_obj)
             user_modes.pop(message.from_user.id, None)
 
             await message.answer_document(
                 FSInputFile(output_file),
-                caption="✅ مدل سه‌بعدی ساخته شد!\n(کیفیت بالا - بدون فاصله)"
+                caption="✅ مدل سه‌بعدی با موفقیت ساخته شد!\n(شامل OBJ + MTL + PNG)"
             )
 
-            # پاکسازی
+            # پاکسازی فایل ورودی
             if os.path.exists(input_path):
                 os.remove(input_path)
 
@@ -230,7 +221,7 @@ async def handle_document(message: types.Message):
 
 # ====================== MAIN ======================
 async def main():
-    print("🚀 Bot started successfully (with Blender support)")
+    print("🚀 Bot started successfully")
     await dp.start_polling(bot)
 
 
