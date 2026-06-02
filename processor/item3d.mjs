@@ -26,7 +26,11 @@ function isSolid(x, y) {
     return false;
   }
 
-  function addCube(x, y) {
+  const i = (y * info.width + x) * 4;
+  return data[i + 3] > 0;
+}
+
+function addCube(x, y) {
 
   const z0 = 0;
   const z1 = DEPTH;
@@ -49,49 +53,45 @@ function isSolid(x, y) {
     vertices.push(`v ${p[0]} ${p[1]} ${p[2]}`)
   );
 
-  // جلو
+  // front
   faces.push(
-    `f ${start} ${start + 1} ${start + 2} ${start + 3}`
+    `f ${start} ${start+1} ${start+2} ${start+3}`
   );
 
-  // پشت
+  // back
   faces.push(
-    `f ${start + 4} ${start + 5} ${start + 6} ${start + 7}`
+    `f ${start+4} ${start+5} ${start+6} ${start+7}`
   );
 
-  // چپ
+  // left
   if (!isSolid(x - 1, info.height - y - 1)) {
     faces.push(
-      `f ${start} ${start + 4} ${start + 7} ${start + 3}`
+      `f ${start} ${start+4} ${start+7} ${start+3}`
     );
   }
 
-  // راست
+  // right
   if (!isSolid(x + 1, info.height - y - 1)) {
     faces.push(
-      `f ${start + 1} ${start + 5} ${start + 6} ${start + 2}`
+      `f ${start+1} ${start+5} ${start+6} ${start+2}`
     );
   }
 
-  // بالا
+  // top
   if (!isSolid(x, info.height - y - 2)) {
     faces.push(
-      `f ${start + 3} ${start + 2} ${start + 6} ${start + 7}`
+      `f ${start+3} ${start+2} ${start+6} ${start+7}`
     );
   }
 
-  // پایین
+  // bottom
   if (!isSolid(x, info.height - y)) {
     faces.push(
-      `f ${start} ${start + 1} ${start + 5} ${start + 4}`
+      `f ${start} ${start+1} ${start+5} ${start+4}`
     );
   }
 
   index += 8;
-}
-
-  const i = (y * info.width + x) * 4;
-  return data[i + 3] > 0;
 }
 
 for (let y = 0; y < info.height; y++) {
