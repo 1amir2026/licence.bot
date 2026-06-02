@@ -3,8 +3,6 @@ import os
 import random
 import string
 from datetime import datetime
-from asyncio import Queue
-import uuid
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -17,18 +15,20 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 user_modes = {}
 
-# مسیرهای مربوط به پردازشگر Node
+# ====================== PATHS ======================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROCESSOR_DIR = os.path.join(BASE_DIR, "..", "processor")
+
 NODE_SCRIPT = os.path.join(PROCESSOR_DIR, "processor.mjs")
 ITEM3D_SCRIPT = os.path.join(PROCESSOR_DIR, "item3d.mjs")
 
 INPUT_DIR = os.path.join(PROCESSOR_DIR, "input")
 OUTPUT_DIR = os.path.join(PROCESSOR_DIR, "output")
+
 os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# regex لایسنس
+# ====================== LICENSE ======================
 LICENSE_REGEX = r"^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$"
 
 
@@ -41,14 +41,44 @@ def is_admin(user_id: int):
     return user_id == ADMIN_ID
 
 
-class Job:
-    def __init__(self, user_id, input_path, output_path, mode):
-        self.user_id = user_id
-        self.input_path = input_path
-        self.output_path = output_path
-        self.mode = mode
-        
-# ---------------------- START ----------------------
+# ====================== HELPERS ======================
+async def run_node_processor(input_path: str, output_path: str, xp_percent: float = 0.7, upscale_rate: int = 1):
+    proc = await asyncio.create_subprocess_exec(
+        "node", NODE_SCRIPT, input_path, output_path,
+        str(xp_percent), str(upscale_rate),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=PROCESSOR_DIR
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(f"Node processor failed: {stderr.decode()}")
+
+
+async def run_item3d(input_path: str, output_obj: str):
+    """اجرای مستقیم item3d.mjs"""
+    proc = await asyncio.create_subprocess_exec(
+        "node", ITEM3D_SCRIPT, input_path, output_obj,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=PROCESSOR_DIR
+    )
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"Item3D failed:\n{stderr.decode()}")
+
+    # خروجی اصلی ZIP است
+    zip_path = output_obj.replace(".obj", ".zip")
+    if os.path.exists(zip_path):
+        return zip_path
+    elif os.path.exists(output_obj):
+        return output_obj
+    else:
+        raise RuntimeError("No output file was generated")
+
+
+# ====================== COMMANDS ======================
 @dp.message(Command("start"))
 async def start(message: types.Message):
     if is_admin(message.from_user.id):
@@ -65,7 +95,6 @@ async def start(message: types.Message):
         )
 
 
-# ---------------------- ADMIN: CREATE LICENSE ----------------------
 @dp.message(F.text == "🔑 ساخت لایسنس جدید")
 async def create_license(message: types.Message):
     if not is_admin(message.from_user.id):
@@ -80,7 +109,6 @@ async def create_license(message: types.Message):
     await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n`{key}`\n\nکپی کن و بفرست.")
 
 
-# ---------------------- USER: LICENSE CHECK ----------------------
 @dp.message(F.text.regexp(LICENSE_REGEX))
 async def check_license(message: types.Message):
     if is_admin(message.from_user.id):
@@ -105,124 +133,27 @@ async def check_license(message: types.Message):
             resize_keyboard=True
         )
 
-        await message.answer(
-            "✅ لایسنس فعال شد!\n\nبه پنل خوش آمدید 🎉",
-            reply_markup=keyboard
-        )
+        await message.answer("✅ لایسنس فعال شد!\n\nبه پنل خوش آمدید 🎉", reply_markup=keyboard)
     else:
         await message.answer("❌ لایسنس نامعتبر یا قبلاً استفاده شده.")
 
     session.close()
 
 
-# ---------------------- REQUEST PACK ----------------------
+# ====================== MODES ======================
 @dp.message(F.text == "📦 دریافت ریسورس پک ریلیز تکسچر")
 async def ask_for_pack(message: types.Message):
     user_modes[message.from_user.id] = "resource_pack"
+    await message.answer("📤 لطفاً فایل ریسورس پک خود را ارسال کنید.\nفقط فرمت‌های .zip یا .mcpack")
 
-    await message.answer(
-        "📤 لطفاً فایل ریسورس پک خود را ارسال کنید.\n"
-        "فقط فرمت‌های .zip یا .mcpack قابل قبول هستند."
-    )
 
-# ---------------------- MINECRAFT 3D ITEM ----------------------
 @dp.message(F.text == "🧊 ساخت آیتم سه‌بعدی ماینکرافت")
 async def minecraft_3d(message: types.Message):
-
     user_modes[message.from_user.id] = "minecraft_3d"
+    await message.answer("🧊 فایل PNG آیتم را ارسال کنید.")
 
-    await message.answer(
-        "🧊 فایل PNG آیتم را ارسال کنید."
-    )
-# ---------------------- NODE PROCESSOR ----------------------
-async def run_node_processor(input_path: str, output_path: str,
-                             xp_percent: float = 0.7, upscale_rate: int = 1):
 
-    proc = await asyncio.create_subprocess_exec(
-        "node",
-        NODE_SCRIPT,
-        input_path,
-        output_path,
-        str(xp_percent),
-        str(upscale_rate),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=PROCESSOR_DIR
-    )
-
-    stdout, stderr = await proc.communicate()
-
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"Node processor failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
-        )
-
-async def run_item3d(input_path: str, output_path: str):
-    proc = await asyncio.create_subprocess_exec(
-        "node",
-        ITEM3D_SCRIPT,
-        input_path,
-        output_path,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=PROCESSOR_DIR
-    )
-
-    stdout, stderr = await proc.communicate()
-
-    if proc.returncode != 0:
-        raise RuntimeError(stderr.decode())
-
-    return output_path
-    
-    stdout, stderr = await proc.communicate()
-
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"Item3D failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
-        )
- # ---------------------- Blender ----------------------    
-async def run_blender(input_path: str, output_path: str):
-    blender_script = os.path.join(PROCESSOR_DIR, "blender_item.py")
-    
-    proc = await asyncio.create_subprocess_exec(
-        "blender",
-        "--background",
-        "--python",
-        blender_script,
-        "--",
-        input_path,
-        output_path,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=PROCESSOR_DIR
-    )
-
-    stdout, stderr = await proc.communicate()
-
-    if proc.returncode != 0:
-        error = stderr.decode() if stderr else stdout.decode()
-        raise RuntimeError(f"Blender failed:\n{error}")
-    
-    if not os.path.exists(output_path):
-        raise RuntimeError("Blender did not generate output file")
-    
-    return output_path
-# ---------------------- worker ----------------------
-async def worker():
-    global job_queue
-    while True:
-        job = await job_queue.get()
-
-        try:
-            if job.mode == "minecraft_3d":
-                await run_blender(job.input_path, job.output_path)
-
-        except Exception as e:
-            print("JOB ERROR:", e)
-
-        job_queue.task_done()
-# ---------------------- FILE HANDLER ----------------------
+# ====================== FILE HANDLER ======================
 @dp.message(F.document)
 async def handle_document(message: types.Message):
     mode = user_modes.get(message.from_user.id)
@@ -247,60 +178,50 @@ async def handle_document(message: types.Message):
         await bot.download_file(file.file_path, destination=input_path)
 
         try:
-            await run_node_processor(
-                input_path=input_path,
-                output_path=output_path,
-                xp_percent=0.7,
-                upscale_rate=1
+            await run_node_processor(input_path, output_path)
+            user_modes.pop(message.from_user.id, None)
+
+            await message.answer_document(
+                FSInputFile(output_path),
+                caption="✅ ریسورس پک پردازش شد!"
             )
         except Exception as e:
             await message.answer(f"❌ خطا:\n{e}")
-            return
-
-        if not os.path.exists(output_path):
-            await message.answer("❌ خروجی پیدا نشد")
-            return
-
-        user_modes.pop(message.from_user.id, None)
-        await message.answer_document(FSInputFile(output_path), caption="✅ انجام شد")
 
     # ---------------- MINECRAFT 3D ITEM ----------------
     elif mode == "minecraft_3d":
         if not doc.file_name.lower().endswith(".png"):
-            await message.answer("❌ فقط PNG")
+            await message.answer("❌ فقط فایل PNG مجاز است")
             return
 
-        await message.answer("🔄 در حال ساخت 3D...")
+        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
 
         input_path = os.path.join(INPUT_DIR, doc.file_name)
-        output_path = os.path.join(
-            OUTPUT_DIR,
-            os.path.splitext(doc.file_name)[0] + ".glb"
-        )
+        output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + ".obj")
 
         file = await bot.get_file(doc.file_id)
         await bot.download_file(file.file_path, destination=input_path)
 
         try:
-            await job_queue.put(Job(
-                user_id=message.from_user.id,
-                input_path=input_path,
-                output_path=output_path,
-                mode="minecraft_3d"
-            ))
+            output_file = await run_item3d(input_path, output_obj)
+            user_modes.pop(message.from_user.id, None)
+
+            await message.answer_document(
+                FSInputFile(output_file),
+                caption="✅ مدل سه‌بعدی با موفقیت ساخته شد!\n(شامل OBJ + MTL + PNG)"
+            )
+
+            # پاکسازی فایل ورودی
+            if os.path.exists(input_path):
+                os.remove(input_path)
+
         except Exception as e:
-            await message.answer(f"❌ خطا:\n{e}")
-            return
-# ---------------------- MAIN ----------------------
+            await message.answer(f"❌ خطا در ساخت مدل:\n{str(e)}")
+
+
+# ====================== MAIN ======================
 async def main():
-    global job_queue
-
-    job_queue = asyncio.Queue()  # 👈 اینجا داخل loop
-
-    print("🚀 Bot started")
-
-    asyncio.create_task(worker())
-
+    print("🚀 Bot started successfully")
     await dp.start_polling(bot)
 
 
