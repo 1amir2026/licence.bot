@@ -6,7 +6,8 @@ import archiver from "archiver";
 const input = process.argv[2];
 const output = process.argv[3];
 
-const DEPTH = 1.0;
+const DEPTH = 0.8;
+const OVERLAP = 0;
 const ALPHA_THRESHOLD = 40;
 
 const { data, info } = await sharp(input)
@@ -55,24 +56,21 @@ for (let y = 0; y < info.height; y++) {
     if (!isSolid(x, y))
       continue;
 
-    const px = x;
-    const py = info.height - y - 1;
+const px = x;
+const py = info.height - y - 1;
 
-    const z0 = -DEPTH / 2;
-    const z1 = DEPTH / 2;
+const pz0 = -DEPTH / 2;
+const pz1 = DEPTH / 2;
 
-    const vb = vertexIndex;
-    const tb = uvIndex;
+vertices.push(`v ${px} ${py} ${pz0}`);
+vertices.push(`v ${px + 1} ${py} ${pz0}`);
+vertices.push(`v ${px + 1} ${py + 1} ${pz0}`);
+vertices.push(`v ${px} ${py + 1} ${pz0}`);
 
-    addVertex(px,     py,     z0); //0
-    addVertex(px + 1, py,     z0); //1
-    addVertex(px + 1, py + 1, z0); //2
-    addVertex(px,     py + 1, z0); //3
-
-    addVertex(px,     py,     z1); //4
-    addVertex(px + 1, py,     z1); //5
-    addVertex(px + 1, py + 1, z1); //6
-    addVertex(px,     py + 1, z1); //7
+vertices.push(`v ${px} ${py} ${pz1}`);
+vertices.push(`v ${px + 1} ${py} ${pz1}`);
+vertices.push(`v ${px + 1} ${py + 1} ${pz1}`);
+vertices.push(`v ${px} ${py + 1} ${pz1}`);
 
     const u1 = x / info.width;
     const u2 = (x + 1) / info.width;
