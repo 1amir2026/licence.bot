@@ -272,51 +272,37 @@ await bot.download_file(file.file_path, destination=input_path)
         return
 
     # ---------------- MINECRAFT 3D ----------------
-    elif mode == "minecraft_3d":
+   elif mode == "minecraft_3d":
 
-        if not doc.file_name.lower().endswith(".png"):
-            await message.answer("❌ فقط PNG")
-            return
+    if not doc.file_name.lower().endswith(".png"):
+        await message.answer("❌ فقط PNG")
+        return
 
-        await message.answer("🔄 در حال ساخت 3D...")
+    await message.answer("🔄 در حال ساخت 3D...")
 
-        input_path = os.path.join(INPUT_DIR, doc.file_name)
-        output_path = os.path.join(
-            OUTPUT_DIR,
-            os.path.splitext(doc.file_name)[0] + ".glb"
-        )
+    input_path = os.path.join(INPUT_DIR, doc.file_name)
 
-file = await bot.get_file(doc.file_id)
-await bot.download_file(file.file_path, destination=input_path)
+    output_path = os.path.join(
+        OUTPUT_DIR,
+        os.path.splitext(doc.file_name)[0] + ".glb"
+    )
 
-try:
-    await job_queue.put(Job(
-        user_id=message.from_user.id,
-        input_path=input_path,
-        output_path=output_path,
-        mode="minecraft_3d"
-    ))
+    file = await bot.get_file(doc.file_id)
+    await bot.download_file(file.file_path, destination=input_path)
 
-    await message.answer("⏳ در صف پردازش قرار گرفت...")
-    return
+    try:
+        await job_queue.put(Job(
+            user_id=message.from_user.id,
+            input_path=input_path,
+            output_path=output_path,
+            mode="minecraft_3d"
+        ))
 
-except Exception as e:
-    await message.answer(f"❌ خطا:\n{e}")
-    return
-        except Exception as e:
-            await message.answer(f"❌ خطا:\n{e}")
-            return
+        await message.answer("⏳ در صف پردازش قرار گرفت...")
+        return
 
-        if not os.path.exists(output_path):
-            await message.answer("❌ GLB ساخته نشد")
-            return
-
-        await message.answer_document(
-            FSInputFile(output_path),
-            caption="🧊 آماده شد"
-        )
-
-        user_modes.pop(message.from_user.id, None)
+    except Exception as e:
+        await message.answer(f"❌ خطا:\n{e}")
         return
 # ---------------------- MAIN ----------------------
 async def main():
