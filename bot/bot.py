@@ -243,16 +243,19 @@ if mode == "resource_pack":
     output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
     output_path = os.path.join(OUTPUT_DIR, output_name)
 
-    file = await bot.get_file(doc.file_id)
-    await bot.download_file(file.file_path, destination=input_path)
-
-    try:
-        await run_node_processor(
-            input_path=input_path,
-            output_path=output_path,
-            xp_percent=0.7,
-            upscale_rate=1
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(
+            file.file_path,
+            destination=input_path
         )
+
+        try:
+            await run_node_processor(
+                input_path=input_path,
+                output_path=output_path,
+                xp_percent=0.7,
+                upscale_rate=1
+            )
     except Exception as e:
         await message.answer(f"❌ خطا:\n{e}")
         return
@@ -286,8 +289,11 @@ elif mode == "minecraft_3d":
         os.path.splitext(doc.file_name)[0] + ".glb"
     )
 
-    file = await bot.get_file(doc.file_id)
-    await bot.download_file(file.file_path, destination=input_path)
+         file = await bot.get_file(doc.file_id)
+        await bot.download_file(
+            file.file_path,
+            destination=input_path
+        )
 
     try:
         await job_queue.put(Job(
