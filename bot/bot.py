@@ -160,8 +160,29 @@ async def run_item3d(input_path: str, output_path: str):
         cwd=PROCESSOR_DIR
     )
 
-    async def run_blender(input_path: str, output_path: str):
+    stdout, stderr = await proc.communicate()
 
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"Item3D failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
+        )
+
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(stderr.decode())
+
+    return output_path
+    
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"Item3D failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
+        )
+ # ---------------------- Blender ----------------------    
+
+async def run_blender(input_path: str, output_path: str):
     proc = await asyncio.create_subprocess_exec(
         "blender",
         "--background",
@@ -181,13 +202,6 @@ async def run_item3d(input_path: str, output_path: str):
 
     return output_path
     
-    stdout, stderr = await proc.communicate()
-
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"Item3D failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
-        )
-        
 # ---------------------- FILE HANDLER ----------------------
 @dp.message(F.document)
 async def handle_document(message: types.Message):
