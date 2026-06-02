@@ -237,7 +237,6 @@ async def handle_document(message: types.Message):
         output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
         output_path = os.path.join(OUTPUT_DIR, output_name)
 
-        # دانلود فایل
         file = await bot.get_file(doc.file_id)
         await bot.download_file(file.file_path, destination=input_path)
 
@@ -257,11 +256,7 @@ async def handle_document(message: types.Message):
             return
 
         user_modes.pop(message.from_user.id, None)
-
-        await message.answer_document(
-            FSInputFile(output_path),
-            caption="✅ انجام شد"
-        )
+        await message.answer_document(FSInputFile(output_path), caption="✅ انجام شد")
 
     # ---------------- MINECRAFT 3D ITEM ----------------
     elif mode == "minecraft_3d":
@@ -277,7 +272,6 @@ async def handle_document(message: types.Message):
             os.path.splitext(doc.file_name)[0] + ".glb"
         )
 
-        # دانلود فایل
         file = await bot.get_file(doc.file_id)
         await bot.download_file(file.file_path, destination=input_path)
 
