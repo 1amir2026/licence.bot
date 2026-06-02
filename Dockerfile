@@ -16,6 +16,7 @@ WORKDIR /app
 
 # ---------------- copy project ----------------
 COPY . .
+COPY mcprep /usr/share/blender/scripts/addons/mcprep
 
 # ---------------- python deps ----------------
 RUN pip3 install --no-cache-dir -r requirements.txt
