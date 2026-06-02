@@ -220,7 +220,6 @@ async def worker():
 async def handle_document(message: types.Message):
 
     mode = user_modes.get(message.from_user.id)
-
     doc = message.document
 
     if not doc:
@@ -245,8 +244,9 @@ async def handle_document(message: types.Message):
         output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
         output_path = os.path.join(OUTPUT_DIR, output_name)
 
-file = await bot.get_file(doc.file_id)
-await bot.download_file(file.file_path, destination=input_path)
+        # ✅ درست دانلود فایل
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(file.file_path, destination=input_path)
 
         try:
             await run_node_processor(
