@@ -187,8 +187,8 @@ async def run_blender(input_path: str, output_path: str):
         "blender",
         "--background",
         "--python",
-        "processor/blender_item.py",
-        "--",
+        "processor/blender_item.py",   # مسیر درست
+        "--",                          # جداکننده آرگومان‌ها
         input_path,
         output_path,
         stdout=asyncio.subprocess.PIPE,
@@ -198,8 +198,9 @@ async def run_blender(input_path: str, output_path: str):
     stdout, stderr = await proc.communicate()
 
     if proc.returncode != 0:
-        raise RuntimeError(stderr.decode())
-
+        error_msg = stderr.decode() or stdout.decode()
+        raise RuntimeError(f"Blender failed: {error_msg}")
+    
     return output_path
 # ---------------------- worker ----------------------
 async def worker():
