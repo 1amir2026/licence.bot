@@ -119,11 +119,11 @@ async def ask_for_pack(message: types.Message):
 # ---------------------- MINECRAFT 3D ITEM ----------------------
 @dp.message(F.text == "🧊 ساخت آیتم سه‌بعدی ماینکرافت")
 async def minecraft_3d(message: types.Message):
+
     user_modes[message.from_user.id] = "minecraft_3d"
 
     await message.answer(
-        "🧊 تصویر PNG آیتم را ارسال کنید.\n\n"
-        "در نسخه فعلی فقط دریافت فایل تست می‌شود."
+        "🧊 فایل PNG آیتم را ارسال کنید."
     )
 
     print("MINECRAFT HANDLER")
@@ -219,46 +219,6 @@ async def run_item3d(input_path: str, output_path: str):
         
 # ---------------------- FILE HANDLER ----------------------
 
-    print("PACK HANDLER")
-    
-    if user_modes.get(message.from_user.id) != "resource_pack":
-        return
-
-    doc = message.document
-
-    if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcpack")):
-        await message.answer("❌ فقط فایل‌های ZIP یا MCPACK قابل قبول هستند.")
-        return
-
-    await message.answer("🔄 فایل دریافت شد. در حال پردازش...")
-
-    input_path = os.path.join(INPUT_DIR, doc.file_name)
-    output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
-    output_path = os.path.join(OUTPUT_DIR, output_name)
-
-    await bot.download(doc, destination=input_path)
-
-    try:
-        await run_node_processor(
-            input_path=input_path,
-            output_path=output_path,
-            xp_percent=0.7,
-            upscale_rate=1
-        )
-    except Exception as e:
-        await message.answer(f"❌ خطا در پردازش پک:\n{e}")
-        return
-
-    if not os.path.exists(output_path):
-        await message.answer("❌ پردازش انجام نشد. خروجی پیدا نشد.")
-        return
-
-    user_modes.pop(message.from_user.id, None)
-    await message.answer_document(
-        FSInputFile(output_path),
-        caption="✅ پردازش انجام شد! این هم UI نهایی:"
-    )
-
 @dp.message(F.document)
 async def handle_document(message: types.Message):
 
@@ -340,14 +300,17 @@ async def handle_document(message: types.Message):
         return
 
     # ---------------- MINECRAFT 3D ----------------
+       # ---------------- MINECRAFT 3D ----------------
     elif mode == "minecraft_3d":
 
         print("MINECRAFT HANDLER")
 
         doc = message.document
 
-        if not doc.file_name.lower().endswith(".png"):
+        if not doc:
+            return
 
+        if not doc.file_name.lower().endswith(".png"):
             await message.answer(
                 "❌ فقط فایل PNG قابل قبول است."
             )
@@ -391,13 +354,6 @@ async def handle_document(message: types.Message):
             )
             return
 
-        if not os.path.exists(output_path):
-
-            await message.answer(
-                "❌ فایل OBJ ساخته نشد."
-            )
-            return
-
         zip_path = output_path.replace(
             ".obj",
             ".zip"
@@ -431,7 +387,7 @@ async def handle_document(message: types.Message):
         )
 
         return
-
+        
     # ---------------- NO MODE ----------------
     else:
 
