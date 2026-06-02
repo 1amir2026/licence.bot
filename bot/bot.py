@@ -168,14 +168,13 @@ async def run_item3d(input_path: str, output_path: str):
         )
         
 # ---------------------- FILE HANDLER ----------------------
-
 @dp.message(F.document)
 async def handle_document(message: types.Message):
 
     mode = user_modes.get(message.from_user.id)
 
     # ---------------- RESOURCE PACK ----------------
-if mode == "resource_pack":
+    if mode == "resource_pack":
 
         print("PACK HANDLER")
 
@@ -250,8 +249,7 @@ if mode == "resource_pack":
         return
 
     # ---------------- MINECRAFT 3D ----------------
-       # ---------------- MINECRAFT 3D ----------------
-elif mode == "minecraft_3d":
+    elif mode == "minecraft_3d":
 
     doc = message.document
 
