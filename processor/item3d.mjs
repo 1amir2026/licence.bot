@@ -41,9 +41,23 @@ let uvIndex = 1;
 
 // ---------------- HELPERS ----------------
 
+const vertexCache = new Map();
+
 function addVertex(x, y, z) {
+
+  const key = `${x},${y},${z}`;
+
+  if (vertexCache.has(key)) {
+    return vertexCache.get(key);
+  }
+
+  const id = vertexIndex++;
+
   vertices.push(`v ${x} ${y} ${z}`);
-  return vertexIndex++;
+
+  vertexCache.set(key, id);
+
+  return id;
 }
 
 function addUV(u, v) {
@@ -67,8 +81,8 @@ function addQuad(v1, v2, v3, v4, t1, t2, t3, t4) {
 
 function buildVoxel(x, y) {
 
-  const px = x;
-  const py = HEIGHT - y - 1;
+const px = x - WIDTH / 2;
+const py = (HEIGHT - y - 1) - HEIGHT / 2;
 
   const z0 = -DEPTH / 2;
   const z1 = DEPTH / 2;
