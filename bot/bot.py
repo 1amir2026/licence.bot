@@ -160,7 +160,6 @@ async def run_node_processor(input_path: str, output_path: str,
         )
 
 async def run_item3d(input_path: str, output_path: str):
-
     proc = await asyncio.create_subprocess_exec(
         "node",
         ITEM3D_SCRIPT,
@@ -174,9 +173,7 @@ async def run_item3d(input_path: str, output_path: str):
     stdout, stderr = await proc.communicate()
 
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"Item3D failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
-        )
+        raise RuntimeError(stderr.decode())
 
     return output_path
     
@@ -187,7 +184,6 @@ async def run_item3d(input_path: str, output_path: str):
             f"Item3D failed:\nSTDOUT: {stdout.decode()}\nSTDERR: {stderr.decode()}"
         )
  # ---------------------- Blender ----------------------    
-
 async def run_blender(input_path: str, output_path: str):
     proc = await asyncio.create_subprocess_exec(
         "blender",
@@ -207,7 +203,6 @@ async def run_blender(input_path: str, output_path: str):
         raise RuntimeError(stderr.decode())
 
     return output_path
-
 # ---------------------- worker ----------------------
 async def worker():
     while True:
@@ -221,7 +216,6 @@ async def worker():
             print("JOB ERROR:", e)
 
         job_queue.task_done()
-        
 # ---------------------- FILE HANDLER ----------------------
 @dp.message(F.document)
 async def handle_document(message: types.Message):
@@ -294,16 +288,20 @@ async def handle_document(message: types.Message):
 
         await bot.download_file(doc.file_id, destination=input_path)
 
-        try:
-await job_queue.put(Job(
-    user_id=message.from_user.id,
-    input_path=input_path,
-    output_path=output_path,
-    mode="minecraft_3d"
-))
+try:
+    await job_queue.put(Job(
+        user_id=message.from_user.id,
+        input_path=input_path,
+        output_path=output_path,
+        mode="minecraft_3d"
+    ))
 
-await message.answer("⏳ در صف پردازش قرار گرفت...")
-return
+    await message.answer("⏳ در صف پردازش قرار گرفت...")
+    return
+
+except Exception as e:
+    await message.answer(f"❌ خطا:\n{e}")
+    return
         except Exception as e:
             await message.answer(f"❌ خطا:\n{e}")
             return
