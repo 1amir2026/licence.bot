@@ -2,127 +2,191 @@ import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import archiver from "archiver";
+import { Potrace } from "potrace";
+import earcut from "earcut";
 
 const input = process.argv[2];
 const output = process.argv[3];
 
+if (!input || !output) {
+  console.log("Usage: node item3d.mjs input.png output.obj");
+  process.exit(1);
+}
+
 const DEPTH = 0.8;
-const ALPHA_THRESHOLD = 40;
 
-const { data, info } = await sharp(input)
+const pngBuffer = await sharp(input)
   .ensureAlpha()
-  .raw()
-  .toBuffer({ resolveWithObject: true });
+  .png()
+  .toBuffer();
 
-function isSolid(x, y) {
-  if (x < 0 || y < 0 || x >= info.width || y >= info.height)
-    return false;
+function trace(buffer) {
+  return new Promise((resolve, reject) => {
+    const potrace = new Potrace({
+      threshold: 128,
+      turdSize: 2,
+      optCurve: true
+    });
 
-  const i = (y * info.width + x) * 4;
-  return data[i + 3] > ALPHA_THRESHOLD;
+    potrace.loadImage(buffer, (err) => {
+      if (err) return reject(err);
+      resolve(potrace.getPathTag());
+    });
+  });
+}
+
+function parsePath(pathTag) {
+  const d = pathTag.match(/d="([^"]+)"/)?.[1];
+  if (!d) throw new Error("No SVG path");
+
+  const pts = [];
+
+  const tokens = d
+    .replace(/[A-Za-z]/g, m => ` ${m} `)
+    .trim()
+    .split(/[\s,]+/);
+
+  let i = 0;
+
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+
+    if (cmd === "M" || cmd === "L") {
+      const x = parseFloat(tokens[i++]);
+      const y = parseFloat(tokens[i++]);
+      pts.push([x, -y]);
+    }
+
+    if (cmd === "Z") break;
+  }
+
+  return pts;
+}
+
+const pathTag = await trace(pngBuffer);
+const contour = parsePath(pathTag);
+
+if (contour.length < 3) {
+  throw new Error("Contour too small");
 }
 
 const vertices = [];
 const uvs = [];
 const faces = [];
 
-let vertexIndex = 1;
-let uvIndex = 1;
-
-function addQuad(a, b, c, d, ta, tb, tc, td) {
-  faces.push(`f ${a}/${ta} ${b}/${tb} ${c}/${tc}`);
-  faces.push(`f ${a}/${ta} ${c}/${tc} ${d}/${td}`);
+function addVertex(x, y, z) {
+  vertices.push([x, y, z]);
+  return vertices.length;
 }
 
-for (let y = 0; y < info.height; y++) {
-  for (let x = 0; x < info.width; x++) {
+function addUV(u, v) {
+  uvs.push([u, v]);
+  return uvs.length;
+}
 
-    if (!isSolid(x, y)) continue;
+const flat = [];
 
-    const px = x;
-    const py = info.height - y - 1;
+for (const [x, y] of contour) {
+  flat.push(x, y);
+}
 
-    const z0 = -DEPTH / 2;
-    const z1 = DEPTH / 2;
+const tris = earcut(flat);
 
-    const vb = vertexIndex;
-    const tb = uvIndex;
+const front = [];
+const back = [];
 
-    vertices.push(`v ${px} ${py} ${z0}`);
-    vertices.push(`v ${px + 1} ${py} ${z0}`);
-    vertices.push(`v ${px + 1} ${py + 1} ${z0}`);
-    vertices.push(`v ${px} ${py + 1} ${z0}`);
+let minX = Infinity;
+let maxX = -Infinity;
+let minY = Infinity;
+let maxY = -Infinity;
 
-    vertices.push(`v ${px} ${py} ${z1}`);
-    vertices.push(`v ${px + 1} ${py} ${z1}`);
-    vertices.push(`v ${px + 1} ${py + 1} ${z1}`);
-    vertices.push(`v ${px} ${py + 1} ${z1}`);
+for (const [x, y] of contour) {
+  minX = Math.min(minX, x);
+  maxX = Math.max(maxX, x);
+  minY = Math.min(minY, y);
+  maxY = Math.max(maxY, y);
+}
 
-    const u1 = x / info.width;
-    const u2 = (x + 1) / info.width;
-    const v1 = (info.height - y - 1) / info.height;
-    const v2 = (info.height - y) / info.height;
+for (const [x, y] of contour) {
 
-    uvs.push(`vt ${u1} ${v1}`);
-    uvs.push(`vt ${u2} ${v1}`);
-    uvs.push(`vt ${u2} ${v2}`);
-    uvs.push(`vt ${u1} ${v2}`);
+  const u = (x - minX) / (maxX - minX || 1);
+  const v = (y - minY) / (maxY - minY || 1);
 
-    // FRONT
-    addQuad(
-      vb+4, vb+5, vb+6, vb+7,
-      tb, tb+1, tb+2, tb+3
-    );
+  const uv = addUV(u, v);
 
-    // BACK
-    addQuad(
-      vb+1, vb+0, vb+3, vb+2,
-      tb+1, tb, tb+3, tb+2
-    );
+  front.push({
+    v: addVertex(x, y, DEPTH / 2),
+    uv
+  });
 
-    // LEFT
-    addQuad(
-      vb+0, vb+4, vb+7, vb+3,
-      tb, tb, tb+3, tb+3
-    );
+  back.push({
+    v: addVertex(x, y, -DEPTH / 2),
+    uv
+  });
+}
 
-    // RIGHT
-    addQuad(
-      vb+5, vb+1, vb+2, vb+6,
-      tb+1, tb+1, tb+2, tb+2
-    );
+for (let i = 0; i < tris.length; i += 3) {
 
-    // TOP
-    addQuad(
-      vb+3, vb+7, vb+6, vb+2,
-      tb+3, tb+3, tb+2, tb+2
-    );
+  const a = tris[i];
+  const b = tris[i + 1];
+  const c = tris[i + 2];
 
-    // BOTTOM
-    addQuad(
-      vb+0, vb+1, vb+5, vb+4,
-      tb, tb+1, tb+1, tb
-    );
+  faces.push([
+    front[a].v, front[a].uv,
+    front[b].v, front[b].uv,
+    front[c].v, front[c].uv
+  ]);
 
-    vertexIndex += 8;
-    uvIndex += 4;
-  }
+  faces.push([
+    back[c].v, back[c].uv,
+    back[b].v, back[b].uv,
+    back[a].v, back[a].uv
+  ]);
+}
+
+for (let i = 0; i < contour.length; i++) {
+
+  const j = (i + 1) % contour.length;
+
+  const a = front[i];
+  const b = front[j];
+  const c = back[j];
+  const d = back[i];
+
+  faces.push([
+    a.v, a.uv,
+    b.v, b.uv,
+    c.v, c.uv
+  ]);
+
+  faces.push([
+    a.v, a.uv,
+    c.v, c.uv,
+    d.v, d.uv
+  ]);
 }
 
 const baseName = path.basename(output, ".obj");
 
-const objContent =
-`mtllib ${baseName}.mtl
-usemtl Material
+let obj = `mtllib ${baseName}.mtl\nusemtl Material\n\n`;
 
-${vertices.join("\n")}
+for (const v of vertices) {
+  obj += `v ${v[0]} ${v[1]} ${v[2]}\n`;
+}
 
-${uvs.join("\n")}
+obj += "\n";
 
-${faces.join("\n")}
-`;
+for (const uv of uvs) {
+  obj += `vt ${uv[0]} ${uv[1]}\n`;
+}
 
-fs.writeFileSync(output, objContent);
+obj += "\n";
+
+for (const f of faces) {
+  obj += `f ${f[0]}/${f[1]} ${f[2]}/${f[3]} ${f[4]}/${f[5]}\n`;
+}
+
+fs.writeFileSync(output, obj);
 
 fs.writeFileSync(
   output.replace(".obj", ".mtl"),
@@ -136,22 +200,35 @@ map_Kd ${baseName}.png
 `
 );
 
-fs.copyFileSync(input, output.replace(".obj", ".png"));
-
-const zipPath = output.replace(".obj", ".zip");
+fs.copyFileSync(
+  input,
+  output.replace(".obj", ".png")
+);
 
 const archive = archiver("zip", {
   zlib: { level: 9 }
 });
 
-const stream = fs.createWriteStream(zipPath);
+const stream = fs.createWriteStream(
+  output.replace(".obj", ".zip")
+);
 
 archive.pipe(stream);
 
-archive.file(output, { name: `${baseName}.obj` });
-archive.file(output.replace(".obj", ".mtl"), { name: `${baseName}.mtl` });
-archive.file(output.replace(".obj", ".png"), { name: `${baseName}.png` });
+archive.file(output, {
+  name: `${baseName}.obj`
+});
+
+archive.file(
+  output.replace(".obj", ".mtl"),
+  { name: `${baseName}.mtl` }
+);
+
+archive.file(
+  output.replace(".obj", ".png"),
+  { name: `${baseName}.png` }
+);
 
 await archive.finalize();
 
-console.log(`✅ Exported (${info.width}x${info.height})`);
+console.log("✅ Extruded OBJ exported");
