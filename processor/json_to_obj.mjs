@@ -10,43 +10,24 @@ if (!inputPath || !outputObjPath) {
 }
 
 try {
-    let jsonText = fs.readFileSync(inputPath, 'utf8').replace(/\/\/.*$/gm, '');
-    const json = JSON.parse(jsonText);
-    
-    let elements = [];
-    let textureWidth = 64;
-    let textureHeight = 64;
-    let baseTexture = "texture";
+    const json = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
+    const baseName = path.basename(outputObjPath, '.obj');
 
-    // تشخیص نوع فرمت
-    if (json["minecraft:geometry"]) {
-        // === Bedrock Format ===
-        const geo = Array.isArray(json["minecraft:geometry"]) ? json["minecraft:geometry"][0] : json["minecraft:geometry"];
-        if (geo.bones) {
-            console.log("Detected: Bedrock Geometry");
-            // ... (کد قبلی Bedrock) ...
-            // برای اختصار فعلاً فقط Java را کامل می‌کنیم چون مشکل فعلی Java است
-        }
-    } else if (json.elements) {
-        // === Java Edition Format ===
-        console.log("Detected: Java Edition Model");
-        elements = json.elements || [];
-        textureWidth = json.texture_size?.[0] || 64;
-        textureHeight = json.texture_size?.[1] || 64;
-    } else {
-        throw new Error(`Unknown format. Keys: ${Object.keys(json)}`);
-    }
+    let elements = json.elements || [];
+    const texW = json.texture_size?.[0] || 64;
+    const texH = json.texture_size?.[1] || 64;
 
     let vertices = [], uvs = [], faces = [];
     let vCount = 1;
     const SCALE = 0.0625;
 
-    elements.forEach((el, idx) => {
-        const from = (el.from || [0,0,0]).map(v => v * SCALE);
-        const to   = (el.to   || [1,1,1]).map(v => v * SCALE);
-        const facesUV = el.faces || {};
+    elements.forEach((el, index) => {
+        const from = el.from.map(v => v * SCALE);
+        const to = el.to.map(v => v * SCALE);
+        const facesData = el.faces || {};
 
-        const c = [
+        // 8 corners
+        const corners = [
             [from[0], from[1], from[2]],
             [to[0],   from[1], from[2]],
             [to[0],   to[1],   from[2]],
@@ -57,30 +38,29 @@ try {
             [from[0], to[1],   to[2]],
         ];
 
-        const vIds = c.map(p => {
+        const vIds = corners.map(p => {
             vertices.push(`v ${p[0].toFixed(6)} ${p[1].toFixed(6)} ${p[2].toFixed(6)}`);
             return vCount++;
         });
 
-        const faceOrder = [
-            {key: 'north', order: [3,2,1,0]},
-            {key: 'east',  order: [2,6,5,1]},
-            {key: 'south', order: [6,7,4,5]},
-            {key: 'west',  order: [7,3,0,4]},
-            {key: 'up',    order: [3,7,6,2]},
-            {key: 'down',  order: [0,1,5,4]},
+        const faceList = [
+            { dir: 'north', order: [3,2,1,0], uv: facesData.north },
+            { dir: 'east',  order: [2,6,5,1], uv: facesData.east },
+            { dir: 'south', order: [6,7,4,5], uv: facesData.south },
+            { dir: 'west',  order: [7,3,0,4], uv: facesData.west },
+            { dir: 'up',    order: [3,7,6,2], uv: facesData.up },
+            { dir: 'down',  order: [0,1,5,4], uv: facesData.down },
         ];
 
-        faceOrder.forEach(f => {
-            const faceData = facesUV[f.key];
-            if (!faceData?.uv) return;
+        faceList.forEach(f => {
+            if (!f.uv?.uv) return;
 
-            const [u1, v1, u2, v2] = faceData.uv;
+            const [u1, v1, u2, v2] = f.uv.uv;
             const uvIds = [
-                addUV(u1/textureWidth, v1/textureHeight),
-                addUV(u2/textureWidth, v1/textureHeight),
-                addUV(u2/textureWidth, v2/textureHeight),
-                addUV(u1/textureWidth, v2/textureHeight),
+                addUV(u1/texW, v1/texH),
+                addUV(u2/texW, v1/texH),
+                addUV(u2/texW, v2/texH),
+                addUV(u1/texW, v2/texH)
             ];
 
             const o = f.order;
@@ -94,10 +74,8 @@ try {
         return id;
     }
 
-    const baseName = path.basename(outputObjPath, '.obj');
-
     const objContent = [
-        `# Converted from Minecraft Java Model`,
+        `# Converted from Java Model`,
         `mtllib ${baseName}.mtl`,
         ...vertices,
         ...uvs,
@@ -109,7 +87,7 @@ try {
     fs.writeFileSync(outputObjPath.replace('.obj', '.mtl'), 
         `newmtl material\nKd 1 1 1\nmap_Kd ${baseName}.png\n`);
 
-    console.log(`✅ Successfully converted Java Model: ${outputObjPath}`);
+    console.log(`✅ Converted: ${outputObjPath}`);
     process.exit(0);
 
 } catch (err) {
