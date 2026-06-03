@@ -178,7 +178,7 @@ async def minecraft_3d(message: types.Message):
 
 # ====================== FILE HANDLER ======================
 @dp.message(F.document)
-async def handle_document(message: types.Message):
+async def handle_document(message):
     mode = user_modes.get(message.from_user.id)
     doc = message.document
 
@@ -212,32 +212,32 @@ async def handle_document(message: types.Message):
             await message.answer(f"❌ خطا:\n{e}")
 
 # ---------------- MINECRAFT 3D ITEM ----------------
-elif mode == "minecraft_3d":
+    elif mode == "minecraft_3d":
 
-    if not doc.file_name.lower().endswith(".png"):
-        await message.answer("❌ فقط فایل PNG مجاز است")
-        return
+        if not doc.file_name.lower().endswith(".png"):
+            await message.answer("❌ فقط فایل PNG مجاز است")
+            return
 
-    input_path = os.path.join(INPUT_DIR, doc.file_name)
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
 
-    file = await bot.get_file(doc.file_id)
-    await bot.download_file(
-        file.file_path,
-        destination=input_path
-    )
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(
+            file.file_path,
+            destination=input_path
+        )
 
-    pending_3d[message.from_user.id] = {
-        "input": input_path,
-        "filename": doc.file_name
-    }
+        pending_3d[message.from_user.id] = {
+            "input": input_path,
+            "filename": doc.file_name
+        }
 
-    await message.answer(
-        "📏 ضخامت مدل را وارد کنید:\n\n"
-        "🔹 آیتم معمولی ماینکرافت: 0.8\n"
-        "🔹 Resource Pack: 1.0 تا 1.3\n"
-        "🔹 ضخیم: 2.0\n\n"
-        "مثال:\n0.8"
-    )
+        await message.answer(
+            "📏 ضخامت مدل را وارد کنید:\n\n"
+            "🔹 آیتم معمولی ماینکرافت: 0.8\n"
+            "🔹 Resource Pack: 1.0 تا 1.3\n"
+            "🔹 ضخیم: 2.0\n\n"
+            "مثال:\n0.8"
+        )
             # پاکسازی فایل ورودی
             if os.path.exists(input_path):
                 os.remove(input_path)
