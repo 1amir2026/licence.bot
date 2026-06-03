@@ -68,7 +68,6 @@ async def run_item3d(input_path: str, output_obj: str):
     if proc.returncode != 0:
         raise RuntimeError(f"Item3D failed:\n{stderr.decode()}")
 
-    # خروجی اصلی ZIP است
     zip_path = output_obj.replace(".obj", ".zip")
     if os.path.exists(zip_path):
         return zip_path
@@ -76,6 +75,27 @@ async def run_item3d(input_path: str, output_obj: str):
         return output_obj
     else:
         raise RuntimeError("No output file was generated")
+
+
+# ====================== JSON TO OBJ HELPER ======================
+async def run_json_to_obj(input_path: str, output_obj: str):
+    """اجرای تبدیل JSON به OBJ"""
+    json_script = os.path.join(PROCESSOR_DIR, "json_to_obj.mjs")
+    proc = await asyncio.create_subprocess_exec(
+        "node", json_script, input_path, output_obj,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=PROCESSOR_DIR
+    )
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"JSON to OBJ failed:\n{stderr.decode()}")
+
+    zip_path = output_obj.replace(".obj", ".zip")
+    if os.path.exists(zip_path):
+        return zip_path
+    return output_obj
 
 
 # ====================== COMMANDS ======================
@@ -125,14 +145,14 @@ async def check_license(message: types.Message):
         license_glb.used_at = datetime.utcnow()
         session.commit()
 
-keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
-        [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
-        [KeyboardButton(text="🔄 تبدیل JSON به OBJ")]   # ← جدید
-    ],
-    resize_keyboard=True
-)
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
+                [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
+                [KeyboardButton(text="🔄 تبدیل JSON به OBJ")]   # ← دکمه جدید
+            ],
+            resize_keyboard=True
+        )
 
         await message.answer("✅ لایسنس فعال شد!\n\nبه پنل خوش آمدید 🎉", reply_markup=keyboard)
     else:
@@ -154,11 +174,10 @@ async def minecraft_3d(message: types.Message):
     await message.answer("🧊 فایل PNG آیتم را ارسال کنید.")
 
 
-# === NEW MODE ===
 @dp.message(F.text == "🔄 تبدیل JSON به OBJ")
 async def json_to_obj_mode(message: types.Message):
     user_modes[message.from_user.id] = "json_to_obj"
-    await message.answer("📤 فایل `.json` مدل ماینکرافت (geometry) را ارسال کنید.")
+    await message.answer("📤 فایل `.json` مدل ماینکرافت را ارسال کنید.")
 
 
 # ====================== FILE HANDLER ======================
@@ -170,38 +189,6 @@ async def handle_document(message: types.Message):
     if not doc or not mode:
         return
 
-    # ... (بقیه کدهای resource_pack و minecraft_3d بدون تغییر) ...
-    # ---------------- JSON TO OBJ ----------------
-    elif mode == "json_to_obj":
-        if not doc.file_name.lower().endswith(".json"):
-            await message.answer("❌ فقط فایل JSON مجاز است")
-            return
-
-        await message.answer("🔄 در حال تبدیل JSON به OBJ...")
-
-        input_path = os.path.join(INPUT_DIR, doc.file_name)
-        base_name = os.path.splitext(doc.file_name)[0]
-        output_obj = os.path.join(OUTPUT_DIR, base_name + ".obj")
-
-        file = await bot.get_file(doc.file_id)
-        await bot.download_file(file.file_path, destination=input_path)
-
-        try:
-            output_file = await run_json_to_obj(input_path, output_obj)
-            user_modes.pop(message.from_user.id, None)
-
-            await message.answer_document(
-                FSInputFile(output_file),
-                caption="✅ تبدیل با موفقیت انجام شد!\n(شامل OBJ + MTL + PNG)"
-            )
-
-            # پاکسازی
-            if os.path.exists(input_path):
-                os.remove(input_path)
-
-        except Exception as e:
-            await message.answer(f"❌ خطا در تبدیل:\n{str(e)}")
-            
     # ---------------- RESOURCE PACK ----------------
     if mode == "resource_pack":
         if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcpack")):
@@ -251,34 +238,43 @@ async def handle_document(message: types.Message):
                 caption="✅ مدل سه‌بعدی با موفقیت ساخته شد!\n(شامل OBJ + MTL + PNG)"
             )
 
-            # پاکسازی فایل ورودی
             if os.path.exists(input_path):
                 os.remove(input_path)
 
         except Exception as e:
             await message.answer(f"❌ خطا در ساخت مدل:\n{str(e)}")
 
-# ====================== Handler Json TO .Obj ======
-async def run_json_to_obj(input_path: str, output_obj: str):
-    """اجرای اسکریپت تبدیل JSON به OBJ"""
-    proc = await asyncio.create_subprocess_exec(
-        "node", os.path.join(PROCESSOR_DIR, "json_to_obj.mjs"),
-        input_path, output_obj,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=PROCESSOR_DIR
-    )
-    stdout, stderr = await proc.communicate()
+    # ---------------- JSON TO OBJ ----------------
+    elif mode == "json_to_obj":
+        if not doc.file_name.lower().endswith(".json"):
+            await message.answer("❌ فقط فایل JSON مجاز است")
+            return
 
-    if proc.returncode != 0:
-        raise RuntimeError(f"JSON to OBJ failed:\n{stderr.decode()}")
+        await message.answer("🔄 در حال تبدیل JSON به OBJ...")
 
-    # خروجی اصلی ZIP یا OBJ
-    zip_path = output_obj.replace(".obj", ".zip")
-    if os.path.exists(zip_path):
-        return zip_path
-    return output_obj
-    
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
+        base_name = os.path.splitext(doc.file_name)[0]
+        output_obj = os.path.join(OUTPUT_DIR, base_name + ".obj")
+
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(file.file_path, destination=input_path)
+
+        try:
+            output_file = await run_json_to_obj(input_path, output_obj)
+            user_modes.pop(message.from_user.id, None)
+
+            await message.answer_document(
+                FSInputFile(output_file),
+                caption="✅ تبدیل JSON به OBJ با موفقیت انجام شد!\n(شامل OBJ + MTL + texture.png)"
+            )
+
+            if os.path.exists(input_path):
+                os.remove(input_path)
+
+        except Exception as e:
+            await message.answer(f"❌ خطا در تبدیل:\n{str(e)}")
+
+
 # ====================== MAIN ======================
 async def main():
     print("🚀 Bot started successfully")
