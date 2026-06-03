@@ -129,10 +129,10 @@ addQuad(
 
 if (!isSolid(x - 1, y)) {
 
-  addQuad(
-    v000,v001,v011,v010,
-    sideUV,sideUV,sideUV,sideUV
-  );
+addQuad(
+  v010,v011,v001,v000,
+  ...
+);
 }
 
   // RIGHT
