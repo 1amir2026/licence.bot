@@ -131,7 +131,7 @@ if (!isSolid(x - 1, y)) {
 
 addQuad(
   v010,v011,v001,v000,
-  ...
+    sideUV,sideUV,sideUV,sideUV
 );
 }
 
