@@ -124,15 +124,15 @@ addQuad(
     t2,t1,t4,t3
   );
 
-  // LEFT
+// LEFT
 
-  if (!isSolid(x - 1, y)) {
+if (!isSolid(x - 1, y)) {
 
-    addQuad(
-      v000,v001,v011,v010,
-      t1,t1,t4,t4
-    );
-  }
+  addQuad(
+    v000,v001,v011,v010,
+    sideUV,sideUV,sideUV,sideUV
+  );
+}
 
   // RIGHT
 
@@ -144,25 +144,25 @@ if (!isSolid(x + 1, y)) {
   );
 }
 
-  // TOP
+// TOP
 
-if (!isSolid(x - 1, y)) {
+if (!isSolid(x, y - 1)) {
 
   addQuad(
-    v000,v001,v011,v010,
+    v010,v011,v111,v110,
     sideUV,sideUV,sideUV,sideUV
   );
 }
 
-  // BOTTOM
+// BOTTOM
 
-  if (!isSolid(x, y + 1)) {
+if (!isSolid(x, y + 1)) {
 
-    addQuad(
-      v000,v100,v101,v001,
-      t1,t2,t2,t1
-    );
-  }
+  addQuad(
+    v000,v100,v101,v001,
+    sideUV,sideUV,sideUV,sideUV
+  );
+}
 }
 
 // ---------------- BUILD ----------------
