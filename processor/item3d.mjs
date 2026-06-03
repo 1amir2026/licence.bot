@@ -120,10 +120,10 @@ addQuad(
 // BACK
 
 addQuad(
-  v100,v000,v010,v110,
+  v110,v010,v000,v100,
   t1,t2,t3,t4
 );
-
+  
 // LEFT
 
 if (!isSolid(x - 1, y)) {
