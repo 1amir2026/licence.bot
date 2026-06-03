@@ -17,54 +17,30 @@ try {
     const texW = json.texture_size?.[0] || 64;
     const texH = json.texture_size?.[1] || 64;
 
-    let vertices = [], uvs = [], faces = [];
+    let vertices = [];
+    let uvs = [];
+    let faces = [];
     let vCount = 1;
     const SCALE = 0.0625;
 
-    // Helper functions for rotation
-    function rotatePoint(point, rotation) {
-        if (!rotation) return point;
-        let [x, y, z] = point;
-        const radX = (rotation.x || 0) * Math.PI / 180;
-        const radY = (rotation.y || 0) * Math.PI / 180;
-        const radZ = (rotation.z || 0) * Math.PI / 180;
-        const origin = rotation.origin || [0, 0, 0];
-
-        // Translate to origin
-        x -= origin[0];
-        y -= origin[1];
-        z -= origin[2];
-
-        // Rotate Z
-        let temp = x;
-        x = x * Math.cos(radZ) - y * Math.sin(radZ);
-        y = temp * Math.sin(radZ) + y * Math.cos(radZ);
-
-        // Rotate Y
-        temp = x;
-        x = x * Math.cos(radY) + z * Math.sin(radY);
-        z = -temp * Math.sin(radY) + z * Math.cos(radY);
-
-        // Rotate X
-        temp = y;
-        y = y * Math.cos(radX) - z * Math.sin(radX);
-        z = temp * Math.sin(radX) + z * Math.cos(radX);
-
-        // Translate back
-        return [
-            x + origin[0],
-            y + origin[1],
-            z + origin[2]
-        ];
+    function addVertex(x, y, z) {
+        vertices.push(`v ${(x*SCALE).toFixed(6)} ${(y*SCALE).toFixed(6)} ${(z*SCALE).toFixed(6)}`);
+        return vCount++;
     }
 
-    elements.forEach(el => {
-        const from = el.from.map(v => v * SCALE);
-        const to = el.to.map(v => v * SCALE);
+    function addUV(u, v) {
+        const id = uvs.length + 1;
+        uvs.push(`vt ${u.toFixed(6)} ${1 - v.toFixed(6)}`);
+        return id;
+    }
+
+    elements.forEach((el, elIndex) => {
+        const from = el.from || [0,0,0];
+        const to = el.to || [1,1,1];
         const rotation = el.rotation;
         const facesData = el.faces || {};
 
-        // Generate 8 corners
+        // 8 corners
         let corners = [
             [from[0], from[1], from[2]],
             [to[0],   from[1], from[2]],
@@ -76,15 +52,36 @@ try {
             [from[0], to[1],   to[2]],
         ];
 
-        // Apply rotation if exists
+        // Apply rotation if present
         if (rotation) {
-            corners = corners.map(p => rotatePoint(p, rotation));
+            const origin = rotation.origin || [0,0,0];
+            const radX = (rotation.x || 0) * Math.PI / 180;
+            const radY = (rotation.y || 0) * Math.PI / 180;
+            const radZ = (rotation.z || 0) * Math.PI / 180;
+
+            corners = corners.map(([x, y, z]) => {
+                x -= origin[0]; y -= origin[1]; z -= origin[2];
+
+                // Z rotation
+                let tx = x * Math.cos(radZ) - y * Math.sin(radZ);
+                let ty = x * Math.sin(radZ) + y * Math.cos(radZ);
+                x = tx; y = ty;
+
+                // Y rotation
+                tx = x * Math.cos(radY) + z * Math.sin(radY);
+                let tz = -x * Math.sin(radY) + z * Math.cos(radY);
+                x = tx; z = tz;
+
+                // X rotation
+                ty = y * Math.cos(radX) - z * Math.sin(radX);
+                tz = y * Math.sin(radX) + z * Math.cos(radX);
+                y = ty; z = tz;
+
+                return [x + origin[0], y + origin[1], z + origin[2]];
+            });
         }
 
-        const vIds = corners.map(p => {
-            vertices.push(`v ${p[0].toFixed(6)} ${p[1].toFixed(6)} ${p[2].toFixed(6)}`);
-            return vCount++;
-        });
+        const vIds = corners.map(p => addVertex(p[0], p[1], p[2]));
 
         const faceDefs = [
             {key: 'north', order: [3,2,1,0]},
@@ -112,14 +109,8 @@ try {
         });
     });
 
-    function addUV(u, v) {
-        const id = uvs.length + 1;
-        uvs.push(`vt ${u.toFixed(6)} ${1 - v.toFixed(6)}`);
-        return id;
-    }
-
     const objContent = [
-        `# Advanced Conversion from Java Model`,
+        `# Advanced Java to OBJ Conversion`,
         `mtllib ${baseName}.mtl`,
         ...vertices,
         ...uvs,
@@ -131,7 +122,7 @@ try {
     fs.writeFileSync(outputObjPath.replace('.obj', '.mtl'), 
         `newmtl material\nKd 1 1 1\nmap_Kd ${baseName}.png\n`);
 
-    console.log(`✅ Advanced conversion completed: ${outputObjPath}`);
+    console.log(`✅ Advanced conversion done: ${outputObjPath}`);
     process.exit(0);
 
 } catch (err) {
