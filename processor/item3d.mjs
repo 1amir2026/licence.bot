@@ -109,8 +109,10 @@ const py = ((HEIGHT - y - 1) - HEIGHT / 2) * SCALE;
   const t2 = addUV(u2, vv1);
   const t3 = addUV(u2, vv2);
   const t4 = addUV(u1, vv2);
-
-  const sideUV = addUV(0.5, 0.5);
+  const pixelUV = addUV(
+  (x + 0.5) / WIDTH,
+  (HEIGHT - y - 0.5) / HEIGHT
+);
 
 // FRONT
 addQuad(
@@ -130,7 +132,7 @@ if (!isSolid(x - 1, y)) {
 
 addQuad(
   v010,v011,v001,v000,
-    sideUV,sideUV,sideUV,sideUV
+    pixelUV,pixelUV,pixelUV,pixelUV
 );
 }
 
@@ -140,7 +142,7 @@ if (!isSolid(x + 1, y)) {
 
 addQuad(
   v111,v110,v100,v101,
-  sideUV,sideUV,sideUV,sideUV
+  pixelUV,pixelUV,pixelUV,pixelUV
 );
 }
 
@@ -150,7 +152,7 @@ if (!isSolid(x, y - 1)) {
 
 addQuad(
   v110,v111,v011,v010,
-  sideUV,sideUV,sideUV,sideUV
+  pixelUV,pixelUV,pixelUV,pixelUV
 );
 }
 
@@ -160,7 +162,7 @@ if (!isSolid(x, y + 1)) {
 
   addQuad(
     v000,v100,v101,v001,
-    sideUV,sideUV,sideUV,sideUV
+    pixelUV,pixelUV,pixelUV,pixelUV
   );
 }
 }
