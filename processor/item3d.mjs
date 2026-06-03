@@ -117,12 +117,12 @@ addQuad(
   t3,t4,t1,t2
 );
 
-  // BACK
+// BACK
 
-  addQuad(
-    v100,v000,v010,v110,
-    t2,t1,t4,t3
-  );
+addQuad(
+  v100,v000,v010,v110,
+  t1,t2,t3,t4
+);
 
 // LEFT
 
