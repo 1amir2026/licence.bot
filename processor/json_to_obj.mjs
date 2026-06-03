@@ -17,33 +17,37 @@ try {
         throw new Error("فرمت JSON معتبر ماینکرافت پیدا نشد.");
     }
 
+    const textureWidth = geometry.description?.texture_width || 64;
+    const textureHeight = geometry.description?.texture_height || 64;
+
     let vertices = [];
     let uvs = [];
-    let normals = [];
     let faces = [];
     let vertexCounter = 1;
 
-    const textureWidth = geometry.description?.texture_width || 64;
-    const textureHeight = geometry.description?.texture_height || 64;
+    // مقیاس‌دهی مناسب برای ماینکرافت (بسیار مهم!)
+    const SCALE = 0.0625; // 1/16 — استاندارد Bedrock Geometry
 
     geometry.bones.forEach(bone => {
         if (!bone.cubes) return;
 
-        bone.cubes.forEach((cube, cubeIndex) => {
-            const origin = cube.origin || [0, 0, 0];
+        bone.cubes.forEach(cube => {
+            let origin = cube.origin || [0, 0, 0];
             const size = cube.size || [1, 1, 1];
-            const uvData = cube.uv || {}; // uv per face
+            const uvData = cube.uv || {};
 
-            // تولید ۸ رأس مکعب
+            // اعمال مقیاس
+            origin = origin.map(v => v * SCALE);
+
             const corners = [
                 [origin[0],           origin[1],           origin[2]],
-                [origin[0] + size[0], origin[1],           origin[2]],
-                [origin[0] + size[0], origin[1] + size[1], origin[2]],
-                [origin[0],           origin[1] + size[1], origin[2]],
-                [origin[0],           origin[1],           origin[2] + size[2]],
-                [origin[0] + size[0], origin[1],           origin[2] + size[2]],
-                [origin[0] + size[0], origin[1] + size[1], origin[2] + size[2]],
-                [origin[0],           origin[1] + size[1], origin[2] + size[2]],
+                [origin[0] + size[0]*SCALE, origin[1],           origin[2]],
+                [origin[0] + size[0]*SCALE, origin[1] + size[1]*SCALE, origin[2]],
+                [origin[0],           origin[1] + size[1]*SCALE, origin[2]],
+                [origin[0],           origin[1],           origin[2] + size[2]*SCALE],
+                [origin[0] + size[0]*SCALE, origin[1],           origin[2] + size[2]*SCALE],
+                [origin[0] + size[0]*SCALE, origin[1] + size[1]*SCALE, origin[2] + size[2]*SCALE],
+                [origin[0],           origin[1] + size[1]*SCALE, origin[2] + size[2]*SCALE],
             ];
 
             const vIndices = [];
@@ -52,7 +56,6 @@ try {
                 vIndices.push(vertexCounter++);
             });
 
-            // UV ساده (بهبود یافته)
             const faceOrder = [
                 {face: 'north',  verts: [0,1,5,4]},
                 {face: 'east',   verts: [1,2,6,5]},
@@ -64,17 +67,20 @@ try {
 
             faceOrder.forEach(({face, verts}) => {
                 const uvInfo = uvData[face] || {uv: [0,0], uv_size: [1,1]};
-                const [u, v] = uvInfo.uv || [0, 0];
-                const [uw, vh] = uvInfo.uv_size || [1, 1];
+                let [u, v] = uvInfo.uv || [0, 0];
+                let [uw, vh] = uvInfo.uv_size || [1, 1];
+
+                u /= textureWidth;
+                v /= textureHeight;
+                uw /= textureWidth;
+                vh /= textureHeight;
 
                 const uvIndices = [];
-                // 4 UV برای هر وجه
-                uvIndices.push(addUV(u/ textureWidth, v/ textureHeight));
-                uvIndices.push(addUV((u+uw)/ textureWidth, v/ textureHeight));
-                uvIndices.push(addUV((u+uw)/ textureWidth, (v+vh)/ textureHeight));
-                uvIndices.push(addUV(u/ textureWidth, (v+vh)/ textureHeight));
+                uvIndices.push(addUV(u, v));
+                uvIndices.push(addUV(u + uw, v));
+                uvIndices.push(addUV(u + uw, v + vh));
+                uvIndices.push(addUV(u, v + vh));
 
-                // Face
                 faces.push(`f ${vIndices[verts[0]]}/${uvIndices[0]}/1 ${vIndices[verts[1]]}/${uvIndices[1]}/1 ${vIndices[verts[2]]}/${uvIndices[2]}/1 ${vIndices[verts[3]]}/${uvIndices[3]}/1`);
             });
         });
@@ -82,28 +88,30 @@ try {
 
     function addUV(u, v) {
         const idx = uvs.length + 1;
-        uvs.push(`vt ${u.toFixed(6)} ${1 - v.toFixed(6)}`); // Flip V for OBJ
+        uvs.push(`vt ${u.toFixed(6)} ${1 - v.toFixed(6)}`);
         return idx;
     }
 
+    const baseName = path.basename(outputObjPath, '.obj');
+    const mtlName = `${baseName}.mtl`;
+
     const objContent = [
-        `# Converted from Minecraft Bedrock Geometry`,
-        `# Model: ${geometry.description?.identifier || 'unknown'}`,
-        `mtllib ${path.basename(outputObjPath).replace('.obj', '.mtl')}`,
+        `# Converted from Minecraft Bedrock`,
+        `mtllib ${mtlName}`,
         ...vertices,
         ...uvs,
-        'vn 0 1 0', // ساده‌سازی نرمال
+        'vn 0 1 0',
         ...faces
     ].join('\n');
 
     fs.writeFileSync(outputObjPath, objContent);
 
-    // ایجاد MTL
+    // MTL با نام تکسچر واقعی (بعداً در بات جایگزین می‌شود)
     const mtlPath = outputObjPath.replace('.obj', '.mtl');
-    const mtlContent = `newmtl material\nKd 1 1 1\nmap_Kd texture.png\n`;
+    const mtlContent = `newmtl material\nKd 1 1 1\nmap_Kd ${baseName}.png\n`;
     fs.writeFileSync(mtlPath, mtlContent);
 
-    console.log(`✅ Conversion successful: ${outputObjPath}`);
+    console.log(`✅ Conversion successful: ${outputObjPath} (Scaled)`);
     process.exit(0);
 
 } catch (err) {
