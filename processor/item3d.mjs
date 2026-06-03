@@ -11,6 +11,7 @@ if (!input || !output) {
   process.exit(1);
 }
 
+const SCALE = 1 / 16;
 const DEPTH = 0.8;
 const ALPHA_THRESHOLD = 40;
 
@@ -82,21 +83,21 @@ function addQuad(v1,v2,v3,v4,t1,t2,t3,t4) {
 
 function buildVoxel(x, y) {
 
-const px = x - WIDTH / 2;
-const py = (HEIGHT - y - 1) - HEIGHT / 2;
+const px = (x - WIDTH / 2) * SCALE;
+const py = ((HEIGHT - y - 1) - HEIGHT / 2) * SCALE;
 
   const z0 = -DEPTH / 2;
   const z1 = DEPTH / 2;
 
   const v000 = addVertex(px,     py,     z0);
-  const v100 = addVertex(px + 1, py,     z0);
-  const v110 = addVertex(px + 1, py + 1, z0);
-  const v010 = addVertex(px,     py + 1, z0);
+  const v100 = addVertex(px + SCALE, py, z0);
+  const v110 = addVertex(px + SCALE, py + SCALE, z0);
+  const v010 = addVertex(px, py + SCALE, z0);
 
-  const v001 = addVertex(px,     py,     z1);
-  const v101 = addVertex(px + 1, py,     z1);
-  const v111 = addVertex(px + 1, py + 1, z1);
-  const v011 = addVertex(px,     py + 1, z1);
+  const v001 = addVertex(px,         py,         z1);
+  const v101 = addVertex(px + SCALE, py,         z1);
+  const v111 = addVertex(px + SCALE, py + SCALE, z1);
+  const v011 = addVertex(px,         py + SCALE, z1);
 
   const u1 = x / WIDTH;
   const u2 = (x + 1) / WIDTH;
