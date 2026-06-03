@@ -71,10 +71,11 @@ function addTri(v1, t1, v2, t2, v3, t3) {
   );
 }
 
-function addQuad(v1, v2, v3, v4, t1, t2, t3, t4) {
+function addQuad(v1,v2,v3,v4,t1,t2,t3,t4) {
 
-  addTri(v1,t1,v2,t2,v3,t3);
-  addTri(v1,t1,v3,t3,v4,t4);
+  addTri(v1,t1,v3,t3,v2,t2);
+  addTri(v1,t1,v4,t4,v3,t3);
+
 }
 
 // ---------------- FACE BUILDER ----------------
