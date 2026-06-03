@@ -12,12 +12,11 @@ if (!inputPath || !outputObjPath) {
 try {
     const json = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
     const geo = json["minecraft:geometry"]?.[0];
-    
     if (!geo) throw new Error("Geometry not found");
 
     const texW = geo.description?.texture_width || 64;
     const texH = geo.description?.texture_height || 64;
-    const SCALE = 0.0625; // Minecraft Bedrock scale
+    const SCALE = 0.0625;
 
     let vertices = [], uvs = [], faces = [];
     let vCount = 1;
@@ -26,21 +25,20 @@ try {
         if (!bone.cubes) return;
 
         bone.cubes.forEach(cube => {
-            let origin = (cube.origin || [0,0,0]).map(v => v * SCALE);
-            const size = (cube.size || [1,1,1]).map(v => v * SCALE);
-            const rotation = cube.rotation || [0,0,0];
-            const uv = cube.uv || {};
+            const origin = (cube.origin || [0,0,0]).map(v => v * SCALE);
+            const size   = (cube.size   || [1,1,1]).map(v => v * SCALE);
+            const uv     = cube.uv || {};
 
-            // 8 corners of the cube
+            // 8 corners
             const c = [
-                [origin[0], origin[1], origin[2]],
-                [origin[0]+size[0], origin[1], origin[2]],
-                [origin[0]+size[0], origin[1]+size[1], origin[2]],
-                [origin[0], origin[1]+size[1], origin[2]],
-                [origin[0], origin[1], origin[2]+size[2]],
-                [origin[0]+size[0], origin[1], origin[2]+size[2]],
-                [origin[0]+size[0], origin[1]+size[1], origin[2]+size[2]],
-                [origin[0], origin[1]+size[1], origin[2]+size[2]],
+                [origin[0],          origin[1],          origin[2]],
+                [origin[0]+size[0],  origin[1],          origin[2]],
+                [origin[0]+size[0],  origin[1]+size[1],  origin[2]],
+                [origin[0],          origin[1]+size[1],  origin[2]],
+                [origin[0],          origin[1],          origin[2]+size[2]],
+                [origin[0]+size[0],  origin[1],          origin[2]+size[2]],
+                [origin[0]+size[0],  origin[1]+size[1],  origin[2]+size[2]],
+                [origin[0],          origin[1]+size[1],  origin[2]+size[2]],
             ];
 
             const vIds = c.map(p => {
@@ -48,19 +46,19 @@ try {
                 return vCount++;
             });
 
-            // Faces with UV
-            const facesDef = [
-                {name:'north',  verts:[3,2,1,0], uv: uv.north},
-                {name:'east',   verts:[2,6,5,1], uv: uv.east},
-                {name:'south',  verts:[6,7,4,5], uv: uv.south},
-                {name:'west',   verts:[7,3,0,4], uv: uv.west},
-                {name:'up',     verts:[3,7,6,2], uv: uv.up},
-                {name:'down',   verts:[0,1,5,4], uv: uv.down},
+            // 6 faces with correct UV mapping
+            const faceDefs = [
+                { name: 'north',  order: [3,2,1,0], uv: uv.north },
+                { name: 'east',   order: [2,6,5,1], uv: uv.east },
+                { name: 'south',  order: [6,7,4,5], uv: uv.south },
+                { name: 'west',   order: [7,3,0,4], uv: uv.west },
+                { name: 'up',     order: [3,7,6,2], uv: uv.up },
+                { name: 'down',   order: [0,1,5,4], uv: uv.down },
             ];
 
-            facesDef.forEach(f => {
-                if (!f.uv) return;
-                const [u, v] = f.uv.uv || [0,0];
+            faceDefs.forEach(f => {
+                if (!f.uv?.uv) return;
+                const [u, v] = f.uv.uv;
                 const [uw, vh] = f.uv.uv_size || [1,1];
 
                 const uvIds = [
@@ -70,22 +68,23 @@ try {
                     addUV(u/texW, (v+vh)/texH)
                 ];
 
-                const order = f.verts;
-                faces.push(`f ${vIds[order[0]]}/${uvIds[0]}/1 ${vIds[order[1]]}/${uvIds[1]}/1 ${vIds[order[2]]}/${uvIds[2]}/1 ${vIds[order[3]]}/${uvIds[3]}/1`);
+                const o = f.order;
+                faces.push(`f ${vIds[o[0]]}/${uvIds[0]}/1 ${vIds[o[1]]}/${uvIds[1]}/1 ${vIds[o[2]]}/${uvIds[2]}/1 ${vIds[o[3]]}/${uvIds[3]}/1`);
             });
         });
     });
 
     function addUV(u, v) {
         const id = uvs.length + 1;
-        uvs.push(`vt ${u.toFixed(6)} ${1-v.toFixed(6)}`);
+        uvs.push(`vt ${u.toFixed(6)} ${1 - v.toFixed(6)}`);
         return id;
     }
 
-    const base = path.basename(outputObjPath, '.obj');
+    const baseName = path.basename(outputObjPath, '.obj');
+
     const objContent = [
-        `# Converted from Bedrock Geometry`,
-        `mtllib ${base}.mtl`,
+        `# Converted from Minecraft Bedrock Geometry`,
+        `mtllib ${baseName}.mtl`,
         ...vertices,
         ...uvs,
         'vn 0 1 0',
@@ -93,15 +92,13 @@ try {
     ].join('\n');
 
     fs.writeFileSync(outputObjPath, objContent);
-
-    // MTL
     fs.writeFileSync(outputObjPath.replace('.obj', '.mtl'), 
-        `newmtl material\nKd 1 1 1\nmap_Kd ${base}.png\n`);
+        `newmtl material\nKd 1.0 1.0 1.0\nmap_Kd ${baseName}.png\n`);
 
-    console.log(`✅ Successfully converted: ${outputObjPath}`);
+    console.log(`✅ Converted: ${outputObjPath}`);
     process.exit(0);
 
-} catch (e) {
-    console.error("Error:", e.message);
+} catch (err) {
+    console.error("Error:", err.message);
     process.exit(1);
 }
