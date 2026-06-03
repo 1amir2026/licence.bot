@@ -108,12 +108,14 @@ const py = (HEIGHT - y - 1) - HEIGHT / 2;
   const t3 = addUV(u2, vv2);
   const t4 = addUV(u1, vv2);
 
+  const sideUV = addUV(0.5, 0.5);
+
   // FRONT
 
-  addQuad(
-    v001,v101,v111,v011,
-    t1,t2,t3,t4
-  );
+addQuad(
+  v110,v010,v000,v100,
+  t3,t4,t1,t2
+);
 
   // BACK
 
@@ -134,23 +136,23 @@ const py = (HEIGHT - y - 1) - HEIGHT / 2;
 
   // RIGHT
 
-  if (!isSolid(x + 1, y)) {
+if (!isSolid(x + 1, y)) {
 
-    addQuad(
-      v101,v100,v110,v111,
-      t2,t2,t3,t3
-    );
-  }
+  addQuad(
+    v101,v100,v110,v111,
+    sideUV,sideUV,sideUV,sideUV
+  );
+}
 
   // TOP
 
-  if (!isSolid(x, y - 1)) {
+if (!isSolid(x - 1, y)) {
 
-    addQuad(
-      v010,v011,v111,v110,
-      t4,t4,t3,t3
-    );
-  }
+  addQuad(
+    v000,v001,v011,v010,
+    sideUV,sideUV,sideUV,sideUV
+  );
+}
 
   // BOTTOM
 
