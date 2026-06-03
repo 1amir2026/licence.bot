@@ -10,94 +10,82 @@ if (!inputPath || !outputObjPath) {
 }
 
 try {
-    const jsonData = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
-    const geometry = jsonData["minecraft:geometry"]?.[0];
+    const json = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
+    const geo = json["minecraft:geometry"]?.[0];
     
-    if (!geometry || !geometry.bones) {
-        throw new Error("فرمت JSON معتبر ماینکرافت پیدا نشد.");
-    }
+    if (!geo) throw new Error("Geometry not found");
 
-    const textureWidth = geometry.description?.texture_width || 64;
-    const textureHeight = geometry.description?.texture_height || 64;
+    const texW = geo.description?.texture_width || 64;
+    const texH = geo.description?.texture_height || 64;
+    const SCALE = 0.0625; // Minecraft Bedrock scale
 
-    let vertices = [];
-    let uvs = [];
-    let faces = [];
-    let vertexCounter = 1;
+    let vertices = [], uvs = [], faces = [];
+    let vCount = 1;
 
-    // مقیاس‌دهی مناسب برای ماینکرافت (بسیار مهم!)
-    const SCALE = 0.0625; // 1/16 — استاندارد Bedrock Geometry
-
-    geometry.bones.forEach(bone => {
+    geo.bones.forEach(bone => {
         if (!bone.cubes) return;
 
         bone.cubes.forEach(cube => {
-            let origin = cube.origin || [0, 0, 0];
-            const size = cube.size || [1, 1, 1];
-            const uvData = cube.uv || {};
+            let origin = (cube.origin || [0,0,0]).map(v => v * SCALE);
+            const size = (cube.size || [1,1,1]).map(v => v * SCALE);
+            const rotation = cube.rotation || [0,0,0];
+            const uv = cube.uv || {};
 
-            // اعمال مقیاس
-            origin = origin.map(v => v * SCALE);
-
-            const corners = [
-                [origin[0],           origin[1],           origin[2]],
-                [origin[0] + size[0]*SCALE, origin[1],           origin[2]],
-                [origin[0] + size[0]*SCALE, origin[1] + size[1]*SCALE, origin[2]],
-                [origin[0],           origin[1] + size[1]*SCALE, origin[2]],
-                [origin[0],           origin[1],           origin[2] + size[2]*SCALE],
-                [origin[0] + size[0]*SCALE, origin[1],           origin[2] + size[2]*SCALE],
-                [origin[0] + size[0]*SCALE, origin[1] + size[1]*SCALE, origin[2] + size[2]*SCALE],
-                [origin[0],           origin[1] + size[1]*SCALE, origin[2] + size[2]*SCALE],
+            // 8 corners of the cube
+            const c = [
+                [origin[0], origin[1], origin[2]],
+                [origin[0]+size[0], origin[1], origin[2]],
+                [origin[0]+size[0], origin[1]+size[1], origin[2]],
+                [origin[0], origin[1]+size[1], origin[2]],
+                [origin[0], origin[1], origin[2]+size[2]],
+                [origin[0]+size[0], origin[1], origin[2]+size[2]],
+                [origin[0]+size[0], origin[1]+size[1], origin[2]+size[2]],
+                [origin[0], origin[1]+size[1], origin[2]+size[2]],
             ];
 
-            const vIndices = [];
-            corners.forEach(p => {
+            const vIds = c.map(p => {
                 vertices.push(`v ${p[0].toFixed(6)} ${p[1].toFixed(6)} ${p[2].toFixed(6)}`);
-                vIndices.push(vertexCounter++);
+                return vCount++;
             });
 
-            const faceOrder = [
-                {face: 'north',  verts: [0,1,5,4]},
-                {face: 'east',   verts: [1,2,6,5]},
-                {face: 'south',  verts: [2,3,7,6]},
-                {face: 'west',   verts: [3,0,4,7]},
-                {face: 'up',     verts: [4,5,6,7]},
-                {face: 'down',   verts: [0,3,2,1]}
+            // Faces with UV
+            const facesDef = [
+                {name:'north',  verts:[3,2,1,0], uv: uv.north},
+                {name:'east',   verts:[2,6,5,1], uv: uv.east},
+                {name:'south',  verts:[6,7,4,5], uv: uv.south},
+                {name:'west',   verts:[7,3,0,4], uv: uv.west},
+                {name:'up',     verts:[3,7,6,2], uv: uv.up},
+                {name:'down',   verts:[0,1,5,4], uv: uv.down},
             ];
 
-            faceOrder.forEach(({face, verts}) => {
-                const uvInfo = uvData[face] || {uv: [0,0], uv_size: [1,1]};
-                let [u, v] = uvInfo.uv || [0, 0];
-                let [uw, vh] = uvInfo.uv_size || [1, 1];
+            facesDef.forEach(f => {
+                if (!f.uv) return;
+                const [u, v] = f.uv.uv || [0,0];
+                const [uw, vh] = f.uv.uv_size || [1,1];
 
-                u /= textureWidth;
-                v /= textureHeight;
-                uw /= textureWidth;
-                vh /= textureHeight;
+                const uvIds = [
+                    addUV(u/texW, v/texH),
+                    addUV((u+uw)/texW, v/texH),
+                    addUV((u+uw)/texW, (v+vh)/texH),
+                    addUV(u/texW, (v+vh)/texH)
+                ];
 
-                const uvIndices = [];
-                uvIndices.push(addUV(u, v));
-                uvIndices.push(addUV(u + uw, v));
-                uvIndices.push(addUV(u + uw, v + vh));
-                uvIndices.push(addUV(u, v + vh));
-
-                faces.push(`f ${vIndices[verts[0]]}/${uvIndices[0]}/1 ${vIndices[verts[1]]}/${uvIndices[1]}/1 ${vIndices[verts[2]]}/${uvIndices[2]}/1 ${vIndices[verts[3]]}/${uvIndices[3]}/1`);
+                const order = f.verts;
+                faces.push(`f ${vIds[order[0]]}/${uvIds[0]}/1 ${vIds[order[1]]}/${uvIds[1]}/1 ${vIds[order[2]]}/${uvIds[2]}/1 ${vIds[order[3]]}/${uvIds[3]}/1`);
             });
         });
     });
 
     function addUV(u, v) {
-        const idx = uvs.length + 1;
-        uvs.push(`vt ${u.toFixed(6)} ${1 - v.toFixed(6)}`);
-        return idx;
+        const id = uvs.length + 1;
+        uvs.push(`vt ${u.toFixed(6)} ${1-v.toFixed(6)}`);
+        return id;
     }
 
-    const baseName = path.basename(outputObjPath, '.obj');
-    const mtlName = `${baseName}.mtl`;
-
+    const base = path.basename(outputObjPath, '.obj');
     const objContent = [
-        `# Converted from Minecraft Bedrock`,
-        `mtllib ${mtlName}`,
+        `# Converted from Bedrock Geometry`,
+        `mtllib ${base}.mtl`,
         ...vertices,
         ...uvs,
         'vn 0 1 0',
@@ -106,15 +94,14 @@ try {
 
     fs.writeFileSync(outputObjPath, objContent);
 
-    // MTL با نام تکسچر واقعی (بعداً در بات جایگزین می‌شود)
-    const mtlPath = outputObjPath.replace('.obj', '.mtl');
-    const mtlContent = `newmtl material\nKd 1 1 1\nmap_Kd ${baseName}.png\n`;
-    fs.writeFileSync(mtlPath, mtlContent);
+    // MTL
+    fs.writeFileSync(outputObjPath.replace('.obj', '.mtl'), 
+        `newmtl material\nKd 1 1 1\nmap_Kd ${base}.png\n`);
 
-    console.log(`✅ Conversion successful: ${outputObjPath} (Scaled)`);
+    console.log(`✅ Successfully converted: ${outputObjPath}`);
     process.exit(0);
 
-} catch (err) {
-    console.error("Error:", err.message);
+} catch (e) {
+    console.error("Error:", e.message);
     process.exit(1);
 }
