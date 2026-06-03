@@ -12,28 +12,29 @@ if (!inputPath || !outputObjPath) {
 try {
     const jsonData = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
     const geometry = jsonData["minecraft:geometry"]?.[0];
-
-    if (!geometry) {
+    
+    if (!geometry || !geometry.bones) {
         throw new Error("فرمت JSON معتبر ماینکرافت پیدا نشد.");
     }
 
     let vertices = [];
     let uvs = [];
+    let normals = [];
     let faces = [];
-    let vertexIndex = 1;
+    let vertexCounter = 1;
 
-    const bones = geometry.bones || [];
+    const textureWidth = geometry.description?.texture_width || 64;
+    const textureHeight = geometry.description?.texture_height || 64;
 
-    bones.forEach(bone => {
+    geometry.bones.forEach(bone => {
         if (!bone.cubes) return;
 
-        bone.cubes.forEach(cube => {
+        bone.cubes.forEach((cube, cubeIndex) => {
             const origin = cube.origin || [0, 0, 0];
             const size = cube.size || [1, 1, 1];
-            const rotation = cube.rotation || [0, 0, 0];
-            const pivot = cube.pivot || origin;
+            const uvData = cube.uv || {}; // uv per face
 
-            // تولید ۸ راس مکعب
+            // تولید ۸ رأس مکعب
             const corners = [
                 [origin[0],           origin[1],           origin[2]],
                 [origin[0] + size[0], origin[1],           origin[2]],
@@ -45,50 +46,62 @@ try {
                 [origin[0],           origin[1] + size[1], origin[2] + size[2]],
             ];
 
-            // ساده‌سازی: فعلاً rotation کامل اعمال نمی‌شود (برای شروع)
+            const vIndices = [];
             corners.forEach(p => {
                 vertices.push(`v ${p[0].toFixed(6)} ${p[1].toFixed(6)} ${p[2].toFixed(6)}`);
+                vIndices.push(vertexCounter++);
             });
 
-            // UV ساده (نیاز به بهبود دارد)
-            uvs.push(`vt 0 0`, `vt 1 0`, `vt 1 1`, `vt 0 1`);
+            // UV ساده (بهبود یافته)
+            const faceOrder = [
+                {face: 'north',  verts: [0,1,5,4]},
+                {face: 'east',   verts: [1,2,6,5]},
+                {face: 'south',  verts: [2,3,7,6]},
+                {face: 'west',   verts: [3,0,4,7]},
+                {face: 'up',     verts: [4,5,6,7]},
+                {face: 'down',   verts: [0,3,2,1]}
+            ];
 
-            // Faces (6 وجه)
-            const idx = vertexIndex;
-            faces.push(
-                `f ${idx} ${idx+1} ${idx+2} ${idx+3}`,
-                `f ${idx+4} ${idx+5} ${idx+6} ${idx+7}`,
-                `f ${idx} ${idx+1} ${idx+5} ${idx+4}`,
-                `f ${idx+3} ${idx+2} ${idx+6} ${idx+7}`,
-                `f ${idx+1} ${idx+2} ${idx+6} ${idx+5}`,
-                `f ${idx} ${idx+3} ${idx+7} ${idx+4}`
-            );
+            faceOrder.forEach(({face, verts}) => {
+                const uvInfo = uvData[face] || {uv: [0,0], uv_size: [1,1]};
+                const [u, v] = uvInfo.uv || [0, 0];
+                const [uw, vh] = uvInfo.uv_size || [1, 1];
 
-            vertexIndex += 8;
+                const uvIndices = [];
+                // 4 UV برای هر وجه
+                uvIndices.push(addUV(u/ textureWidth, v/ textureHeight));
+                uvIndices.push(addUV((u+uw)/ textureWidth, v/ textureHeight));
+                uvIndices.push(addUV((u+uw)/ textureWidth, (v+vh)/ textureHeight));
+                uvIndices.push(addUV(u/ textureWidth, (v+vh)/ textureHeight));
+
+                // Face
+                faces.push(`f ${vIndices[verts[0]]}/${uvIndices[0]}/1 ${vIndices[verts[1]]}/${uvIndices[1]}/1 ${vIndices[verts[2]]}/${uvIndices[2]}/1 ${vIndices[verts[3]]}/${uvIndices[3]}/1`);
+            });
         });
     });
 
+    function addUV(u, v) {
+        const idx = uvs.length + 1;
+        uvs.push(`vt ${u.toFixed(6)} ${1 - v.toFixed(6)}`); // Flip V for OBJ
+        return idx;
+    }
+
     const objContent = [
-        `# Converted from Minecraft Geometry`,
+        `# Converted from Minecraft Bedrock Geometry`,
         `# Model: ${geometry.description?.identifier || 'unknown'}`,
+        `mtllib ${path.basename(outputObjPath).replace('.obj', '.mtl')}`,
         ...vertices,
         ...uvs,
-        ...faces,
-        ''
+        'vn 0 1 0', // ساده‌سازی نرمال
+        ...faces
     ].join('\n');
 
     fs.writeFileSync(outputObjPath, objContent);
 
-    // ایجاد MTL ساده
+    // ایجاد MTL
     const mtlPath = outputObjPath.replace('.obj', '.mtl');
     const mtlContent = `newmtl material\nKd 1 1 1\nmap_Kd texture.png\n`;
     fs.writeFileSync(mtlPath, mtlContent);
-
-    // ایجاد texture.png placeholder
-    const pngPath = path.join(path.dirname(outputObjPath), 'texture.png');
-    if (!fs.existsSync(pngPath)) {
-        fs.writeFileSync(pngPath, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', 'base64'));
-    }
 
     console.log(`✅ Conversion successful: ${outputObjPath}`);
     process.exit(0);
