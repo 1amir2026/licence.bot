@@ -13,7 +13,7 @@ try {
     const json = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
     const baseName = path.basename(outputObjPath, '.obj');
 
-    let elements = json.elements || [];
+    const elements = json.elements || [];
     const texW = json.texture_size?.[0] || 64;
     const texH = json.texture_size?.[1] || 64;
 
@@ -21,13 +21,51 @@ try {
     let vCount = 1;
     const SCALE = 0.0625;
 
-    elements.forEach((el, index) => {
+    // Helper functions for rotation
+    function rotatePoint(point, rotation) {
+        if (!rotation) return point;
+        let [x, y, z] = point;
+        const radX = (rotation.x || 0) * Math.PI / 180;
+        const radY = (rotation.y || 0) * Math.PI / 180;
+        const radZ = (rotation.z || 0) * Math.PI / 180;
+        const origin = rotation.origin || [0, 0, 0];
+
+        // Translate to origin
+        x -= origin[0];
+        y -= origin[1];
+        z -= origin[2];
+
+        // Rotate Z
+        let temp = x;
+        x = x * Math.cos(radZ) - y * Math.sin(radZ);
+        y = temp * Math.sin(radZ) + y * Math.cos(radZ);
+
+        // Rotate Y
+        temp = x;
+        x = x * Math.cos(radY) + z * Math.sin(radY);
+        z = -temp * Math.sin(radY) + z * Math.cos(radY);
+
+        // Rotate X
+        temp = y;
+        y = y * Math.cos(radX) - z * Math.sin(radX);
+        z = temp * Math.sin(radX) + z * Math.cos(radX);
+
+        // Translate back
+        return [
+            x + origin[0],
+            y + origin[1],
+            z + origin[2]
+        ];
+    }
+
+    elements.forEach(el => {
         const from = el.from.map(v => v * SCALE);
         const to = el.to.map(v => v * SCALE);
+        const rotation = el.rotation;
         const facesData = el.faces || {};
 
-        // 8 corners
-        const corners = [
+        // Generate 8 corners
+        let corners = [
             [from[0], from[1], from[2]],
             [to[0],   from[1], from[2]],
             [to[0],   to[1],   from[2]],
@@ -38,24 +76,30 @@ try {
             [from[0], to[1],   to[2]],
         ];
 
+        // Apply rotation if exists
+        if (rotation) {
+            corners = corners.map(p => rotatePoint(p, rotation));
+        }
+
         const vIds = corners.map(p => {
             vertices.push(`v ${p[0].toFixed(6)} ${p[1].toFixed(6)} ${p[2].toFixed(6)}`);
             return vCount++;
         });
 
-        const faceList = [
-            { dir: 'north', order: [3,2,1,0], uv: facesData.north },
-            { dir: 'east',  order: [2,6,5,1], uv: facesData.east },
-            { dir: 'south', order: [6,7,4,5], uv: facesData.south },
-            { dir: 'west',  order: [7,3,0,4], uv: facesData.west },
-            { dir: 'up',    order: [3,7,6,2], uv: facesData.up },
-            { dir: 'down',  order: [0,1,5,4], uv: facesData.down },
+        const faceDefs = [
+            {key: 'north', order: [3,2,1,0]},
+            {key: 'east',  order: [2,6,5,1]},
+            {key: 'south', order: [6,7,4,5]},
+            {key: 'west',  order: [7,3,0,4]},
+            {key: 'up',    order: [3,7,6,2]},
+            {key: 'down',  order: [0,1,5,4]},
         ];
 
-        faceList.forEach(f => {
-            if (!f.uv?.uv) return;
+        faceDefs.forEach(f => {
+            const face = facesData[f.key];
+            if (!face?.uv) return;
 
-            const [u1, v1, u2, v2] = f.uv.uv;
+            const [u1, v1, u2, v2] = face.uv;
             const uvIds = [
                 addUV(u1/texW, v1/texH),
                 addUV(u2/texW, v1/texH),
@@ -75,7 +119,7 @@ try {
     }
 
     const objContent = [
-        `# Converted from Java Model`,
+        `# Advanced Conversion from Java Model`,
         `mtllib ${baseName}.mtl`,
         ...vertices,
         ...uvs,
@@ -87,7 +131,7 @@ try {
     fs.writeFileSync(outputObjPath.replace('.obj', '.mtl'), 
         `newmtl material\nKd 1 1 1\nmap_Kd ${baseName}.png\n`);
 
-    console.log(`✅ Converted: ${outputObjPath}`);
+    console.log(`✅ Advanced conversion completed: ${outputObjPath}`);
     process.exit(0);
 
 } catch (err) {
