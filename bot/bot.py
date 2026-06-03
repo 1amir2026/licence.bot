@@ -14,7 +14,6 @@ from database import Session, License
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 user_modes = {}
-pending_3d = {}
 
 # ====================== PATHS ======================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -56,29 +55,7 @@ async def run_node_processor(input_path: str, output_path: str, xp_percent: floa
         raise RuntimeError(f"Node processor failed: {stderr.decode()}")
 
 
-async def run_item3d(input_path: str, output_obj: str, depth: float):
-    proc = await asyncio.create_subprocess_exec(
-        "node",
-        ITEM3D_SCRIPT,
-        input_path,
-        output_obj,
-        str(depth),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=PROCESSOR_DIR
-    )
-
-    stdout, stderr = await proc.communicate()
-
-    if proc.returncode != 0:
-        raise RuntimeError(f"Item3D failed:\n{stderr.decode()}")
-
-    zip_path = output_obj.replace(".obj", ".zip")
-
-    if os.path.exists(zip_path):
-        return zip_path
-
-    raise RuntimeError("No output file generated")
+async def run_item3d(input_path: str, output_obj: str):
     """اجرای مستقیم item3d.mjs"""
     proc = await asyncio.create_subprocess_exec(
         "node", ITEM3D_SCRIPT, input_path, output_obj,
@@ -178,7 +155,7 @@ async def minecraft_3d(message: types.Message):
 
 # ====================== FILE HANDLER ======================
 @dp.message(F.document)
-async def handle_document(message):
+async def handle_document(message: types.Message):
     mode = user_modes.get(message.from_user.id)
     doc = message.document
 
@@ -211,91 +188,37 @@ async def handle_document(message):
         except Exception as e:
             await message.answer(f"❌ خطا:\n{e}")
 
-# ---------------- MINECRAFT 3D ITEM ----------------
+    # ---------------- MINECRAFT 3D ITEM ----------------
     elif mode == "minecraft_3d":
-
         if not doc.file_name.lower().endswith(".png"):
             await message.answer("❌ فقط فایل PNG مجاز است")
             return
 
+        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
+
         input_path = os.path.join(INPUT_DIR, doc.file_name)
+        output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + ".obj")
 
         file = await bot.get_file(doc.file_id)
-        await bot.download_file(
-            file.file_path,
-            destination=input_path
-        )
+        await bot.download_file(file.file_path, destination=input_path)
 
-        pending_3d[message.from_user.id] = {
-            "input": input_path,
-            "filename": doc.file_name
-        }
+        try:
+            output_file = await run_item3d(input_path, output_obj)
+            user_modes.pop(message.from_user.id, None)
 
-        await message.answer(
-            "📏 ضخامت مدل را وارد کنید:\n\n"
-            "🔹 آیتم معمولی ماینکرافت: 0.8\n"
-            "🔹 Resource Pack: 1.0 تا 1.3\n"
-            "🔹 ضخیم: 2.0\n\n"
-            "مثال:\n0.8"
-        )
+            await message.answer_document(
+                FSInputFile(output_file),
+                caption="✅ مدل سه‌بعدی با موفقیت ساخته شد!\n(شامل OBJ + MTL + PNG)"
+            )
+
             # پاکسازی فایل ورودی
             if os.path.exists(input_path):
                 os.remove(input_path)
 
         except Exception as e:
             await message.answer(f"❌ خطا در ساخت مدل:\n{str(e)}")
-# --------- minecraft-3d Depth -----------
-@dp.message(F.text)
-async def receive_depth(message: types.Message):
 
-    if message.from_user.id not in pending_3d:
-        return
 
-    try:
-        depth = float(message.text.replace(",", "."))
-
-        if depth < 0.1 or depth > 3:
-            await message.answer(
-                "❌ ضخامت باید بین 0.1 تا 3 باشد"
-            )
-            return
-
-    except:
-        await message.answer(
-            "❌ فقط عدد وارد کنید\n\nمثال:\n0.8"
-        )
-        return
-
-    data = pending_3d.pop(message.from_user.id)
-
-    input_path = data["input"]
-
-    output_obj = os.path.join(
-        OUTPUT_DIR,
-        os.path.splitext(data["filename"])[0] + ".obj"
-    )
-
-    await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
-
-    try:
-
-        output_file = await run_item3d(
-            input_path,
-            output_obj,
-            depth
-        )
-
-        await message.answer_document(
-            FSInputFile(output_file),
-            caption=f"✅ مدل ساخته شد\n\nضخامت: {depth}"
-        )
-
-    except Exception as e:
-
-        await message.answer(
-            f"❌ خطا:\n{e}"
-        )
-        
 # ====================== MAIN ======================
 async def main():
     print("🚀 Bot started successfully")
