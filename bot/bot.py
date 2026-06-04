@@ -318,7 +318,14 @@ async def add_button(message: types.Message, state: FSMContext):
     buttons.append({"title": title, "action": action})
     await state.update_data(buttons=buttons)
 
-    await message.answer(f"دکمه «{title}» اضافه شد.")
+    # کیبورد اینلاین دوباره 
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="➕ افزودن دکمه", callback_data="add_btn")],
+        [types.InlineKeyboardButton(text="✔️ تکمیل و ارسال", callback_data="finish")],
+        [types.InlineKeyboardButton(text="🔙 بازگشت", callback_data="back")]
+    ])
+
+    await message.answer(f"دکمه «{title}» اضافه شد.", reply_markup=keyboard)
 
 # ===================== COPY BUTTON ======================
 @dp.callback_query(F.data.startswith("copy_"))
