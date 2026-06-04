@@ -266,6 +266,7 @@ async def ask_button(message: types.Message):
 
 @dp.message(BroadcastState.waiting_buttons)
 async def add_button(message: types.Message, state: FSMContext):
+    # اگر پیام دکمه نبود، این هندلر نباید اجرا شود
     if "|" not in message.text:
         return
 
@@ -280,7 +281,6 @@ async def add_button(message: types.Message, state: FSMContext):
     await state.update_data(buttons=buttons)
 
     await message.answer(f"دکمه «{title}» اضافه شد.")
-
 
 @dp.message(F.text == "✔️ تکمیل و ارسال", BroadcastState.waiting_buttons)
 async def finish_broadcast(message: types.Message, state: FSMContext):
