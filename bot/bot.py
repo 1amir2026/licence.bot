@@ -248,39 +248,99 @@ async def receive_broadcast_message(message: types.Message, state: FSMContext):
     await state.set_state(BroadcastState.waiting_buttons)
     await message.answer("پیام ذخیره شد.\n\nاکنون می‌توانید دکمه اضافه کنید.", reply_markup=keyboard)
 
-
 @dp.callback_query(F.data == "finish")
 async def finish_broadcast(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    content = data["content"]
-    buttons = data["buttons"]
+    content = data.get("content")
+    buttons = data.get("buttons", [])
 
-    kb = types.InlineKeyboardMarkup()
-    for btn in buttons:
-        if btn["action"].startswith("copy:"):
-            msg_id = btn["action"].replace("copy:", "")
-            kb.add(types.InlineKeyboardButton(text=btn["title"], callback_data=f"copy_{msg_id}"))
-        else:
-            kb.add(types.InlineKeyboardButton(text=btn["title"], url=btn["action"]))
+    if not content:
+        await callback.answer("❌ محتوا پیدا نشد!", show_alert=True)
+        return
+
+    # ساخت کیبورد درست
+    kb = None
+    if buttons:
+        inline_buttons = []
+        for btn in buttons:
+            if btn["action"].startswith("copy:"):
+                msg_id = btn["action"].replace("copy:", "")
+                inline_buttons.append([
+                    types.InlineKeyboardButton(
+                        text=btn["title"], 
+                        callback_data=f"copy_{msg_id}"
+                    )
+                ])
+            else:
+                inline_buttons.append([
+                    types.InlineKeyboardButton(
+                        text=btn["title"], 
+                        url=btn["action"]
+                    )
+                ])
+        kb = types.InlineKeyboardMarkup(inline_keyboard=inline_buttons)
 
     session = Session()
-    users = session.query(License).filter(License.used == True).all()
+    try:
+        users = session.query(License).filter(License.used == True).all()
+        success = 0
+        failed = 0
 
-    for u in users:
-        try:
-            if content["type"] == "text":
-                await bot.send_message(u.user_id, content["text"], reply_markup=kb)
-            elif content["type"] == "photo":
-                await bot.send_photo(u.user_id, content["file_id"], caption=content["caption"], reply_markup=kb)
-            elif content["type"] == "video":
-                await bot.send_video(u.user_id, content["file_id"], caption=content["caption"], reply_markup=kb)
-            elif content["type"] == "document":
-                await bot.send_document(u.user_id, content["file_id"], caption=content["caption"], reply_markup=kb)
-        except:
-            pass
+        for u in users:
+            if not u.user_id:
+                failed += 1
+                continue
+                
+            try:
+                if content["type"] == "text":
+                    await bot.send_message(
+                        u.user_id, 
+                        content["text"], 
+                        reply_markup=kb,
+                        disable_web_page_preview=True
+                    )
+                elif content["type"] == "photo":
+                    await bot.send_photo(
+                        u.user_id, 
+                        content["file_id"], 
+                        caption=content.get("caption", ""),
+                        reply_markup=kb
+                    )
+                elif content["type"] == "video":
+                    await bot.send_video(
+                        u.user_id, 
+                        content["file_id"], 
+                        caption=content.get("caption", ""),
+                        reply_markup=kb
+                    )
+                elif content["type"] == "document":
+                    await bot.send_document(
+                        u.user_id, 
+                        content["file_id"], 
+                        caption=content.get("caption", ""),
+                        reply_markup=kb
+                    )
+                success += 1
+                
+                # جلوگیری از Flood Control
+                await asyncio.sleep(0.05)  # 50ms delay
 
-    await state.clear()
-    await callback.message.answer("✅ اطلاع‌رسانی با موفقیت ارسال شد.")
+            except Exception as e:
+                failed += 1
+                print(f"Failed to send to {u.user_id}: {e}")  # لاگ مهم
+
+        await callback.message.edit_text(
+            f"✅ اطلاع‌رسانی تمام شد!\n\n"
+            f"✅ موفق: {success}\n"
+            f"❌ ناموفق: {failed}\n"
+            f"👥 کل کاربران: {len(users)}"
+        )
+
+    except Exception as e:
+        await callback.message.edit_text(f"❌ خطای کلی: {e}")
+    finally:
+        session.close()
+        await state.clear()
 
 @dp.callback_query(F.data == "back")
 async def back_to_admin(callback: types.CallbackQuery, state: FSMContext):
