@@ -252,31 +252,6 @@ async def receive_broadcast_message(message: types.Message, state: FSMContext):
     await state.set_state(BroadcastState.waiting_buttons)
     await message.answer("پیام ذخیره شد.\n\nاکنون می‌توانید دکمه اضافه کنید.", reply_markup=keyboard)
 
-
-@dp.message(F.text == "➕ افزودن دکمه", BroadcastState.waiting_buttons)
-async def ask_button(message: types.Message):
-    await message.answer(
-        "فرمت دکمه:\n\n"
-        "`عنوان دکمه | لینک`\n"
-        "یا\n"
-        "`عنوان دکمه | copy:MESSAGE_ID`\n",
-        parse_mode="Markdown"
-    )
-
-@dp.message(F.text.contains("|"), BroadcastState.waiting_buttons)
-async def add_button(message: types.Message, state: FSMContext):
-    title, action = message.text.split("|", 1)
-    title = title.strip()
-    action = action.strip()
-
-    data = await state.get_data()
-    buttons = data["buttons"]
-
-    buttons.append({"title": title, "action": action})
-    await state.update_data(buttons=buttons)
-
-    await message.answer(f"دکمه «{title}» اضافه شد.")
-
 @dp.message(F.text == "✔️ تکمیل و ارسال", BroadcastState.waiting_buttons)
 async def finish_broadcast(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -311,13 +286,10 @@ async def finish_broadcast(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("✅ اطلاع‌رسانی با موفقیت ارسال شد.")
 
-
-@dp.message(F.text == "🔙 بازگشت")
+@dp.message(F.text == "🔙 بازگشت", BroadcastState.waiting_buttons)
 async def back_to_admin(message: types.Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
-        return
-
     await state.clear()
+
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🔑 ساخت لایسنس جدید")],
@@ -325,8 +297,32 @@ async def back_to_admin(message: types.Message, state: FSMContext):
         ],
         resize_keyboard=True
     )
+
     await message.answer("به منوی ادمین برگشتی.", reply_markup=keyboard)
 
+@dp.message(F.text == "➕ افزودن دکمه", BroadcastState.waiting_buttons)
+async def ask_button(message: types.Message):
+    await message.answer(
+        "فرمت دکمه:\n\n"
+        "`عنوان دکمه | لینک`\n"
+        "یا\n"
+        "`عنوان دکمه | copy:MESSAGE_ID`\n",
+        parse_mode="Markdown"
+    )
+
+@dp.message(F.text.contains("|"), BroadcastState.waiting_buttons)
+async def add_button(message: types.Message, state: FSMContext):
+    title, action = message.text.split("|", 1)
+    title = title.strip()
+    action = action.strip()
+
+    data = await state.get_data()
+    buttons = data["buttons"]
+
+    buttons.append({"title": title, "action": action})
+    await state.update_data(buttons=buttons)
+
+    await message.answer(f"دکمه «{title}» اضافه شد.")
 
 # ===================== COPY BUTTON ======================
 @dp.callback_query(F.data.startswith("copy_"))
