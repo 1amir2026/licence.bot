@@ -1,9 +1,41 @@
 import fs from "fs";
 import path from "path";
 
-// ====================== HELPERS ======================
+// ====================== LOAD MODEL WITH PARENT ======================
 
-// چرخش یک نقطه حول محور X/Y/Z
+function loadModel(filePath, visited = new Set()) {
+    if (visited.has(filePath)) return { elements: [], textures: {} };
+    visited.add(filePath);
+
+    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+
+    let elements = raw.elements || [];
+    let textures = raw.textures || {};
+
+    if (raw.parent) {
+        let parentPath;
+
+        if (raw.parent.includes(":")) {
+            const [ns, p] = raw.parent.split(":");
+            parentPath = path.join("resourcepack/assets", ns, "models", p + ".json");
+        } else {
+            parentPath = path.join(path.dirname(filePath), raw.parent + ".json");
+        }
+
+        if (fs.existsSync(parentPath)) {
+            const parent = loadModel(parentPath, visited);
+
+            // child overwrites parent
+            elements = elements.length ? elements : parent.elements;
+            textures = { ...parent.textures, ...textures };
+        }
+    }
+
+    return { elements, textures };
+}
+
+// ====================== ROTATION ======================
+
 function rotatePoint([x, y, z], origin, axis, angleDeg) {
     const angle = -angleDeg * Math.PI / 180;
     let [ox, oy, oz] = origin;
@@ -30,7 +62,6 @@ function rotatePoint([x, y, z], origin, axis, angleDeg) {
     return [rx + ox, ry + oy, rz + oz];
 }
 
-// تبدیل مختصات ماینکرافت به OBJ (مقیاس 1/16)
 function mcToObj([x, y, z]) {
     return [
         -(x - 8) / 16,
@@ -39,7 +70,8 @@ function mcToObj([x, y, z]) {
     ];
 }
 
-// ساخت مکعب از from/to
+// ====================== BUILD CUBE ======================
+
 function buildCube(from, to, rotation) {
     const verts = [
         [from[0], to[1], from[2]],
@@ -74,30 +106,28 @@ function buildCube(from, to, rotation) {
 
 // ====================== MAIN ======================
 
-if (process.argv.length < 4) {
-    console.error("Usage: node json_to_obj.mjs input.json output.obj");
-    process.exit(1);
-}
-
 const inputJson = process.argv[2];
 const outputObj = process.argv[3];
 const outputMtl = outputObj.replace(".obj", ".mtl");
 
-const data = JSON.parse(fs.readFileSync(inputJson, "utf8"));
+const { elements, textures } = loadModel(inputJson);
+
+if (!elements.length) {
+    console.error("❌ No elements found. Model is empty.");
+    process.exit(1);
+}
 
 let obj = "";
 let mtl = "";
 let vCount = 1;
 
-const textureName = "texture.png";
-
 mtl += `newmtl material0\n`;
-mtl += `map_Kd ${textureName}\n\n`;
+mtl += `map_Kd texture.png\n\n`;
 
 obj += `mtllib ${path.basename(outputMtl)}\n`;
 obj += `usemtl material0\n`;
 
-for (const el of data.elements) {
+for (const el of elements) {
     const from = el.from;
     const to = el.to;
 
