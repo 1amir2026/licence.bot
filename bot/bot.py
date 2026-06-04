@@ -11,18 +11,18 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
+from config import TOKEN, ADMIN_ID
+from database import Session, License
+
 # ====================== FSM ======================
 class BroadcastState(StatesGroup):
     waiting_message = State()
     waiting_buttons = State()
 
-from config import TOKEN, ADMIN_ID
-from database import Session, License
-
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 user_modes = {}
-user_data = {}
+user_data = {}  # برای ذخیره اطلاعات بین دو مرحله JSON و Texture
 
 # ====================== PATHS ======================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,12 +41,15 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # ====================== LICENSE ======================
 LICENSE_REGEX = r"^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$"
 
+
 def generate_license():
     chars = string.ascii_uppercase + string.digits
     return '-'.join(''.join(random.choices(chars, k=4)) for _ in range(4))
 
+
 def is_admin(user_id: int):
     return user_id == ADMIN_ID
+
 
 # ====================== HELPERS ======================
 async def run_node_processor(input_path: str, output_path: str, xp_percent: float = 0.7, upscale_rate: int = 1):
@@ -60,6 +63,7 @@ async def run_node_processor(input_path: str, output_path: str, xp_percent: floa
     stdout, stderr = await proc.communicate()
     if proc.returncode != 0:
         raise RuntimeError(f"Node processor failed: {stderr.decode()}")
+
 
 async def run_item3d(input_path: str, output_obj: str):
     proc = await asyncio.create_subprocess_exec(
@@ -81,6 +85,7 @@ async def run_item3d(input_path: str, output_obj: str):
     else:
         raise RuntimeError("No output file was generated")
 
+
 async def run_json_to_obj(json_path: str, output_obj: str):
     os.makedirs(os.path.dirname(output_obj), exist_ok=True)
     
@@ -99,6 +104,7 @@ async def run_json_to_obj(json_path: str, output_obj: str):
         raise RuntimeError(f"Output file not created: {output_obj}")
     
     return output_obj
+
 
 def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -121,6 +127,7 @@ def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
     
     return zip_path
 
+
 # ====================== COMMANDS ======================
 @dp.message(Command("start"))
 async def start(message: types.Message):
@@ -136,13 +143,27 @@ async def start(message: types.Message):
             "سلام ادمین گرامی\n\nبرای ساخت لایسنس جدید دکمه زیر را بزن:",
             reply_markup=keyboard
         )
-
     else:
         await message.answer(
             "سلام! اگر از قبل لایسنس دارید نادیده بگیرید.\n\n"
             "برای دریافت لایسنس به ادمین مراجعه کنید:\n"
             "@Amirmah198"
         )
+
+
+@dp.message(F.text == "🔑 ساخت لایسنس جدید")
+async def create_license(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    key = generate_license()
+    session = Session()
+    session.add(License(key=key))
+    session.commit()
+    session.close()
+
+    await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n`{key}`\n\nکپی کن و بفرست.")
+
 
 # ====================== LICENSE CHECK ======================
 @dp.message(F.text.regexp(LICENSE_REGEX))
@@ -176,6 +197,7 @@ async def check_license(message: types.Message):
 
     session.close()
 
+
 # ====================== BROADCAST ======================
 @dp.message(F.text == "📢 اطلاع‌رسانی")
 async def start_broadcast(message: types.Message, state: FSMContext):
@@ -187,6 +209,7 @@ async def start_broadcast(message: types.Message, state: FSMContext):
         "📨 پیام خود را ارسال کنید.\n\n"
         "می‌توانید متن، عکس، ویدیو یا فایل بفرستید."
     )
+
 
 @dp.message(BroadcastState.waiting_message)
 async def receive_broadcast_message(message: types.Message, state: FSMContext):
@@ -229,6 +252,7 @@ async def receive_broadcast_message(message: types.Message, state: FSMContext):
     await state.set_state(BroadcastState.waiting_buttons)
     await message.answer("پیام ذخیره شد.\n\nاکنون می‌توانید دکمه اضافه کنید.", reply_markup=keyboard)
 
+
 @dp.message(F.text == "➕ افزودن دکمه", BroadcastState.waiting_buttons)
 async def ask_button(message: types.Message):
     await message.answer(
@@ -238,6 +262,7 @@ async def ask_button(message: types.Message):
         "`عنوان دکمه | copy:MESSAGE_ID`\n",
         parse_mode="Markdown"
     )
+
 
 @dp.message(BroadcastState.waiting_buttons)
 async def add_button(message: types.Message, state: FSMContext):
@@ -255,6 +280,7 @@ async def add_button(message: types.Message, state: FSMContext):
     await state.update_data(buttons=buttons)
 
     await message.answer(f"دکمه «{title}» اضافه شد.")
+
 
 @dp.message(F.text == "✔️ تکمیل و ارسال", BroadcastState.waiting_buttons)
 async def finish_broadcast(message: types.Message, state: FSMContext):
@@ -277,21 +303,35 @@ async def finish_broadcast(message: types.Message, state: FSMContext):
         try:
             if content["type"] == "text":
                 await bot.send_message(u.user_id, content["text"], reply_markup=kb)
-
             elif content["type"] == "photo":
                 await bot.send_photo(u.user_id, content["file_id"], caption=content["caption"], reply_markup=kb)
-
             elif content["type"] == "video":
                 await bot.send_video(u.user_id, content["file_id"], caption=content["caption"], reply_markup=kb)
-
             elif content["type"] == "document":
                 await bot.send_document(u.user_id, content["file_id"], caption=content["caption"], reply_markup=kb)
-
         except:
             pass
 
+    session.close()
     await state.clear()
     await message.answer("✅ اطلاع‌رسانی با موفقیت ارسال شد.")
+
+
+@dp.message(F.text == "🔙 بازگشت")
+async def back_to_admin(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    await state.clear()
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🔑 ساخت لایسنس جدید")],
+            [KeyboardButton(text="📢 اطلاع‌رسانی")]
+        ],
+        resize_keyboard=True
+    )
+    await message.answer("به منوی ادمین برگشتی.", reply_markup=keyboard)
+
 
 # ===================== COPY BUTTON ======================
 @dp.callback_query(F.data.startswith("copy_"))
@@ -306,22 +346,26 @@ async def copy_message_handler(callback: types.CallbackQuery):
     except:
         await callback.answer("❌ پیام یافت نشد.", show_alert=True)
 
+
 # ====================== MODES ======================
 @dp.message(F.text == "📦 دریافت ریسورس پک ریلیز تکسچر")
 async def ask_for_pack(message: types.Message):
     user_modes[message.from_user.id] = "resource_pack"
     await message.answer("📤 لطفاً فایل ریسورس پک خود را ارسال کنید.\nفقط فرمت‌های .zip یا .mcpack")
 
+
 @dp.message(F.text == "🧊 ساخت آیتم سه‌بعدی ماینکرافت")
 async def minecraft_3d(message: types.Message):
     user_modes[message.from_user.id] = "minecraft_3d"
     await message.answer("🧊 فایل PNG آیتم را ارسال کنید.")
+
 
 @dp.message(F.text == "🔄 تبدیل JSON به OBJ")
 async def json_to_obj_mode(message: types.Message):
     user_modes[message.from_user.id] = "json_to_obj"
     user_data.pop(message.from_user.id, None)
     await message.answer("📤 **فایل JSON** مدل ماینکرافت را ارسال کنید.")
+
 
 # ====================== FILE HANDLER ======================
 @dp.message(F.document)
@@ -441,10 +485,12 @@ async def handle_document(message: types.Message):
             user_modes.pop(user_id, None)
             user_data.pop(user_id, None)
 
+
 # ====================== MAIN ======================
 async def main():
     print("🚀 Bot started successfully")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
