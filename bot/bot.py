@@ -246,7 +246,7 @@ async def add_button(message: types.Message, state: FSMContext):
 
     await message.answer(f"دکمه «{title}» اضافه شد.")
 
-@dp.message(BroadcastState.waiting_buttons, F.text == "✔️ تکمیل و ارسال")
+@dp.message(F.text == "✔️ تکمیل و ارسال", BroadcastState.waiting_buttons)
 async def finish_broadcast(message: types.Message, state: FSMContext):
     data = await state.get_data()
     content = data["content"]
