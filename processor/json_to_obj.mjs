@@ -1,65 +1,63 @@
 import fs from 'fs';
 import path from 'path';
 
-const inputPath = process.argv[2];
-const outputObjPath = process.argv[3];
+const [,, inputJson, outputObj] = process.argv;
 
-if (!inputPath || !outputObjPath) {
+if (!inputJson || !outputObj) {
     console.error("Usage: node json_to_obj.mjs <input.json> <output.obj>");
     process.exit(1);
 }
 
 try {
-    let json = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
-    const baseName = path.basename(outputObjPath, '.obj');
+    const data = JSON.parse(fs.readFileSync(inputJson, 'utf8'));
+    const baseName = path.basename(outputObj, '.obj');
 
-    // پشتیبانی از هر دو فرمت Java و Bedrock
-    const elements = json.elements || (json.minecraft && json.minecraft.geometry ? json.minecraft.geometry[0].bones.flatMap(b => b.cubes || []) : []);
-    const texW = json.texture_size?.[0] || json.texture_width || 64;
-    const texH = json.texture_size?.[1] || json.texture_height || 64;
+    const elements = data.elements || [];
+    const texW = data.texture_size?.[0] || 64;
+    const texH = data.texture_size?.[1] || 64;
 
-    let vertices = [], uvs = [], faces = [];
-    let vCount = 1;
-    const SCALE = 0.0625; // 1/16
+    let objLines = [];
+    let vertexCount = 1;
+    let uvCount = 1;
+    const SCALE = 0.0625;
 
     function addVertex(x, y, z) {
-        vertices.push(`v ${(x * SCALE).toFixed(6)} ${(y * SCALE).toFixed(6)} ${(z * SCALE).toFixed(6)}`);
-        return vCount++;
+        objLines.push(`v ${(x * SCALE).toFixed(6)} ${(y * SCALE).toFixed(6)} ${(z * SCALE).toFixed(6)}`);
+        return vertexCount++;
     }
 
     function addUV(u, v) {
-        const id = uvs.length + 1;
-        uvs.push(`vt ${u.toFixed(6)} ${(1 - v).toFixed(6)}`);
-        return id;
+        objLines.push(`vt ${u.toFixed(6)} ${(1 - v).toFixed(6)}`);
+        return uvCount++;
     }
 
-    // تابع چرخش پیشرفته با Pivot
+    // چرخش کامل (3 محور + pivot) - مثل MCPrep/Blockbench
     function applyRotation(corners, rotation) {
-        if (!rotation) return corners;
-        const origin = rotation.origin || [0, 0, 0];
+        if (!rotation?.origin) return corners;
+        const [ox, oy, oz] = rotation.origin;
         const rx = (rotation.x || 0) * Math.PI / 180;
         const ry = (rotation.y || 0) * Math.PI / 180;
         const rz = (rotation.z || 0) * Math.PI / 180;
 
         return corners.map(([x, y, z]) => {
-            x -= origin[0]; y -= origin[1]; z -= origin[2];
+            x -= ox; y -= oy; z -= oz;
 
-            // Rotation Z
+            // Z rotation
             let tx = x * Math.cos(rz) - y * Math.sin(rz);
             let ty = x * Math.sin(rz) + y * Math.cos(rz);
             x = tx; y = ty;
 
-            // Rotation Y
+            // Y rotation
             tx = x * Math.cos(ry) + z * Math.sin(ry);
             let tz = -x * Math.sin(ry) + z * Math.cos(ry);
             x = tx; z = tz;
 
-            // Rotation X
+            // X rotation
             ty = y * Math.cos(rx) - z * Math.sin(rx);
             tz = y * Math.sin(rx) + z * Math.cos(rx);
             y = ty; z = tz;
 
-            return [x + origin[0], y + origin[1], z + origin[2]];
+            return [x + ox, y + oy, z + oz];
         });
     }
 
@@ -74,29 +72,29 @@ try {
             [el.from[0], el.from[1], el.to[2]],
             [el.to[0],   el.from[1], el.to[2]],
             [el.to[0],   el.to[1],   el.to[2]],
-            [el.from[0], el.to[1],   el.to[2]],
+            [el.from[0], el.to[1],   el.to[2]]
         ];
 
         corners = applyRotation(corners, el.rotation);
 
-        const vIds = corners.map(p => addVertex(p[0], p[1], p[2]));
+        const vIds = corners.map(v => addVertex(...v));
 
+        // ترتیب face دقیق‌تر (مشابه Blockbench)
         const faceDefs = [
-            {key: 'north', order: [3,2,1,0]},
-            {key: 'east',  order: [2,6,5,1]},
-            {key: 'south', order: [6,7,4,5]},
-            {key: 'west',  order: [7,3,0,4]},
-            {key: 'up',    order: [3,7,6,2]},
-            {key: 'down',  order: [0,1,5,4]},
+            { dir: 'north', order: [3, 2, 1, 0] },
+            { dir: 'east',  order: [2, 6, 5, 1] },
+            { dir: 'south', order: [6, 7, 4, 5] },
+            { dir: 'west',  order: [7, 3, 0, 4] },
+            { dir: 'up',    order: [3, 7, 6, 2] },
+            { dir: 'down',  order: [0, 1, 5, 4] }
         ];
 
-        const facesData = el.faces || {};
+        faceDefs.forEach(({ dir, order }) => {
+            const face = el.faces?.[dir];
+            if (!face?.uv) return;
 
-        faceDefs.forEach(f => {
-            const face = facesData[f.key];
-            if (!face || !face.uv) return;
+            const [u1, v1, u2, v2] = face.uv.map(n => Number(n));
 
-            let [u1, v1, u2, v2] = face.uv;
             const uvIds = [
                 addUV(u1 / texW, v1 / texH),
                 addUV(u2 / texW, v1 / texH),
@@ -104,26 +102,23 @@ try {
                 addUV(u1 / texW, v2 / texH)
             ];
 
-            const o = f.order;
-            faces.push(`f ${vIds[o[0]]}/${uvIds[0]}/1 ${vIds[o[1]]}/${uvIds[1]}/1 ${vIds[o[2]]}/${uvIds[2]}/1 ${vIds[o[3]]}/${uvIds[3]}/1`);
+            objLines.push(`f ${vIds[order[0]]}/${uvIds[0]} ${vIds[order[1]]}/${uvIds[1]} ${vIds[order[2]]}/${uvIds[2]} ${vIds[order[3]]}/${uvIds[3]}`);
         });
     });
 
     const objContent = [
-        `# Minecraft JSON to OBJ - Advanced Conversion`,
+        `# JSON to OBJ - Improved for MCPrep/Blockbench`,
         `mtllib ${baseName}.mtl`,
-        ...vertices,
-        ...uvs,
-        'vn 0 1 0',
-        ...faces
+        ...objLines,
+        'vn 0 1 0'
     ].join('\n');
 
-    fs.writeFileSync(outputObjPath, objContent);
-    fs.writeFileSync(outputObjPath.replace('.obj', '.mtl'), 
-        `newmtl material\nKd 1 1 1\nmap_Kd ${baseName}.png\n`);
+    fs.writeFileSync(outputObj, objContent);
 
-    console.log(`✅ Conversion completed: ${outputObjPath}`);
-    process.exit(0);
+    const mtlPath = outputObj.replace('.obj', '.mtl');
+    fs.writeFileSync(mtlPath, `newmtl material\nKd 1 1 1\nmap_Kd ${baseName}.png\n`);
+
+    console.log(`✅ Converted successfully: ${outputObj}`);
 
 } catch (err) {
     console.error("Error:", err.message);
