@@ -8,6 +8,12 @@ from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
+
+class BroadcastState(StatesGroup):
+    waiting_message = State()
+    waiting_buttons = State()
 
 from config import TOKEN, ADMIN_ID
 from database import Session, License
@@ -123,11 +129,14 @@ def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
 # ====================== COMMANDS ======================
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    if is_admin(message.from_user.id):
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="🔑 ساخت لایسنس جدید")]],
-            resize_keyboard=True
-        )
+if is_admin(message.from_user.id):
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🔑 ساخت لایسنس جدید")],
+            [KeyboardButton(text="📢 اطلاع‌رسانی")]
+        ],
+        resize_keyboard=True
+    )
         await message.answer("سلام ادمین گرامی\n\nبرای ساخت لایسنس جدید دکمه زیر را بزن:", reply_markup=keyboard)
     else:
         await message.answer(
@@ -150,11 +159,126 @@ async def create_license(message: types.Message):
 
     await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n`{key}`\n\nکپی کن و بفرست.")
 
-
 @dp.message(F.text.regexp(LICENSE_REGEX))
 async def check_license(message: types.Message):
     if is_admin(message.from_user.id):
         return
+
+@dp.message(F.text == "📢 اطلاع‌رسانی")
+async def start_broadcast(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    await state.set_state(BroadcastState.waiting_message)
+    await message.answer(
+        "📨 پیام خود را ارسال کنید.\n\n"
+        "می‌توانید متن، عکس، ویدیو یا فایل بفرستید."
+    )
+
+@dp.message(BroadcastState.waiting_message)
+async def receive_broadcast_message(message: types.Message, state: FSMContext):
+    content = {}
+
+    if message.text:
+        content["type"] = "text"
+        content["text"] = message.text
+
+    elif message.photo:
+        content["type"] = "photo"
+        content["file_id"] = message.photo[-1].file_id
+        content["caption"] = message.caption or ""
+
+    elif message.video:
+        content["type"] = "video"
+        content["file_id"] = message.video.file_id
+        content["caption"] = message.caption or ""
+
+    elif message.document:
+        content["type"] = "document"
+        content["file_id"] = message.document.file_id
+        content["caption"] = message.caption or ""
+
+    else:
+        await message.answer("❌ فرمت پیام پشتیبانی نمی‌شود.")
+        return
+
+    await state.update_data(content=content, buttons=[])
+
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="➕ افزودن دکمه")],
+            [KeyboardButton(text="✔️ تکمیل و ارسال")],
+            [KeyboardButton(text="🔙 بازگشت")]
+        ],
+        resize_keyboard=True
+    )
+
+    await state.set_state(BroadcastState.waiting_buttons)
+    await message.answer("پیام ذخیره شد.\n\nاکنون می‌توانید دکمه اضافه کنید.", reply_markup=keyboard)
+
+@dp.message(BroadcastState.waiting_buttons, F.text == "➕ افزودن دکمه")
+async def ask_button(message: types.Message):
+    await message.answer(
+        "فرمت دکمه:\n\n"
+        "`عنوان دکمه | لینک`\n"
+        "یا\n"
+        "`عنوان دکمه | copy:MESSAGE_ID`\n",
+        parse_mode="Markdown"
+    )
+
+@dp.message(BroadcastState.waiting_buttons)
+async def add_button(message: types.Message, state: FSMContext):
+    if "|" not in message.text:
+        return
+
+    title, action = message.text.split("|", 1)
+    title = title.strip()
+    action = action.strip()
+
+    data = await state.get_data()
+    buttons = data["buttons"]
+
+    buttons.append({"title": title, "action": action})
+    await state.update_data(buttons=buttons)
+
+    await message.answer(f"دکمه «{title}» اضافه شد.")
+
+@dp.message(BroadcastState.waiting_buttons, F.text == "✔️ تکمیل و ارسال")
+async def finish_broadcast(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    content = data["content"]
+    buttons = data["buttons"]
+
+    kb = types.InlineKeyboardMarkup()
+    for btn in buttons:
+        if btn["action"].startswith("copy:"):
+            msg_id = btn["action"].replace("copy:", "")
+            kb.add(types.InlineKeyboardButton(text=btn["title"], callback_data=f"copy_{msg_id}"))
+        else:
+            kb.add(types.InlineKeyboardButton(text=btn["title"], url=btn["action"]))
+
+    session = Session()
+    users = session.query(License).filter(License.used == True).all()
+
+    for u in users:
+        try:
+            if content["type"] == "text":
+                await bot.send_message(u.user_id, content["text"], reply_markup=kb)
+
+            elif content["type"] == "photo":
+                await bot.send_photo(u.user_id, content["file_id"], caption=content["caption"], reply_markup=kb)
+
+            elif content["type"] == "video":
+                await bot.send_video(u.user_id, content["file_id"], caption=content["caption"], reply_markup=kb)
+
+            elif content["type"] == "document":
+                await bot.send_document(u.user_id, content["file_id"], caption=content["caption"], reply_markup=kb)
+
+        except:
+            pass
+
+    await state.clear()
+    await message.answer("✅ اطلاع‌رسانی با موفقیت ارسال شد.")
 
     session = Session()
     license_glb = session.query(License).filter_by(
@@ -322,7 +446,18 @@ async def handle_document(message: types.Message):
                         pass
             user_modes.pop(user_id, None)
             user_data.pop(user_id, None)
-
+# ===================== Broadcast ===============
+@dp.callback_query(F.data.startswith("copy_"))
+async def copy_message_handler(callback: types.CallbackQuery):
+    msg_id = callback.data.replace("copy_", "")
+    try:
+        await bot.copy_message(
+            chat_id=callback.from_user.id,
+            from_chat_id=ADMIN_ID,
+            message_id=int(msg_id)
+        )
+    except:
+        await callback.answer("❌ پیام یافت نشد.", show_alert=True)
 
 # ====================== MAIN ======================
 async def main():
