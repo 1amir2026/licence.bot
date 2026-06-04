@@ -80,27 +80,31 @@ async def run_item3d(input_path: str, output_obj: str):
 
 
 async def run_json_to_obj(json_path: str, output_obj: str):
+    # مطمئن شویم پوشه خروجی وجود دارد
+    os.makedirs(os.path.dirname(output_obj), exist_ok=True)
+    
     proc = await asyncio.create_subprocess_exec(
-        "blender", "--background", "--python", "processor/json_to_obj_blender.py", "--", 
-        json_path, output_obj,
+        "node", JSON_TO_OBJ_SCRIPT, json_path, output_obj,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
+        stderr=asyncio.subprocess.PIPE,
+        cwd=PROCESSOR_DIR
     )
     stdout, stderr = await proc.communicate()
     
     if proc.returncode != 0:
-        raise RuntimeError(f"Blender failed: {stderr.decode()}")
+        raise RuntimeError(f"JSON to OBJ failed:\n{stderr.decode()}")
+    
+    if not os.path.exists(output_obj):
+        raise RuntimeError(f"Output file not created: {output_obj}")
     
     return output_obj
 
-
 def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
-    """ساخت ZIP با نام واقعی تکسچر"""
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     zip_path = os.path.join(OUTPUT_DIR, f"{base_name}.zip")
     texture_name = os.path.basename(texture_path)
-    
-    # بروزرسانی MTL با نام واقعی تکسچر
     mtl_path = obj_path.replace('.obj', '.mtl')
+    
     if os.path.exists(mtl_path):
         with open(mtl_path, 'r', encoding='utf-8') as f:
             mtl_content = f.read()
@@ -110,11 +114,11 @@ def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
 
     with zipfile.ZipFile(zip_path, 'w') as z:
         z.write(obj_path, os.path.basename(obj_path))
-        z.write(mtl_path, os.path.basename(mtl_path))
+        if os.path.exists(mtl_path):
+            z.write(mtl_path, os.path.basename(mtl_path))
         z.write(texture_path, texture_name)
     
     return zip_path
-
 
 # ====================== COMMANDS ======================
 @dp.message(Command("start"))
