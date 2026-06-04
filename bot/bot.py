@@ -93,7 +93,8 @@ def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
 
     with zipfile.ZipFile(zip_path, 'w') as z:
         z.write(obj_path, os.path.basename(obj_path))
-        z.write(mtl_path, os.path.basename(mtl_path))
+        if os.path.exists(mtl_path):
+            z.write(mtl_path, os.path.basename(mtl_path))
         z.write(texture_path, texture_name)
     return zip_path
 
@@ -150,10 +151,10 @@ async def create_license(message: types.Message):
 async def broadcast_mode(message: types.Message):
     if not is_admin(message.from_user.id): return
     user_modes[message.from_user.id] = "broadcast"
-    await message.answer("📢 حالت اطلاع‌رسانی فعال شد.\nهر نوع محتوایی بفرستید.")
+    await message.answer("📢 حالت اطلاع‌رسانی فعال شد.\nهر محتوایی (متن، عکس، ویدیو، فایل...) بفرست.")
 
 
-# ====================== LICENSE CHECK ======================
+# ====================== LICENSE ======================
 @dp.message(F.text.regexp(LICENSE_REGEX))
 async def check_license(message: types.Message):
     if is_admin(message.from_user.id): return
@@ -198,13 +199,13 @@ async def json_to_obj_mode(message: types.Message):
     await message.answer("📤 فایل JSON مدل را ارسال کنید.")
 
 
-# ====================== TEXT HANDLER (Broadcast) ======================
+# ====================== BROADCAST HANDLER ======================
 @dp.message()
 async def handle_text(message: types.Message):
     user_id = message.from_user.id
     if user_modes.get(user_id) == "broadcast" and is_admin(user_id):
         count = await broadcast_message(message)
-        await message.answer(f"✅ اطلاع‌رسانی با موفقیت انجام شد!\nبه {count} کاربر ارسال گردید.")
+        await message.answer(f"✅ اطلاع‌رسانی انجام شد!\nبه {count} کاربر ارسال شد.")
         user_modes.pop(user_id, None)
 
 
@@ -218,36 +219,33 @@ async def handle_document(message: types.Message):
     if not doc or not mode:
         return
 
-    # ================= RESOURCE PACK =================
+    # Resource Pack
     if mode == "resource_pack":
         if not doc.file_name.lower().endswith(('.zip', '.mcpack')):
-            await message.answer("❌ فقط فایل zip یا mcpack مجاز است.")
+            await message.answer("❌ فقط zip یا mcpack")
             return
-
-        await message.answer("🔄 در حال پردازش ریسورس پک...")
+        await message.answer("🔄 در حال پردازش...")
         input_path = os.path.join(INPUT_DIR, doc.file_name)
-        output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
-        output_path = os.path.join(OUTPUT_DIR, output_name)
+        output_path = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + "_ui.png")
 
         file_info = await bot.get_file(doc.file_id)
         await bot.download_file(file_info.file_path, input_path)
 
         try:
             await run_node_processor(input_path, output_path)
-            await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
+            await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش شد!")
         except Exception as e:
             await message.answer(f"❌ خطا: {str(e)}")
         finally:
             if os.path.exists(input_path): os.remove(input_path)
             user_modes.pop(user_id, None)
 
-    # ================= 3D ITEM =================
+    # 3D Item
     elif mode == "minecraft_3d":
         if not doc.file_name.lower().endswith('.png'):
-            await message.answer("❌ فقط فایل PNG مجاز است.")
+            await message.answer("❌ فقط PNG")
             return
-
-        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
+        await message.answer("🔄 در حال ساخت مدل...")
         input_path = os.path.join(INPUT_DIR, doc.file_name)
         output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + ".obj")
 
@@ -263,33 +261,30 @@ async def handle_document(message: types.Message):
             if os.path.exists(input_path): os.remove(input_path)
             user_modes.pop(user_id, None)
 
-    # ================= JSON TO OBJ - مرحله 1 =================
+    # JSON to OBJ Stage 1
     elif mode == "json_to_obj":
         if not doc.file_name.lower().endswith('.json'):
-            await message.answer("❌ فقط فایل JSON مجاز است.")
+            await message.answer("❌ فقط JSON")
             return
 
         json_path = os.path.join(INPUT_DIR, doc.file_name)
         file_info = await bot.get_file(doc.file_id)
         await bot.download_file(file_info.file_path, json_path)
 
-        user_data[user_id] = {
-            "json_path": json_path,
-            "base_name": os.path.splitext(doc.file_name)[0]
-        }
+        user_data[user_id] = {"json_path": json_path, "base_name": os.path.splitext(doc.file_name)[0]}
         user_modes[user_id] = "json_to_obj_waiting_texture"
 
-        await message.answer("✅ JSON دریافت شد.\n\n📤 حالا فایل **تکسچر PNG** را ارسال کنید.")
+        await message.answer("✅ JSON دریافت شد.\n\n📤 حالا فایل PNG تکسچر را ارسال کنید.")
 
-    # ================= JSON TO OBJ - مرحله 2 =================
+    # JSON to OBJ Stage 2
     elif mode == "json_to_obj_waiting_texture":
         if not doc.file_name.lower().endswith('.png'):
-            await message.answer("❌ فقط فایل PNG مجاز است.")
+            await message.answer("❌ فقط PNG")
             return
 
         data = user_data.get(user_id)
         if not data:
-            await message.answer("❌ خطا: اطلاعات مدل پیدا نشد.")
+            await message.answer("❌ خطا: اطلاعات پیدا نشد.")
             return
 
         texture_path = os.path.join(INPUT_DIR, doc.file_name)
@@ -300,7 +295,7 @@ async def handle_document(message: types.Message):
         base_name = data["base_name"]
         output_obj = os.path.join(OUTPUT_DIR, f"{base_name}.obj")
 
-        await message.answer("🔄 در حال تبدیل JSON به OBJ...")
+        await message.answer("🔄 در حال تبدیل...")
 
         try:
             await run_json_to_obj(json_path, output_obj)
