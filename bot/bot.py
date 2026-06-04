@@ -240,10 +240,10 @@ async def receive_broadcast_message(message: types.Message, state: FSMContext):
 
     await state.update_data(content=content, buttons=[])
 
-    keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(types.InlineKeyboardButton(text="➕ افزودن دکمه", callback_data="add_btn"))
-    keyboard.add(types.InlineKeyboardButton(text="✔️ تکمیل و ارسال", callback_data="finish"))
-    keyboard.add(types.InlineKeyboardButton(text="🔙 بازگشت", callback_data="back"))
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
+    keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="➕ افزودن دکمه", callback_data="add_btn")])
+    keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="✔️ تکمیل و ارسال", callback_data="finish")])
+    keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="🔙 بازگشت", callback_data="back")])
 
     await state.set_state(BroadcastState.waiting_buttons)
     await message.answer("پیام ذخیره شد.\n\nاکنون می‌توانید دکمه اضافه کنید.", reply_markup=keyboard)
