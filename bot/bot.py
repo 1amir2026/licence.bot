@@ -81,15 +81,16 @@ async def run_item3d(input_path: str, output_obj: str):
 
 async def run_json_to_obj(json_path: str, output_obj: str):
     proc = await asyncio.create_subprocess_exec(
-        "node", JSON_TO_OBJ_SCRIPT, json_path, output_obj,
+        "blender", "--background", "--python", "processor/json_to_obj_blender.py", "--", 
+        json_path, output_obj,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=PROCESSOR_DIR
+        stderr=asyncio.subprocess.PIPE
     )
     stdout, stderr = await proc.communicate()
-
+    
     if proc.returncode != 0:
-        raise RuntimeError(f"JSON to OBJ failed:\n{stderr.decode()}")
+        raise RuntimeError(f"Blender failed: {stderr.decode()}")
+    
     return output_obj
 
 
