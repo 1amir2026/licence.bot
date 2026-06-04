@@ -263,13 +263,8 @@ async def ask_button(message: types.Message):
         parse_mode="Markdown"
     )
 
-
-@dp.message(BroadcastState.waiting_buttons)
+@dp.message(F.text.contains("|"), BroadcastState.waiting_buttons)
 async def add_button(message: types.Message, state: FSMContext):
-    # اگر پیام دکمه نبود، این هندلر نباید اجرا شود
-    if "|" not in message.text:
-        return
-
     title, action = message.text.split("|", 1)
     title = title.strip()
     action = action.strip()
