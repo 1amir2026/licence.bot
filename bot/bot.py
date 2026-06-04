@@ -98,7 +98,7 @@ def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
     return zip_path
 
 
-# ====================== BROADCAST (بهبود یافته) ======================
+# ====================== BROADCAST ======================
 async def broadcast_message(message: types.Message):
     session = Session()
     users = session.query(License.user_id).filter(License.user_id.isnot(None)).distinct().all()
@@ -110,20 +110,10 @@ async def broadcast_message(message: types.Message):
     for (user_id,) in users:
         try:
             if message.text:
-                # ارسال متن با هدر بولد
                 full_text = header + message.text
-                await bot.send_message(
-                    chat_id=user_id,
-                    text=full_text,
-                    parse_mode="MarkdownV2"
-                )
+                await bot.send_message(chat_id=user_id, text=full_text, parse_mode="MarkdownV2")
             else:
-                # ارسال عکس، ویدیو، فایل، گیف و ...
-                await bot.copy_message(
-                    chat_id=user_id,
-                    from_chat_id=message.chat.id,
-                    message_id=message.message_id
-                )
+                await bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
             success += 1
         except:
             pass
@@ -135,51 +125,43 @@ async def broadcast_message(message: types.Message):
 async def start(message: types.Message):
     if is_admin(message.from_user.id):
         keyboard = ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="🔑 ساخت لایسنس جدید")],
-                [KeyboardButton(text="📢 اطلاع‌رسانی به کاربران")]
-            ],
+            keyboard=[[KeyboardButton(text="🔑 ساخت لایسنس جدید")], [KeyboardButton(text="📢 اطلاع‌رسانی به کاربران")]],
             resize_keyboard=True
         )
-        await message.answer("👋 سلام امیرمهدی عزیز!", reply_markup=keyboard)
+        await message.answer("👋 سلام ادمین عزیز!", reply_markup=keyboard)
     else:
         await message.answer("سلام! کد لایسنس خود را ارسال کنید.")
 
 
 @dp.message(F.text == "🔑 ساخت لایسنس جدید")
 async def create_license(message: types.Message):
-    if not is_admin(message.from_user.id):
-        return
+    if not is_admin(message.from_user.id): return
     key = generate_license()
     session = Session()
     session.add(License(key=key))
     session.commit()
     session.close()
-    await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n`{key}`")
+    await message.answer(f"✅ لایسنس جدید:\n\n`{key}`")
 
 
 @dp.message(F.text == "📢 اطلاع‌رسانی به کاربران")
 async def broadcast_mode(message: types.Message):
-    if not is_admin(message.from_user.id):
-        return
+    if not is_admin(message.from_user.id): return
     user_modes[message.from_user.id] = "broadcast"
-    await message.answer("📢 حالت اطلاع‌رسانی فعال شد.\n\nهر نوع محتوایی (متن، عکس، ویدیو، فایل، گیف و ...) بفرستید.")
+    await message.answer("📢 حالت اطلاع‌رسانی فعال شد.\nهر چیزی بفرستید.")
 
 
-# ====================== LICENSE CHECK ======================
+# ====================== LICENSE ======================
 @dp.message(F.text.regexp(LICENSE_REGEX))
 async def check_license(message: types.Message):
-    if is_admin(message.from_user.id):
-        return
+    if is_admin(message.from_user.id): return
     session = Session()
     license_glb = session.query(License).filter_by(key=message.text.strip(), used=False).first()
-
     if license_glb:
         license_glb.used = True
         license_glb.user_id = message.from_user.id
         license_glb.used_at = datetime.utcnow()
         session.commit()
-
         keyboard = ReplyKeyboardMarkup(
             keyboard=[
                 [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
@@ -188,9 +170,9 @@ async def check_license(message: types.Message):
             ],
             resize_keyboard=True
         )
-        await message.answer("✅ لایسنس فعال شد!\nبه پنل خوش آمدید 🎉", reply_markup=keyboard)
+        await message.answer("✅ لایسنس فعال شد!", reply_markup=keyboard)
     else:
-        await message.answer("❌ لایسنس نامعتبر یا قبلاً استفاده شده.")
+        await message.answer("❌ لایسنس نامعتبر است.")
     session.close()
 
 
@@ -211,21 +193,20 @@ async def minecraft_3d_mode(message: types.Message):
 async def json_to_obj_mode(message: types.Message):
     user_modes[message.from_user.id] = "json_to_obj"
     user_data.pop(message.from_user.id, None)
-    await message.answer("📤 فایل **JSON** مدل را ارسال کنید.")
+    await message.answer("📤 فایل JSON مدل را ارسال کنید.")
 
 
-# ====================== BROADCAST HANDLER ======================
+# ====================== TEXT HANDLER ======================
 @dp.message()
 async def handle_text(message: types.Message):
     user_id = message.from_user.id
     if user_modes.get(user_id) == "broadcast" and is_admin(user_id):
         count = await broadcast_message(message)
-        await message.answer(f"✅ اطلاع‌رسانی با موفقیت انجام شد!\n\n📨 به {count} کاربر ارسال گردید.")
+        await message.answer(f"✅ اطلاع‌رسانی انجام شد!\nبه {count} کاربر ارسال شد.")
         user_modes.pop(user_id, None)
-        return
 
 
-# ====================== DOCUMENT HANDLER ======================
+# ====================== DOCUMENT HANDLER (کامل) ======================
 @dp.message(F.document)
 async def handle_document(message: types.Message):
     user_id = message.from_user.id
@@ -235,8 +216,53 @@ async def handle_document(message: types.Message):
     if not doc or not mode:
         return
 
-    # ---------------- JSON TO OBJ - مرحله اول ----------------
-    if mode == "json_to_obj":
+    # ==================== RESOURCE PACK ====================
+    if mode == "resource_pack":
+        if not doc.file_name.lower().endswith(('.zip', '.mcpack')):
+            await message.answer("❌ فقط فایل zip یا mcpack مجاز است.")
+            return
+
+        await message.answer("🔄 در حال پردازش ریسورس پک...")
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
+        output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
+        output_path = os.path.join(OUTPUT_DIR, output_name)
+
+        file_info = await bot.get_file(doc.file_id)
+        await bot.download_file(file_info.file_path, input_path)
+
+        try:
+            await run_node_processor(input_path, output_path)
+            await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش شد!")
+        except Exception as e:
+            await message.answer(f"❌ خطا: {str(e)}")
+        finally:
+            if os.path.exists(input_path): os.remove(input_path)
+            user_modes.pop(user_id, None)
+
+    # ==================== MINECRAFT 3D ITEM ====================
+    elif mode == "minecraft_3d":
+        if not doc.file_name.lower().endswith('.png'):
+            await message.answer("❌ فقط فایل PNG مجاز است.")
+            return
+
+        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
+        output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + ".obj")
+
+        file_info = await bot.get_file(doc.file_id)
+        await bot.download_file(file_info.file_path, input_path)
+
+        try:
+            output_file = await run_item3d(input_path, output_obj)
+            await message.answer_document(FSInputFile(output_file), caption="✅ مدل سه‌بعدی ساخته شد!")
+        except Exception as e:
+            await message.answer(f"❌ خطا: {str(e)}")
+        finally:
+            if os.path.exists(input_path): os.remove(input_path)
+            user_modes.pop(user_id, None)
+
+    # ==================== JSON TO OBJ ====================
+    elif mode == "json_to_obj":
         if not doc.file_name.lower().endswith(".json"):
             await message.answer("❌ فقط فایل JSON مجاز است.")
             return
@@ -245,15 +271,11 @@ async def handle_document(message: types.Message):
         file_info = await bot.get_file(doc.file_id)
         await bot.download_file(file_info.file_path, json_path)
 
-        user_data[user_id] = {
-            "json_path": json_path,
-            "base_name": os.path.splitext(doc.file_name)[0]
-        }
+        user_data[user_id] = {"json_path": json_path, "base_name": os.path.splitext(doc.file_name)[0]}
         user_modes[user_id] = "json_to_obj_waiting_texture"
 
-        await message.answer("✅ JSON دریافت شد.\n\n📤 حالا فایل **تکسچر PNG** را ارسال کنید.")
+        await message.answer("✅ JSON دریافت شد.\n\n📤 حالا فایل PNG تکسچر را ارسال کنید.")
 
-    # ---------------- JSON TO OBJ - مرحله دوم ----------------
     elif mode == "json_to_obj_waiting_texture":
         if not doc.file_name.lower().endswith(".png"):
             await message.answer("❌ فقط فایل PNG مجاز است.")
@@ -261,7 +283,7 @@ async def handle_document(message: types.Message):
 
         data = user_data.get(user_id)
         if not data:
-            await message.answer("❌ خطا: اطلاعات مدل پیدا نشد.")
+            await message.answer("❌ خطا: اطلاعات پیدا نشد.")
             return
 
         texture_path = os.path.join(INPUT_DIR, doc.file_name)
@@ -272,29 +294,19 @@ async def handle_document(message: types.Message):
         base_name = data["base_name"]
         output_obj = os.path.join(OUTPUT_DIR, f"{base_name}.obj")
 
-        await message.answer("🔄 در حال تبدیل و ساخت ZIP...")
+        await message.answer("🔄 در حال تبدیل...")
 
         try:
             await run_json_to_obj(json_path, output_obj)
             zip_path = create_zip_with_texture(base_name, output_obj, texture_path)
-
-            await message.answer_document(
-                FSInputFile(zip_path),
-                caption=f"✅ تبدیل JSON به OBJ با موفقیت انجام شد!\n\n"
-                        f"📦 شامل:\n"
-                        f"• {base_name}.obj\n"
-                        f"• {base_name}.mtl\n"
-                        f"• {os.path.basename(texture_path)}"
-            )
+            await message.answer_document(FSInputFile(zip_path), caption="✅ تبدیل با موفقیت انجام شد!")
         except Exception as e:
-            await message.answer(f"❌ خطا:\n{str(e)}")
+            await message.answer(f"❌ خطا: {str(e)}")
         finally:
             for p in [json_path, texture_path, output_obj, output_obj.replace('.obj', '.mtl')]:
                 if os.path.exists(p):
-                    try:
-                        os.remove(p)
-                    except:
-                        pass
+                    try: os.remove(p)
+                    except: pass
             user_modes.pop(user_id, None)
             user_data.pop(user_id, None)
 
