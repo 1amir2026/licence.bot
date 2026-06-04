@@ -12,7 +12,7 @@ if (!input || !output) {
 }
 
 const SCALE = 1 / 16;
-const DEPTH = 0.08;
+const DEPTH = 0.07;
 const ALPHA_THRESHOLD = 40;
 
 const { data, info } = await sharp(input)
