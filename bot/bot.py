@@ -238,15 +238,15 @@ async def receive_broadcast_message(message: types.Message, state: FSMContext):
         await message.answer("❌ فرمت پیام پشتیبانی نمی‌شود.")
         return
 
-    await state.update_data(content=content, buttons=[])
+await state.update_data(content=content, buttons=[])
 
 keyboard = types.InlineKeyboardMarkup()
 keyboard.add(types.InlineKeyboardButton(text="➕ افزودن دکمه", callback_data="add_btn"))
 keyboard.add(types.InlineKeyboardButton(text="✔️ تکمیل و ارسال", callback_data="finish"))
 keyboard.add(types.InlineKeyboardButton(text="🔙 بازگشت", callback_data="back"))
 
-    await state.set_state(BroadcastState.waiting_buttons)
-    await message.answer("پیام ذخیره شد.\n\nاکنون می‌توانید دکمه اضافه کنید.", reply_markup=keyboard)
+await state.set_state(BroadcastState.waiting_buttons)
+await message.answer("پیام ذخیره شد.\n\nاکنون می‌توانید دکمه اضافه کنید.", reply_markup=keyboard)
 
 @dp.callback_query(F.data == "finish")
 async def finish_broadcast(callback: types.CallbackQuery, state: FSMContext):
