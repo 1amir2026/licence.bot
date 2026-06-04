@@ -129,22 +129,25 @@ def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
 # ====================== COMMANDS ======================
 @dp.message(Command("start"))
 async def start(message: types.Message):
-if is_admin(message.from_user.id):
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🔑 ساخت لایسنس جدید")],
-            [KeyboardButton(text="📢 اطلاع‌رسانی")]
-        ],
-        resize_keyboard=True
-    )
-        await message.answer("سلام ادمین گرامی\n\nبرای ساخت لایسنس جدید دکمه زیر را بزن:", reply_markup=keyboard)
+    if is_admin(message.from_user.id):
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="🔑 ساخت لایسنس جدید")],
+                [KeyboardButton(text="📢 اطلاع‌رسانی")]
+            ],
+            resize_keyboard=True
+        )
+        await message.answer(
+            "سلام ادمین گرامی\n\nبرای ساخت لایسنس جدید دکمه زیر را بزن:",
+            reply_markup=keyboard
+        )
+
     else:
         await message.answer(
             "سلام! اگر از قبل لایسنس دارید نادیده بگیرید.\n\n"
             "برای دریافت لایسنس به ادمین مراجعه کنید:\n"
             "@Amirmah198"
         )
-
 
 @dp.message(F.text == "🔑 ساخت لایسنس جدید")
 async def create_license(message: types.Message):
