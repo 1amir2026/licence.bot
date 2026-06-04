@@ -240,20 +240,16 @@ async def receive_broadcast_message(message: types.Message, state: FSMContext):
 
     await state.update_data(content=content, buttons=[])
 
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="➕ افزودن دکمه")],
-            [KeyboardButton(text="✔️ تکمیل و ارسال")],
-            [KeyboardButton(text="🔙 بازگشت")]
-        ],
-        resize_keyboard=True
-    )
+keyboard = types.InlineKeyboardMarkup()
+keyboard.add(types.InlineKeyboardButton(text="➕ افزودن دکمه", callback_data="add_btn"))
+keyboard.add(types.InlineKeyboardButton(text="✔️ تکمیل و ارسال", callback_data="finish"))
+keyboard.add(types.InlineKeyboardButton(text="🔙 بازگشت", callback_data="back"))
 
     await state.set_state(BroadcastState.waiting_buttons)
     await message.answer("پیام ذخیره شد.\n\nاکنون می‌توانید دکمه اضافه کنید.", reply_markup=keyboard)
 
-@dp.message(F.text == "✔️ تکمیل و ارسال", BroadcastState.waiting_buttons)
-async def finish_broadcast(message: types.Message, state: FSMContext):
+@dp.callback_query(F.data == "finish")
+async def finish_broadcast(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     content = data["content"]
     buttons = data["buttons"]
@@ -282,12 +278,11 @@ async def finish_broadcast(message: types.Message, state: FSMContext):
         except:
             pass
 
-    session.close()
     await state.clear()
-    await message.answer("✅ اطلاع‌رسانی با موفقیت ارسال شد.")
+    await callback.message.answer("✅ اطلاع‌رسانی با موفقیت ارسال شد.")
 
-@dp.message(F.text == "🔙 بازگشت", BroadcastState.waiting_buttons)
-async def back_to_admin(message: types.Message, state: FSMContext):
+@dp.callback_query(F.data == "back")
+async def back_to_admin(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
 
     keyboard = ReplyKeyboardMarkup(
@@ -298,11 +293,11 @@ async def back_to_admin(message: types.Message, state: FSMContext):
         resize_keyboard=True
     )
 
-    await message.answer("به منوی ادمین برگشتی.", reply_markup=keyboard)
+    await callback.message.answer("به منوی ادمین برگشتی.", reply_markup=keyboard)
 
-@dp.message(F.text == "➕ افزودن دکمه", BroadcastState.waiting_buttons)
-async def ask_button(message: types.Message):
-    await message.answer(
+@dp.callback_query(F.data == "add_btn")
+async def ask_button(callback: types.CallbackQuery):
+    await callback.message.answer(
         "فرمت دکمه:\n\n"
         "`عنوان دکمه | لینک`\n"
         "یا\n"
