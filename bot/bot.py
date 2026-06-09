@@ -23,6 +23,11 @@ class BroadcastState(StatesGroup):
 class AdminState(StatesGroup):
     waiting_search = State()
 
+# New FSM for world conversion
+class WorldConversionState(StatesGroup):
+    waiting_world = State()
+    waiting_bounds = State()
+
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 user_modes = {}
@@ -35,6 +40,7 @@ PROCESSOR_DIR = os.path.join(BASE_DIR, "..", "processor")
 NODE_SCRIPT = os.path.join(PROCESSOR_DIR, "processor.mjs")
 ITEM3D_SCRIPT = os.path.join(PROCESSOR_DIR, "item3d.mjs")
 JSON_TO_OBJ_SCRIPT = os.path.join(PROCESSOR_DIR, "json_to_obj.mjs")
+WORLD_TO_OBJ_SCRIPT = os.path.join(PROCESSOR_DIR, "world_to_obj.mjs")
 
 INPUT_DIR = os.path.join(PROCESSOR_DIR, "input")
 OUTPUT_DIR = os.path.join(PROCESSOR_DIR, "output")
@@ -120,6 +126,29 @@ async def run_json_to_obj(json_path: str, output_obj: str):
         raise RuntimeError(f"Output file not created: {output_obj}")
     
     return output_obj
+
+
+async def run_world_to_obj(world_path: str, chat_id: int, minx: str = "-64", maxx: str = "64", minz: str = "-64", maxz: str = "64"):
+    output_base = os.path.join(OUTPUT_DIR, f"world_{chat_id}")
+    os.makedirs(output_base, exist_ok=True)
+    
+    proc = await asyncio.create_subprocess_exec(
+        "node", WORLD_TO_OBJ_SCRIPT, world_path, output_base,
+        minx, maxx, minz, maxz,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=PROCESSOR_DIR
+    )
+    stdout, stderr = await proc.communicate()
+    
+    if proc.returncode != 0:
+        raise RuntimeError(f"World to OBJ failed:\n{stderr.decode()}")
+    
+    obj_path = output_base + ".obj"
+    if os.path.exists(obj_path):
+        return obj_path
+    else:
+        raise RuntimeError("OBJ file not generated")
 
 
 def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
@@ -381,7 +410,8 @@ async def check_license(message: types.Message):
                 keyboard=[
                     [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
                     [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
-                    [KeyboardButton(text="🔄 تبدیل JSON به OBJ")]
+                    [KeyboardButton(text="🔄 تبدیل JSON به OBJ")],
+                    [KeyboardButton(text="🌍 تبدیل World به مدل 3D")]  # New button
                 ],
                 resize_keyboard=True
             )
@@ -754,9 +784,25 @@ async def json_to_obj_mode(message: types.Message):
     await message.answer("📤 **فایل JSON** مدل ماینکرافت را ارسال کنید.", parse_mode="Markdown")
 
 
+# New World Converter Handler
+@dp.message(F.text == "🌍 تبدیل World به مدل 3D")
+async def world_to_3d_mode(message: types.Message, state: FSMContext):
+    if is_user_banned(message.from_user.id):
+        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
+        return
+
+    await state.set_state(WorldConversionState.waiting_world)
+    await message.answer(
+        "🌍 **World ماینکرافت** خود را به صورت **ZIP** ارسال کنید (شامل level.dat و فولدر region).
+\n"
+        "بعد از آپلود، محدوده export را می‌توانید مشخص کنید.",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+
+
 # ====================== FILE HANDLER ======================
 @dp.message(F.document)
-async def handle_document(message: types.Message):
+async def handle_document(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
 
     if is_user_banned(user_id):
@@ -764,9 +810,10 @@ async def handle_document(message: types.Message):
         return
 
     mode = user_modes.get(user_id)
+    current_state = await state.get_state()
     doc = message.document
 
-    if not doc or not mode:
+    if not doc:
         return
 
     # RESOURCE PACK
@@ -876,6 +923,48 @@ async def handle_document(message: types.Message):
                         pass
             user_modes.pop(user_id, None)
             user_data.pop(user_id, None)
+
+    # WORLD TO OBJ
+    elif current_state == WorldConversionState.waiting_world.state:
+        if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcworld")):
+            await message.answer("❌ فقط فایل ZIP world مجاز است.")
+            return
+
+        await message.answer("🔄 در حال استخراج و تبدیل World... (ممکن است چند دقیقه طول بکشد)")
+
+        world_zip = os.path.join(INPUT_DIR, doc.file_name)
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(file.file_path, destination=world_zip)
+
+        try:
+            # Extract if ZIP
+            extract_dir = os.path.join(INPUT_DIR, f"world_{user_id}")
+            os.makedirs(extract_dir, exist_ok=True)
+            if world_zip.endswith(".zip"):
+                with zipfile.ZipFile(world_zip, 'r') as z:
+                    z.extractall(extract_dir)
+                world_folder = extract_dir
+            else:
+                world_folder = world_zip
+
+            obj_path = await run_world_to_obj(world_folder, user_id)
+            await message.answer_document(FSInputFile(obj_path), caption="✅ World با موفقیت به مدل OBJ تبدیل شد!")
+
+        except Exception as e:
+            await message.answer(f"❌ خطا در تبدیل World:\n{str(e)}")
+        finally:
+            await state.clear()
+            # Cleanup
+            for p in [world_zip, extract_dir]:
+                if os.path.exists(p):
+                    try:
+                        if os.path.isdir(p):
+                            import shutil
+                            shutil.rmtree(p, ignore_errors=True)
+                        else:
+                            os.remove(p)
+                    except:
+                        pass
 
 
 # ====================== MAIN ======================
