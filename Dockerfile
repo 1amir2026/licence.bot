@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
     curl \
+    openjdk-17-jre \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -30,6 +31,9 @@ RUN cd processor && npm install
 # ---------------- install mcprep into blender path ----------------
 RUN mkdir -p /usr/share/blender/scripts/addons && \
     cp -r mcprep /usr/share/blender/scripts/addons/mcprep || true
+
+# Download latest jmc2obj.jar
+RUN curl -L -o /app/processor/jmc2obj.jar https://github.com/jmc2obj/j-mc-2-obj/releases/latest/download/jmc2obj.jar || echo "Warning: jmc2obj download failed"
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
