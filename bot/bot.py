@@ -11,6 +11,7 @@ from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+import aiohttp
 
 from config import TOKEN, ADMIN_ID
 from database import Session, License
@@ -381,7 +382,8 @@ async def check_license(message: types.Message):
                 keyboard=[
                     [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
                     [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
-                    [KeyboardButton(text="🔄 تبدیل JSON به OBJ")]
+                    [KeyboardButton(text="🔄 تبدیل JSON به OBJ")],
+                    [KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")]  # دکمه جدید
                 ],
                 resize_keyboard=True
             )
@@ -754,6 +756,24 @@ async def json_to_obj_mode(message: types.Message):
     await message.answer("📤 **فایل JSON** مدل ماینکرافت را ارسال کنید.", parse_mode="Markdown")
 
 
+@dp.message(F.text == "📥 گرفتن فایل‌های ماینکرافت")
+async def minecraft_assets_mode(message: types.Message):
+    if is_user_banned(message.from_user.id):
+        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
+        return
+
+    user_modes[message.from_user.id] = "minecraft_assets"
+    await message.answer(
+        "<b>📥 نام آیتم ماینکرافت را وارد کنید</b>\n\n"
+        "مثال‌ها:\n"
+        "<code>diamond_sword</code>\n"
+        "<code>emerald</code>\n"
+        "<code>netherite_pickaxe</code>\n"
+        "<code>apple</code>",
+        parse_mode="HTML"
+    )
+
+
 # ====================== FILE HANDLER ======================
 @dp.message(F.document)
 async def handle_document(message: types.Message):
@@ -876,6 +896,87 @@ async def handle_document(message: types.Message):
                         pass
             user_modes.pop(user_id, None)
             user_data.pop(user_id, None)
+
+
+# ====================== MINECRAFT ASSETS DOWNLOADER ======================
+@dp.message(F.text, lambda m: user_modes.get(m.from_user.id) == "minecraft_assets")
+async def handle_minecraft_asset_name(message: types.Message):
+    if is_user_banned(message.from_user.id):
+        return
+
+    item_name = message.text.strip().lower().replace(".png", "").replace(".json", "")
+    user_id = message.from_user.id
+
+    await message.answer(f"🔍 در حال دانلود <b>{item_name}</b> ...", parse_mode="HTML")
+
+    # نسخه فعلی ماینکرافت
+    version = "26.1.2"
+    base_url = f"https://mcasset.cloud/{version}/assets/minecraft/"
+
+    png_url = f"{base_url}textures/item/{item_name}.png"
+    json_url = f"{base_url}models/item/{item_name}.json"
+
+    png_path = os.path.join(OUTPUT_DIR, f"{item_name}.png")
+    json_path = os.path.join(OUTPUT_DIR, f"{item_name}.json")
+
+    async with aiohttp.ClientSession() as session:
+        # دانلود PNG
+        png_success = False
+        try:
+            async with session.get(png_url) as resp:
+                if resp.status == 200:
+                    with open(png_path, "wb") as f:
+                        f.write(await resp.read())
+                    png_success = True
+        except:
+            pass
+
+        # دانلود JSON
+        json_success = False
+        try:
+            async with session.get(json_url) as resp:
+                if resp.status == 200:
+                    with open(json_path, "wb") as f:
+                        f.write(await resp.read())
+                    json_success = True
+        except:
+            pass
+
+    sent = 0
+    if png_success and os.path.exists(png_path):
+        await message.answer_document(
+            FSInputFile(png_path),
+            caption=f"🖼️ <b>{item_name}.png</b>",
+            parse_mode="HTML"
+        )
+        sent += 1
+        try:
+            os.remove(png_path)
+        except:
+            pass
+
+    if json_success and os.path.exists(json_path):
+        await message.answer_document(
+            FSInputFile(json_path),
+            caption=f"📋 <b>{item_name}.json</b>",
+            parse_mode="HTML"
+        )
+        sent += 1
+        try:
+            os.remove(json_path)
+        except:
+            pass
+
+    if sent == 0:
+        await message.answer(
+            "❌ فایل‌ها پیدا نشدند.\n"
+            "نام آیتم را دقیق چک کنید یا نسخه دیگری امتحان کنید.",
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer("✅ فایل‌ها با موفقیت ارسال شدند!", parse_mode="HTML")
+
+    user_modes.pop(user_id, None)
 
 
 # ====================== MAIN ======================
