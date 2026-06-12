@@ -9,6 +9,7 @@ from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 import aiohttp
@@ -755,19 +756,88 @@ async def json_to_obj_mode(message: types.Message):
     user_data.pop(message.from_user.id, None)
     await message.answer("📤 **فایل JSON** مدل ماینکرافت را ارسال کنید.", parse_mode="Markdown")
 
-
+# ====================== MINECRAFT ASSETS DOWNLOADER ======================
 @dp.message(F.text == "📥 گرفتن فایل‌های ماینکرافت")
 async def minecraft_assets_mode(message: types.Message):
     if is_user_banned(message.from_user.id):
-        await message.answer("❌ شما بن شده‌اید.")
+        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
         return
 
     user_modes[message.from_user.id] = "minecraft_assets"
     await message.answer(
         "<b>📥 نام آیتم ماینکرافت را وارد کنید</b>\n\n"
-        "مثال: <code>diamond_sword</code>",
+        "مثال:\n"
+        "<code>diamond_sword</code>\n"
+        "<code>emerald</code>\n"
+        "<code>oak_planks</code>",
         parse_mode="HTML"
     )
+
+
+@dp.message(F.text, lambda m: user_modes.get(m.from_user.id) == "minecraft_assets")
+async def handle_minecraft_asset_name(message: types.Message):
+    if is_user_banned(message.from_user.id):
+        return
+
+    item_name = message.text.strip().lower().replace(".png", "").replace(".json", "")
+    user_id = message.from_user.id
+
+    await message.answer(f"🔍 جستجو برای <b>{item_name}</b> ...", parse_mode="HTML")
+
+    version = "26.1.2"
+    base_url = f"https://assets.mcasset.cloud/{version}/assets/minecraft/"
+
+    search_paths = [
+        f"textures/item/{item_name}",
+        f"textures/block/{item_name}",
+        f"models/item/{item_name}",
+        f"models/block/{item_name}",
+    ]
+
+    found_files = []
+    async with aiohttp.ClientSession() as session:
+        for path in search_paths:
+            for ext in [".png", ".json"]:
+                url = f"{base_url}{path}{ext}"
+                try:
+                    async with session.head(url) as resp:
+                        if resp.status == 200:
+                            found_files.append({
+                                "name": f"{item_name}{ext}",
+                                "url": url,
+                                "type": ext
+                            })
+                except:
+                    pass
+
+    if not found_files:
+        await message.answer("❌ هیچ فایلی پیدا نشد. نام آیتم را دقیق‌تر بنویسید.")
+        user_modes.pop(user_id, None)
+        return
+
+    # ساخت کیبورد inline
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    for i, file in enumerate(found_files):
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(
+                text=f"📄 {file['name']}",
+                callback_data=f"asset_select:{i}:{item_name}"
+            )
+        ])
+
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="✅ ارسال انتخاب‌ها (حداکثر ۲)", callback_data="asset_send")
+    ])
+
+    await message.answer(
+        f"✅ <b>{len(found_files)} فایل پیدا شد!</b>\n"
+        "تا حداکثر ۲ فایل را انتخاب کنید و سپس دکمه «ارسال» را بزنید.",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+
+    user_selections[user_id] = []  # global dict برای انتخاب‌ها
+    user_data[user_id] = {"files": found_files, "item_name": item_name}
 
 # ====================== FILE HANDLER ======================
 @dp.message(F.document)
@@ -1015,6 +1085,65 @@ async def send_selected_assets(callback: types.CallbackQuery):
 
     await callback.message.answer("✅ تمام فایل‌های انتخابی ارسال شدند!")
     
+    user_selections.pop(user_id, None)
+    user_data.pop(user_id, None)
+    user_modes.pop(user_id, None)
+
+# ====================== ASSET SELECTION CALLBACKS ======================
+user_selections = {}  # user_id -> list of selected files
+
+@dp.callback_query(F.data.startswith("asset_select:"))
+async def select_asset(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    _, idx_str, _ = callback.data.split(":", 2)
+    idx = int(idx_str)
+
+    if user_id not in user_selections:
+        user_selections[user_id] = []
+
+    if len(user_selections[user_id]) >= 2:
+        await callback.answer("⚠️ فقط می‌توانید ۲ فایل انتخاب کنید!", show_alert=True)
+        return
+
+    files = user_data.get(user_id, {}).get("files", [])
+    if idx < len(files):
+        selected = files[idx]
+        user_selections[user_id].append(selected)
+        await callback.answer(f"✅ {selected['name']} انتخاب شد")
+
+
+@dp.callback_query(F.data == "asset_send")
+async def send_selected_assets(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    selected = user_selections.get(user_id, [])
+
+    if not selected:
+        await callback.answer("هیچ فایلی انتخاب نشده!", show_alert=True)
+        return
+
+    await callback.message.answer("📤 در حال ارسال فایل‌های انتخابی...")
+
+    async with aiohttp.ClientSession() as session:
+        for file in selected:
+            try:
+                async with session.get(file["url"]) as resp:
+                    if resp.status == 200:
+                        data = await resp.read()
+                        temp_path = os.path.join(OUTPUT_DIR, file["name"])
+                        with open(temp_path, "wb") as f:
+                            f.write(data)
+
+                        await callback.message.answer_document(
+                            FSInputFile(temp_path),
+                            caption=f"📎 <b>{file['name']}</b>",
+                            parse_mode="HTML"
+                        )
+                        os.remove(temp_path)
+            except:
+                await callback.message.answer(f"❌ خطا در ارسال {file['name']}")
+
+    await callback.message.answer("✅ تمام فایل‌های انتخابی ارسال شدند!")
+
     user_selections.pop(user_id, None)
     user_data.pop(user_id, None)
     user_modes.pop(user_id, None)
