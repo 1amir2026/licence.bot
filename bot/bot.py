@@ -759,20 +759,15 @@ async def json_to_obj_mode(message: types.Message):
 @dp.message(F.text == "📥 گرفتن فایل‌های ماینکرافت")
 async def minecraft_assets_mode(message: types.Message):
     if is_user_banned(message.from_user.id):
-        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
+        await message.answer("❌ شما بن شده‌اید.")
         return
 
     user_modes[message.from_user.id] = "minecraft_assets"
     await message.answer(
         "<b>📥 نام آیتم ماینکرافت را وارد کنید</b>\n\n"
-        "مثال‌ها:\n"
-        "<code>diamond_sword</code>\n"
-        "<code>emerald</code>\n"
-        "<code>netherite_pickaxe</code>\n"
-        "<code>apple</code>",
+        "مثال: <code>diamond_sword</code>",
         parse_mode="HTML"
     )
-
 
 # ====================== FILE HANDLER ======================
 @dp.message(F.document)
@@ -899,6 +894,9 @@ async def handle_document(message: types.Message):
 
 
 # ====================== MINECRAFT ASSETS DOWNLOADER ======================
+# ذخیره انتخاب‌های کاربر (user_id -> list of selected urls)
+user_selections = {}
+
 @dp.message(F.text, lambda m: user_modes.get(m.from_user.id) == "minecraft_assets")
 async def handle_minecraft_asset_name(message: types.Message):
     if is_user_banned(message.from_user.id):
@@ -907,70 +905,120 @@ async def handle_minecraft_asset_name(message: types.Message):
     item_name = message.text.strip().lower().replace(".png", "").replace(".json", "")
     user_id = message.from_user.id
 
-    await message.answer(f"🔍 در حال دانلود <b>{item_name}</b> ...", parse_mode="HTML")
+    await message.answer(f"🔍 جستجو برای <b>{item_name}</b> ...", parse_mode="HTML")
 
     version = "26.1.2"
     base_url = f"https://assets.mcasset.cloud/{version}/assets/minecraft/"
 
-    png_url = f"{base_url}textures/item/{item_name}.png"
-    json_url = f"{base_url}models/item/{item_name}.json"
+    # جستجو در پوشه‌های رایج
+    search_paths = [
+        f"textures/item/{item_name}",
+        f"textures/block/{item_name}",
+        f"models/item/{item_name}",
+        f"models/block/{item_name}",
+    ]
 
-    png_path = os.path.join(OUTPUT_DIR, f"{item_name}.png")
-    json_path = os.path.join(OUTPUT_DIR, f"{item_name}.json")
+    found_files = []
+    async with aiohttp.ClientSession() as session:
+        for path in search_paths:
+            for ext in [".png", ".json"]:
+                url = f"{base_url}{path}{ext}"
+                try:
+                    async with session.head(url) as resp:
+                        if resp.status == 200:
+                            found_files.append({
+                                "name": f"{item_name}{ext}",
+                                "url": url,
+                                "type": ext
+                            })
+                except:
+                    pass
+
+    if not found_files:
+        await message.answer("❌ هیچ فایلی پیدا نشد. نام را دقیق‌تر بنویسید.")
+        user_modes.pop(user_id, None)
+        return
+
+    # ساخت کیبورد با دکمه‌ها
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    for i, file in enumerate(found_files):
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(
+                text=f"📄 {file['name']}",
+                callback_data=f"asset_select:{i}:{item_name}"
+            )
+        ])
+
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="✅ ارسال انتخاب‌ها (حداکثر ۲)", callback_data="asset_send")
+    ])
+
+    await message.answer(
+        f"✅ <b>{len(found_files)} فایل پیدا شد!</b>\n"
+        "تا ۲ فایل را انتخاب کنید و سپس دکمه ارسال را بزنید.",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+
+    user_selections[user_id] = []
+    user_data[user_id] = {"files": found_files, "item_name": item_name}
+
+# ================== CallbackData ==================
+@dp.callback_query(F.data.startswith("asset_select:"))
+async def select_asset(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    _, idx_str, item_name = callback.data.split(":", 2)
+    idx = int(idx_str)
+
+    if user_id not in user_selections:
+        user_selections[user_id] = []
+
+    if len(user_selections[user_id]) >= 2:
+        await callback.answer("⚠️ فقط می‌توانید ۲ فایل انتخاب کنید!", show_alert=True)
+        return
+
+    files = user_data.get(user_id, {}).get("files", [])
+    if idx < len(files):
+        selected = files[idx]
+        user_selections[user_id].append(selected)
+        await callback.answer(f"✅ {selected['name']} انتخاب شد")
+
+@dp.callback_query(F.data == "asset_send")
+async def send_selected_assets(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    selected = user_selections.get(user_id, [])
+
+    if not selected:
+        await callback.answer("هیچ فایلی انتخاب نشده!", show_alert=True)
+        return
+
+    await callback.message.answer("📤 در حال ارسال فایل‌های انتخابی...")
 
     async with aiohttp.ClientSession() as session:
-        png_success = False
-        try:
-            async with session.get(png_url) as resp:
-                if resp.status == 200:
-                    with open(png_path, "wb") as f:
-                        f.write(await resp.read())
-                    png_success = True
-        except:
-            pass
+        for file in selected:
+            try:
+                async with session.get(file["url"]) as resp:
+                    if resp.status == 200:
+                        data = await resp.read()
+                        temp_path = os.path.join(OUTPUT_DIR, file["name"])
+                        with open(temp_path, "wb") as f:
+                            f.write(data)
 
-        json_success = False
-        try:
-            async with session.get(json_url) as resp:
-                if resp.status == 200:
-                    with open(json_path, "wb") as f:
-                        f.write(await resp.read())
-                    json_success = True
-        except:
-            pass
+                        await callback.message.answer_document(
+                            FSInputFile(temp_path),
+                            caption=f"📎 <b>{file['name']}</b>",
+                            parse_mode="HTML"
+                        )
+                        os.remove(temp_path)
+            except Exception as e:
+                await callback.message.answer(f"❌ خطا در ارسال {file['name']}")
 
-    sent = 0
-    if png_success and os.path.exists(png_path) and os.path.getsize(png_path) > 100:
-        await message.answer_document(
-            FSInputFile(png_path),
-            caption=f"🖼️ <b>{item_name}.png</b>",
-            parse_mode="HTML"
-        )
-        sent += 1
-        os.remove(png_path)
-
-    if json_success and os.path.exists(json_path) and os.path.getsize(json_path) > 10:
-        await message.answer_document(
-            FSInputFile(json_path),
-            caption=f"📋 <b>{item_name}.json</b>",
-            parse_mode="HTML"
-        )
-        sent += 1
-        os.remove(json_path)
-
-    if sent == 0:
-        await message.answer(
-            "❌ فایل پیدا نشد.\n"
-            "نام آیتم را دقیق بنویس (مثل diamond_sword).\n"
-            "بعضی آیتم‌ها block هستند نه item.",
-            parse_mode="HTML"
-        )
-    else:
-        await message.answer("✅ فایل‌ها ارسال شدند!", parse_mode="HTML")
-
+    await callback.message.answer("✅ تمام فایل‌های انتخابی ارسال شدند!")
+    
+    user_selections.pop(user_id, None)
+    user_data.pop(user_id, None)
     user_modes.pop(user_id, None)
-
-
+    
 # ====================== MAIN ======================
 async def main():
     print("🚀 Bot started successfully")
