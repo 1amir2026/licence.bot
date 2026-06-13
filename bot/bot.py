@@ -781,73 +781,67 @@ async def handle_minecraft_asset_name(message: types.Message):
     raw_input = message.text.strip()
     user_id = message.from_user.id
 
-    # ====================== SMART NORMALIZATION ======================
-    normalized = raw_input.lower().replace(" ", "_").replace("-", "_").replace(".", "")
+    # ====================== VERY STRONG SMART SEARCH ======================
+    normalized = raw_input.lower().replace(" ", "_").replace("-", "_").replace(".", "").strip("_")
     
+    # تولید ترم‌های جستجو
     search_terms = [normalized]
     if "_" in normalized:
-        parts = normalized.split("_")
-        search_terms.extend(parts)                    # تک کلمات (wood, iron, ...)
-        if len(parts) >= 2:
-            search_terms.append("_".join(parts[-2:])) # دو کلمه آخر
+        parts = [p for p in normalized.split("_") if p]
+        search_terms.extend(parts)
+        for i in range(len(parts)):
+            for j in range(i+1, len(parts)+1):
+                search_terms.append("_".join(parts[i:j]))  # ترکیب‌های متوالی
 
-    await message.answer(f"🔍 جستجوی هوشمند برای <b>{raw_input}</b> ...", parse_mode="HTML")
+    await message.answer(f"🔍 جستجوی گسترده برای <b>{raw_input}</b> ...", parse_mode="HTML")
 
     version = "26.1.2"
     base_url = f"https://assets.mcasset.cloud/{version}/assets/minecraft/"
 
-    search_folders = [
-        "textures/item/",
-        "textures/block/",
-        "models/item/",
-        "models/block/",
+    folders = ["textures/item/", "textures/block/", "textures/models/armor/", "models/item/", "models/block/"]
+
+    # prefixهای خیلی کامل
+    prefixes = [
+        "", "wooden_", "stone_", "iron_", "golden_", "diamond_", "netherite_",
+        "leather_", "chainmail_", "copper_", "amethyst_", "emerald_", "quartz_",
+        "oak_", "spruce_", "birch_", "jungle_", "acacia_", "dark_oak_", "mangrove_",
+        "cherry_", "bamboo_", "crimson_", "warped_"
     ]
 
     found_files = []
     seen = set()
 
     async with aiohttp.ClientSession() as session:
-        for term in search_terms:
-            for folder in search_folders:
-                # جستجوی partial با HEAD (کارآمد)
-                # برای جستجوی قوی‌تر، چند الگو تست می‌کنیم
-                patterns = [term, f"*{term}*", f"{term}*"]
-                for pattern in patterns:
-                    # فعلاً از HEAD با نام‌های رایج استفاده می‌کنیم، اما برای spear و iron armor بهتر کار می‌کنه
-                    for ext in [".png", ".json"]:
-                        # تست مستقیم + چند واریانت رایج
-                        test_names = [
-                            f"{term}{ext}",
-                            f"{term}_* {ext}",   # این فقط برای نمایشه
-                        ]
-                        # در عمل HEAD فقط exact کار می‌کنه، پس واریانت‌های رایج رو هم تست کنیم
-                        common_prefix = ["", "wooden_", "stone_", "iron_", "golden_", "diamond_", "netherite_"]
-                        for prefix in common_prefix:
-                            url = f"{base_url}{folder}{prefix}{term}{ext}"
-                            try:
-                                async with session.head(url, allow_redirects=True, timeout=5) as resp:
-                                    if resp.status == 200 and url not in seen:
-                                        seen.add(url)
-                                        name = f"{prefix}{term}{ext}".replace(" ", "")
-                                        found_files.append({
-                                            "name": name,
-                                            "url": url,
-                                            "type": ext
-                                        })
-                            except:
-                                pass
+        for term in set(search_terms):  # حذف تکراری
+            for folder in folders:
+                for prefix in prefixes:
+                    for ext in [".png"]:   # فقط PNG
+                        name = f"{prefix}{term}"
+                        url = f"{base_url}{folder}{name}{ext}"
+                        try:
+                            async with session.head(url, timeout=6) as resp:
+                                if resp.status == 200 and url not in seen:
+                                    seen.add(url)
+                                    display_name = f"{name}{ext}"
+                                    found_files.append({
+                                        "name": display_name,
+                                        "url": url,
+                                        "folder": folder
+                                    })
+                        except:
+                            pass
 
-    # حذف تکراری‌ها و مرتب‌سازی
-    found_files = list({f['url']: f for f in found_files}.values())[:15]  # حداکثر ۱۵ تا
+    # حذف تکراری و محدود کردن
+    found_files = list({f['url']: f for f in found_files}.values())[:20]  # حداکثر ۲۰ نتیجه
 
     if not found_files:
         await message.answer(
             "❌ هیچ فایلی پیدا نشد.\n\n"
-            "پیشنهادها:\n"
-            "• iron_armor\n"
+            "امتحان کن:\n"
             "• wooden_sword\n"
-            "• spear\n"
-            "• oak_planks",
+            "• iron_chestplate\n"
+            "• oak_planks\n"
+            "• spear",
             parse_mode="HTML"
         )
         user_modes.pop(user_id, None)
@@ -858,7 +852,7 @@ async def handle_minecraft_asset_name(message: types.Message):
     for i, file in enumerate(found_files):
         kb.inline_keyboard.append([
             InlineKeyboardButton(
-                text=f"📄 {file['name']}",
+                text=f"🖼️ {file['name']}",
                 callback_data=f"asset_select:{i}"
             )
         ])
@@ -868,8 +862,8 @@ async def handle_minecraft_asset_name(message: types.Message):
     ])
 
     await message.answer(
-        f"✅ <b>{len(found_files)} فایل پیدا شد!</b>\n"
-        "تا ۲ فایل انتخاب کن و دکمه ارسال رو بزن.",
+        f"✅ <b>{len(found_files)} فایل PNG پیدا شد!</b>\n"
+        "تا ۲ فایل را انتخاب کنید و دکمه ارسال را بزنید.",
         reply_markup=kb,
         parse_mode="HTML"
     )
