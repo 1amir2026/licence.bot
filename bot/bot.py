@@ -773,55 +773,75 @@ async def minecraft_assets_mode(message: types.Message):
         parse_mode="HTML"
     )
 
-
 @dp.message(F.text, lambda m: user_modes.get(m.from_user.id) == "minecraft_assets")
 async def handle_minecraft_asset_name(message: types.Message):
     if is_user_banned(message.from_user.id):
         return
 
-    item_name = message.text.strip().lower().replace(".png", "").replace(".json", "")
+    raw_input = message.text.strip()
     user_id = message.from_user.id
 
-    await message.answer(f"🔍 جستجو برای <b>{item_name}</b> ...", parse_mode="HTML")
+    # ====================== NORMALIZATION & SMART SEARCH ======================
+    # تبدیل فضای خالی به آندرلاین + حذف فاصله‌های اضافی
+    normalized = raw_input.lower().replace(" ", "_").replace(".", "").replace("-", "_")
+    
+    # لیست کلمات جستجو (برای مواردی مثل golden apple)
+    search_terms = [normalized]
+    
+    # اگر چند کلمه‌ای بود، آخرین کلمه را هم جداگانه جستجو کن (مثل apple)
+    if "_" in normalized:
+        parts = normalized.split("_")
+        if len(parts) > 1:
+            search_terms.append(parts[-1])   # مثلاً apple
+            search_terms.append("_".join(parts[-2:]))  # مثلاً golden_apple
+
+    await message.answer(f"🔍 جستجوی هوشمند برای <b>{raw_input}</b> ...", parse_mode="HTML")
 
     version = "26.1.2"
     base_url = f"https://assets.mcasset.cloud/{version}/assets/minecraft/"
 
-    search_paths = [
-        f"textures/item/{item_name}",
-        f"textures/block/{item_name}",
-        f"models/item/{item_name}",
-        f"models/block/{item_name}",
-    ]
+    search_paths = ["textures/item/", "textures/block/", "models/item/", "models/block/"]
 
     found_files = []
+    seen = set()  # جلوگیری از تکراری
+
     async with aiohttp.ClientSession() as session:
-        for path in search_paths:
-            for ext in [".png", ".json"]:
-                url = f"{base_url}{path}{ext}"
-                try:
-                    async with session.head(url) as resp:
-                        if resp.status == 200:
-                            found_files.append({
-                                "name": f"{item_name}{ext}",
-                                "url": url,
-                                "type": ext
-                            })
-                except:
-                    pass
+        for term in search_terms:
+            for folder in search_paths:
+                for ext in [".png", ".json"]:
+                    url = f"{base_url}{folder}{term}{ext}"
+                    try:
+                        async with session.head(url, allow_redirects=True) as resp:
+                            if resp.status == 200 and url not in seen:
+                                seen.add(url)
+                                display_name = f"{term}{ext}"
+                                found_files.append({
+                                    "name": display_name,
+                                    "url": url,
+                                    "type": ext
+                                })
+                    except:
+                        pass
 
     if not found_files:
-        await message.answer("❌ هیچ فایلی پیدا نشد. نام آیتم را دقیق‌تر بنویسید.")
+        await message.answer(
+            "❌ هیچ فایلی پیدا نشد.\n\n"
+            "نکات:\n"
+            "• از آندرلاین استفاده کن (diamond_sword)\n"
+            "• املای درست را چک کن\n"
+            "• برای بلوک‌ها هم امتحان کن (oak_planks)",
+            parse_mode="HTML"
+        )
         user_modes.pop(user_id, None)
         return
 
-    # ساخت کیبورد inline
+    # ساخت کیبورد
     kb = InlineKeyboardMarkup(inline_keyboard=[])
-    for i, file in enumerate(found_files):
+    for i, file in enumerate(found_files[:12]):  # حداکثر ۱۲ نتیجه
         kb.inline_keyboard.append([
             InlineKeyboardButton(
                 text=f"📄 {file['name']}",
-                callback_data=f"asset_select:{i}:{item_name}"
+                callback_data=f"asset_select:{i}:{normalized}"
             )
         ])
 
@@ -831,13 +851,14 @@ async def handle_minecraft_asset_name(message: types.Message):
 
     await message.answer(
         f"✅ <b>{len(found_files)} فایل پیدا شد!</b>\n"
-        "تا حداکثر ۲ فایل را انتخاب کنید و سپس دکمه «ارسال» را بزنید.",
+        f"جستجو شده برای: <code>{', '.join(search_terms)}</code>\n"
+        "تا حداکثر ۲ فایل را انتخاب کنید و دکمه ارسال را بزنید.",
         reply_markup=kb,
         parse_mode="HTML"
     )
 
-    user_selections[user_id] = []  # global dict برای انتخاب‌ها
-    user_data[user_id] = {"files": found_files, "item_name": item_name}
+    user_selections[user_id] = []
+    user_data[user_id] = {"files": found_files, "item_name": normalized}
 
 # ====================== FILE HANDLER ======================
 @dp.message(F.document)
