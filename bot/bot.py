@@ -900,7 +900,7 @@ async def handle_document(message: types.Message):
 # ====================== MINECRAFT ASSETS DOWNLOADER ======================
 
 # آدرس پایه GitHub برای assets ماینکرافت 1.21
-MC_ASSETS_BASE = "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.1/assets/minecraft"
+MC_ASSETS_BASE = "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/26.1.2/assets/minecraft"
 
 # alias برای کلمات عمومی که کاربر می‌زنه
 ITEM_ALIASES: dict[str, list[str]] = {
