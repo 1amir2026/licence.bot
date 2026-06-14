@@ -757,244 +757,6 @@ async def json_to_obj_mode(message: types.Message):
     await message.answer("📤 **فایل JSON** مدل ماینکرافت را ارسال کنید.", parse_mode="Markdown")
 
 # ====================== MINECRAFT ASSETS DOWNLOADER ======================
-@dp.message(F.text == "📥 گرفتن فایل‌های ماینکرافت")
-async def minecraft_assets_mode(message: types.Message):
-    if is_user_banned(message.from_user.id):
-        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
-        return
-
-    user_modes[message.from_user.id] = "minecraft_assets"
-    await message.answer(
-        "<b>📥 نام آیتم ماینکرافت را وارد کنید</b>\n\n"
-        "مثال:\n"
-        "<code>diamond_sword</code>\n"
-        "<code>emerald</code>\n"
-        "<code>oak_planks</code>",
-        parse_mode="HTML"
-    )
-
-@dp.message(F.text, lambda m: user_modes.get(m.from_user.id) == "minecraft_assets")
-async def handle_minecraft_asset_name(message: types.Message):
-    if is_user_banned(message.from_user.id):
-        return
-
-    raw_input = message.text.strip()
-    user_id = message.from_user.id
-
-    # ====================== VERY STRONG SMART SEARCH ======================
-    normalized = raw_input.lower().replace(" ", "_").replace("-", "_").replace(".", "").strip("_")
-    
-    # تولید ترم‌های جستجو
-    search_terms = [normalized]
-    if "_" in normalized:
-        parts = [p for p in normalized.split("_") if p]
-        search_terms.extend(parts)
-        for i in range(len(parts)):
-            for j in range(i+1, len(parts)+1):
-                search_terms.append("_".join(parts[i:j]))  # ترکیب‌های متوالی
-
-    await message.answer(f"🔍 جستجوی گسترده برای <b>{raw_input}</b> ...", parse_mode="HTML")
-
-    version = "26.1.2"
-    base_url = f"https://assets.mcasset.cloud/{version}/assets/minecraft/"
-
-    folders = ["textures/item/", "textures/block/", "textures/models/armor/", "models/item/", "models/block/"]
-
-    # prefixهای خیلی کامل
-    prefixes = [
-        "", "wooden_", "stone_", "iron_", "golden_", "diamond_", "netherite_",
-        "leather_", "chainmail_", "copper_", "amethyst_", "emerald_", "quartz_",
-        "oak_", "spruce_", "birch_", "jungle_", "acacia_", "dark_oak_", "mangrove_",
-        "cherry_", "bamboo_", "crimson_", "warped_"
-    ]
-
-    found_files = []
-    seen = set()
-
-    async with aiohttp.ClientSession() as session:
-        for term in set(search_terms):  # حذف تکراری
-            for folder in folders:
-                for prefix in prefixes:
-                    for ext in [".png"]:   # فقط PNG
-                        name = f"{prefix}{term}"
-                        url = f"{base_url}{folder}{name}{ext}"
-                        try:
-                            async with session.head(url, timeout=6) as resp:
-                                if resp.status == 200 and url not in seen:
-                                    seen.add(url)
-                                    display_name = f"{name}{ext}"
-                                    found_files.append({
-                                        "name": display_name,
-                                        "url": url,
-                                        "folder": folder
-                                    })
-                        except:
-                            pass
-
-    # حذف تکراری و محدود کردن
-    found_files = list({f['url']: f for f in found_files}.values())[:20]  # حداکثر ۲۰ نتیجه
-
-    if not found_files:
-        await message.answer(
-            "❌ هیچ فایلی پیدا نشد.\n\n"
-            "امتحان کن:\n"
-            "• wooden_sword\n"
-            "• iron_chestplate\n"
-            "• oak_planks\n"
-            "• spear",
-            parse_mode="HTML"
-        )
-        user_modes.pop(user_id, None)
-        return
-
-    # ساخت کیبورد
-    kb = InlineKeyboardMarkup(inline_keyboard=[])
-    for i, file in enumerate(found_files):
-        kb.inline_keyboard.append([
-            InlineKeyboardButton(
-                text=f"🖼️ {file['name']}",
-                callback_data=f"asset_select:{i}"
-            )
-        ])
-
-    kb.inline_keyboard.append([
-        InlineKeyboardButton(text="✅ ارسال انتخاب‌ها (حداکثر ۲)", callback_data="asset_send")
-    ])
-
-    await message.answer(
-        f"✅ <b>{len(found_files)} فایل PNG پیدا شد!</b>\n"
-        "تا ۲ فایل را انتخاب کنید و دکمه ارسال را بزنید.",
-        reply_markup=kb,
-        parse_mode="HTML"
-    )
-
-    user_selections[user_id] = []
-    user_data[user_id] = {"files": found_files}
-
-# ====================== FILE HANDLER ======================
-@dp.message(F.document)
-async def handle_document(message: types.Message):
-    user_id = message.from_user.id
-
-    if is_user_banned(user_id):
-        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
-        return
-
-    mode = user_modes.get(user_id)
-    doc = message.document
-
-    if not doc or not mode:
-        return
-
-    # RESOURCE PACK
-    if mode == "resource_pack":
-        if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcpack")):
-            await message.answer("❌ فقط ZIP یا MCPACK")
-            return
-
-        await message.answer("🔄 در حال پردازش...")
-        input_path = os.path.join(INPUT_DIR, doc.file_name)
-        output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
-        output_path = os.path.join(OUTPUT_DIR, output_name)
-
-        file = await bot.get_file(doc.file_id)
-        await bot.download_file(file.file_path, destination=input_path)
-
-        try:
-            await run_node_processor(input_path, output_path)
-            user_modes.pop(user_id, None)
-            await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
-        except Exception as e:
-            await message.answer(f"❌ خطا:\n{e}")
-
-    # MINECRAFT 3D ITEM
-    elif mode == "minecraft_3d":
-        if not doc.file_name.lower().endswith(".png"):
-            await message.answer("❌ فقط فایل PNG مجاز است")
-            return
-
-        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
-        input_path = os.path.join(INPUT_DIR, doc.file_name)
-        output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + ".obj")
-
-        file = await bot.get_file(doc.file_id)
-        await bot.download_file(file.file_path, destination=input_path)
-
-        try:
-            output_file = await run_item3d(input_path, output_obj)
-            user_modes.pop(user_id, None)
-            await message.answer_document(FSInputFile(output_file), caption="✅ مدل سه‌بعدی با موفقیت ساخته شد!")
-            if os.path.exists(input_path):
-                os.remove(input_path)
-        except Exception as e:
-            await message.answer(f"❌ خطا در ساخت مدل:\n{str(e)}")
-
-    # JSON TO OBJ - STEP 1
-    elif mode == "json_to_obj":
-        if not doc.file_name.lower().endswith(".json"):
-            await message.answer("❌ فقط فایل JSON مجاز است.")
-            return
-
-        await message.answer("✅ JSON دریافت شد.\n\n📤 حالا **فایل تکسچر (PNG)** را ارسال کنید.")
-
-        json_path = os.path.join(INPUT_DIR, doc.file_name)
-        file = await bot.get_file(doc.file_id)
-        await bot.download_file(file.file_path, destination=json_path)
-
-        user_data[user_id] = {
-            "json_path": json_path,
-            "base_name": os.path.splitext(doc.file_name)[0]
-        }
-        user_modes[user_id] = "json_to_obj_waiting_texture"
-
-    # JSON TO OBJ - STEP 2
-    elif mode == "json_to_obj_waiting_texture":
-        if not doc.file_name.lower().endswith(".png"):
-            await message.answer("❌ فقط فایل PNG مجاز است.")
-            return
-
-        await message.answer("🔄 در حال ساخت OBJ + MTL + ZIP...")
-
-        data = user_data.get(user_id)
-        if not data:
-            await message.answer("❌ خطا: اطلاعات مدل پیدا نشد.")
-            return
-
-        json_path = data["json_path"]
-        base_name = data["base_name"]
-        texture_path = os.path.join(INPUT_DIR, doc.file_name)
-        output_obj = os.path.join(OUTPUT_DIR, base_name + ".obj")
-
-        file = await bot.get_file(doc.file_id)
-        await bot.download_file(file.file_path, destination=texture_path)
-
-        try:
-            await run_json_to_obj(json_path, output_obj)
-            zip_path = create_zip_with_texture(base_name, output_obj, texture_path)
-
-            await message.answer_document(
-                FSInputFile(zip_path),
-                caption=f"✅ تبدیل با موفقیت انجام شد!\n\n"
-                        f"📦 فایل‌ها داخل ZIP:\n"
-                        f"• {base_name}.obj\n"
-                        f"• {base_name}.mtl\n"
-                        f"• {os.path.basename(texture_path)}"
-            )
-
-        except Exception as e:
-            await message.answer(f"❌ خطا:\n{str(e)}")
-
-        finally:
-            for p in [json_path, texture_path, output_obj, output_obj.replace('.obj', '.mtl')]:
-                if os.path.exists(p):
-                    try:
-                        os.remove(p)
-                    except:
-                        pass
-            user_modes.pop(user_id, None)
-            user_data.pop(user_id, None)
-
-
 # ====================== MINECRAFT ASSETS DOWNLOADER ======================
 
 # آدرس پایه GitHub برای assets ماینکرافت 1.21
@@ -1257,6 +1019,129 @@ async def _send_asset_files(callback: types.CallbackQuery, files: list, user_id:
     user_selections.pop(user_id, None)
     user_data.pop(user_id, None)
     user_modes.pop(user_id, None)
+    
+# ====================== FILE HANDLER ======================
+@dp.message(F.document)
+async def handle_document(message: types.Message):
+    user_id = message.from_user.id
+
+    if is_user_banned(user_id):
+        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
+        return
+
+    mode = user_modes.get(user_id)
+    doc = message.document
+
+    if not doc or not mode:
+        return
+
+    # RESOURCE PACK
+    if mode == "resource_pack":
+        if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcpack")):
+            await message.answer("❌ فقط ZIP یا MCPACK")
+            return
+
+        await message.answer("🔄 در حال پردازش...")
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
+        output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
+        output_path = os.path.join(OUTPUT_DIR, output_name)
+
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(file.file_path, destination=input_path)
+
+        try:
+            await run_node_processor(input_path, output_path)
+            user_modes.pop(user_id, None)
+            await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
+        except Exception as e:
+            await message.answer(f"❌ خطا:\n{e}")
+
+    # MINECRAFT 3D ITEM
+    elif mode == "minecraft_3d":
+        if not doc.file_name.lower().endswith(".png"):
+            await message.answer("❌ فقط فایل PNG مجاز است")
+            return
+
+        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
+        output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + ".obj")
+
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(file.file_path, destination=input_path)
+
+        try:
+            output_file = await run_item3d(input_path, output_obj)
+            user_modes.pop(user_id, None)
+            await message.answer_document(FSInputFile(output_file), caption="✅ مدل سه‌بعدی با موفقیت ساخته شد!")
+            if os.path.exists(input_path):
+                os.remove(input_path)
+        except Exception as e:
+            await message.answer(f"❌ خطا در ساخت مدل:\n{str(e)}")
+
+    # JSON TO OBJ - STEP 1
+    elif mode == "json_to_obj":
+        if not doc.file_name.lower().endswith(".json"):
+            await message.answer("❌ فقط فایل JSON مجاز است.")
+            return
+
+        await message.answer("✅ JSON دریافت شد.\n\n📤 حالا **فایل تکسچر (PNG)** را ارسال کنید.")
+
+        json_path = os.path.join(INPUT_DIR, doc.file_name)
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(file.file_path, destination=json_path)
+
+        user_data[user_id] = {
+            "json_path": json_path,
+            "base_name": os.path.splitext(doc.file_name)[0]
+        }
+        user_modes[user_id] = "json_to_obj_waiting_texture"
+
+    # JSON TO OBJ - STEP 2
+    elif mode == "json_to_obj_waiting_texture":
+        if not doc.file_name.lower().endswith(".png"):
+            await message.answer("❌ فقط فایل PNG مجاز است.")
+            return
+
+        await message.answer("🔄 در حال ساخت OBJ + MTL + ZIP...")
+
+        data = user_data.get(user_id)
+        if not data:
+            await message.answer("❌ خطا: اطلاعات مدل پیدا نشد.")
+            return
+
+        json_path = data["json_path"]
+        base_name = data["base_name"]
+        texture_path = os.path.join(INPUT_DIR, doc.file_name)
+        output_obj = os.path.join(OUTPUT_DIR, base_name + ".obj")
+
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(file.file_path, destination=texture_path)
+
+        try:
+            await run_json_to_obj(json_path, output_obj)
+            zip_path = create_zip_with_texture(base_name, output_obj, texture_path)
+
+            await message.answer_document(
+                FSInputFile(zip_path),
+                caption=f"✅ تبدیل با موفقیت انجام شد!\n\n"
+                        f"📦 فایل‌ها داخل ZIP:\n"
+                        f"• {base_name}.obj\n"
+                        f"• {base_name}.mtl\n"
+                        f"• {os.path.basename(texture_path)}"
+            )
+
+        except Exception as e:
+            await message.answer(f"❌ خطا:\n{str(e)}")
+
+        finally:
+            for p in [json_path, texture_path, output_obj, output_obj.replace('.obj', '.mtl')]:
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except:
+                        pass
+            user_modes.pop(user_id, None)
+            user_data.pop(user_id, None)
     
 # ====================== MAIN ======================
 async def main():
