@@ -48,22 +48,24 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 LICENSE_REGEX = r"^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$"
 
 def generate_license():
-chars = string.ascii_uppercase + string.digits
-return '-'.join(''.join(random.choices(chars, k=4)) for _ in range(4))
+    chars = string.ascii_uppercase + string.digits
+    return '-'.join(''.join(random.choices(chars, k=4)) for _ in range(4))
+
 
 def is_admin(user_id: int):
-return user_id == ADMIN_ID
+    return user_id == ADMIN_ID
+
 
 def is_user_banned(user_id: int) -> bool:
-session = Session()
-try:
-banned = session.query(License).filter(
-License.user_id == user_id,
-License.banned == True
-).first()
-return banned is not None
-finally:
-session.close()
+    session = Session()
+    try:
+        banned = session.query(License).filter(
+            License.user_id == user_id,
+            License.banned == True
+        ).first()
+        return banned is not None
+    finally:
+        session.close()
 
 # ====================== HELPERS ======================
 async def run_node_processor(input_path: str, output_path: str, xp_percent: float = 0.7, upscale_rate: int = 1):
