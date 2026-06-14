@@ -774,7 +774,10 @@ async def minecraft_assets_mode(message: types.Message):
        "<code>gold armor</code>\n"
         "<code>emerald</code>\n"
         "<code>oak_planks</code>"
-        "<b>برای آرمور: Armor | برای ابزار: Tool | برای نیزه: Spear</b>\n\n",
+        "• برای زره بنویس: <code>iron armor</code> یا <code>diamond armor</code>"
+        "• برای نیزه بنویس: <code>spear</code> یا <code>spear in hand</code>"        
+        "• برای ابزار بنویس: <code>netherite tools</code> یا <code>copper tool</code>"   
+        "• برای ore بنویس: <code>ore</code> یا <code>copper_ore</code>",
         parse_mode="HTML"
     )
     
@@ -921,7 +924,9 @@ ITEM_ALIASES: dict[str, list[str]] = {
     "wooden_spear": ["wooden_spear"],
     "copper spear": ["copper_spear"],
     "copper_spear": ["copper_spear"],
-    "spear_in_hand": ["copper_spear_in_hand", "wooden_sword_in_hand", "stone_sword_in_hand", "diamond_sword_in_hand", "netherite_sword_in_hand", "iron_sword_in_hand"],
+    "spear_in_hand": ["copper_spear_in_hand", "wooden_spear_in_hand", "stone_spear_in_hand", "diamond_spear_in_hand", "netherite_spear_in_hand", "iron_spear_in_hand"],
+    "spear in hand": ["copper_spear_in_hand", "wooden_spear_in_hand", "stone_spear_in_hand", "diamond_spear_in_hand", "netherite_spear_in_hand", "iron_spear_in_hand"],
+    
     # Copper tools
     "copper pickaxe": ["copper_pickaxe"],
     "copper_pickaxe": ["copper_pickaxe"],
