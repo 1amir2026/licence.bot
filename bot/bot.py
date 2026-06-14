@@ -768,8 +768,13 @@ async def minecraft_assets_mode(message: types.Message):
         "<b>📥 نام آیتم ماینکرافت را وارد کنید</b>\n\n"
         "مثال:\n"
         "<code>diamond_sword</code>\n"
+        "<code>copper tools</code>\n"
+        "<code>spear</code>\n"
+       "<code>spear_in_hand</code>\n"
+       "<code>gold armor</code>\n"
         "<code>emerald</code>\n"
-        "<code>oak_planks</code>",
+        "<code>oak_planks</code>"
+        "<b>برای آرمور: Armor | برای ابزار: Tool | برای نیزه: Spear</b>\n\n",
         parse_mode="HTML"
     )
     
@@ -916,7 +921,7 @@ ITEM_ALIASES: dict[str, list[str]] = {
     "wooden_spear": ["wooden_spear"],
     "copper spear": ["copper_spear"],
     "copper_spear": ["copper_spear"],
-
+    "spear_in_hand": ["copper_spear_in_hand", "wooden_sword_in_hand", "stone_sword_in_hand", "diamond_sword_in_hand", "netherite_sword_in_hand", "iron_sword_in_hand"],
     # Copper tools
     "copper pickaxe": ["copper_pickaxe"],
     "copper_pickaxe": ["copper_pickaxe"],
@@ -930,7 +935,10 @@ ITEM_ALIASES: dict[str, list[str]] = {
     # Swordهای معمولی
     "wooden sword": ["wooden_sword"],
     "wooden_sword": ["wooden_sword"],
-
+    "wooden tool": ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_hoe", "wooden_sword"],
+    "wooden_tool": ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_hoe", "wooden_sword"],
+    "wooden tools": ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_hoe", "wooden_sword"],
+    
     # مثال‌های بیشتر برای راحتی کاربر
     "diamond sword": ["diamond_sword"],
     "iron sword": ["iron_sword"],
@@ -955,8 +963,12 @@ ITEM_ALIASES: dict[str, list[str]] = {
     "diamond tools": ["diamond_sword", "diamond_pickaxe", "diamond_axe", "diamond_shovel", "diamond_hoe"],
     # سنگ
     "stone": ["stone", "cobblestone", "smooth_stone", "stone_bricks"],
+    "stone tools": ["stone_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_hoe"],
+    "netherite tools": ["netherite_sword", "netherite_pickaxe", "netherite_axe", "netherite_shovel", "netherite_hoe"],
     # سنگ معدن
     "ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore"],
+    "_ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore"],
+    " ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore"],
     # علف
     "grass": ["grass_block", "grass"],
     # آب و لاوا
