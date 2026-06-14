@@ -934,7 +934,7 @@ ITEM_ALIASES: dict[str, list[str]] = {
     "copper_pickaxe": ["copper_pickaxe"],
     "copper tool": ["copper_pickaxe", "copper_axe", "copper_shovel", "copper_hoe", "copper_sword"],
     "copper tools": ["copper_pickaxe", "copper_axe", "copper_shovel", "copper_hoe", "copper_sword"],
-    "copper armor": ["copper_helmet", "copper_chestplate", "copper_leggins", "copper_boots"],
+    "copper armor": ["copper_helmet", "copper_chestplate", "copper_leggings", "copper_boots"],
     
     # Variantهای in_hand (held)
     "in hand": ["_in_hand"],  # این کمک میکنه بعداً گسترش بدی
