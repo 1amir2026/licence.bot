@@ -934,7 +934,8 @@ ITEM_ALIASES: dict[str, list[str]] = {
     "copper_pickaxe": ["copper_pickaxe"],
     "copper tool": ["copper_pickaxe", "copper_axe", "copper_shovel", "copper_hoe", "copper_sword"],
     "copper tools": ["copper_pickaxe", "copper_axe", "copper_shovel", "copper_hoe", "copper_sword"],
-
+    "copper armor": ["copper_helmet", "copper_chestplate", "copper_leggins", "copper_boots"],
+    
     # Variantهای in_hand (held)
     "in hand": ["_in_hand"],  # این کمک میکنه بعداً گسترش بدی
     "_in_hand": [],
@@ -975,9 +976,9 @@ ITEM_ALIASES: dict[str, list[str]] = {
     "stone tools": ["stone_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_hoe"],
     "netherite tools": ["netherite_sword", "netherite_pickaxe", "netherite_axe", "netherite_shovel", "netherite_hoe"],
     # سنگ معدن
-    "ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore"],
-    "_ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore"],
-    " ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore"],
+    "ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore", "copper_ore"],
+    "_ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore", "copper_ore"],
+    " ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore", "copper_ore"],
     # علف
     "grass": ["grass_block", "grass"],
     # آب و لاوا
