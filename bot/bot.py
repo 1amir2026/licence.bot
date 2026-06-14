@@ -17,7 +17,7 @@ import aiohttp
 from config import TOKEN, ADMIN_ID
 from database import Session, License
 
-====================== FSM ======================
+# ====================== FSM ======================
 class BroadcastState(StatesGroup):
 waiting_message = State()
 waiting_buttons = State()
@@ -30,7 +30,7 @@ dp = Dispatcher()
 user_modes = {}
 user_data = {} # برای ذخیره اطلاعات بین دو مرحله JSON و Texture
 
-====================== PATHS ======================
+# ====================== PATHS ======================
 BASE_DIR = os.path.dirname(os.path.abspath(file))
 PROCESSOR_DIR = os.path.join(BASE_DIR, "..", "processor")
 
@@ -44,7 +44,7 @@ OUTPUT_DIR = os.path.join(PROCESSOR_DIR, "output")
 os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-====================== LICENSE ======================
+# ====================== LICENSE ======================
 LICENSE_REGEX = r"^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$"
 
 def generate_license():
@@ -65,7 +65,7 @@ return banned is not None
 finally:
 session.close()
 
-====================== HELPERS ======================
+# ====================== HELPERS ======================
 async def run_node_processor(input_path: str, output_path: str, xp_percent: float = 0.7, upscale_rate: int = 1):
 proc = await asyncio.create_subprocess_exec(
 "node", NODE_SCRIPT, input_path, output_path,
@@ -137,8 +137,7 @@ z.write(mtl_path, os.path.basename(mtl_path))
 z.write(texture_path, texture_name)
 
 return zip_path
-
-====================== ADMIN PANEL HELPERS ======================
+# ====================== ADMIN PANEL HELPERS ======================
 PAGE_SIZE = 5
 
 def make_cb(a: str, **kwargs) -> str:
@@ -305,7 +304,7 @@ await callback.message.edit_text(text, reply_markup=kb)
 finally:
 session.close()
 
-====================== COMMANDS ======================
+# ====================== COMMANDS ======================
 @dp.message(Command("start"))
 async def start(message: types.Message):
 if is_admin(message.from_user.id):
@@ -338,7 +337,7 @@ session.close()
 
 await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n{key}\n\nکپی کن و بفرست.")
 
-====================== LICENSE CHECK ======================
+# ====================== LICENSE CHECK ======================
 @dp.message(F.text.regexp(LICENSE_REGEX))
 async def check_license(message: types.Message):
 if is_admin(message.from_user.id):
@@ -377,7 +376,7 @@ await message.answer("❌ لایسنس نامعتبر یا قبلاً استفا
 finally:
 session.close()
 
-====================== BROADCAST ======================
+# ====================== BROADCAST ======================
 @dp.message(F.text == "📢 اطلاع‌رسانی")
 async def start_broadcast(message: types.Message, state: FSMContext):
 if not is_admin(message.from_user.id):
@@ -558,7 +557,7 @@ keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
 
 await message.answer(f"دکمه «{title}» اضافه شد.", reply_markup=keyboard)
 
-===================== COPY BUTTON ======================
+# ===================== COPY BUTTON ======================
 @dp.callback_query(F.data.startswith("copy_"))
 async def copy_message_handler(callback: types.CallbackQuery):
 msg_id = callback.data.replace("copy_", "")
@@ -571,7 +570,7 @@ message_id=int(msg_id)
 except:
 await callback.answer("❌ پیام یافت نشد.", show_alert=True)
 
-====================== ADMIN MANAGEMENT PANEL ======================
+# ====================== ADMIN MANAGEMENT PANEL ======================
 @dp.message(F.text == "🛠 سیستم مدیریت")
 async def open_management_panel(message: types.Message):
 if not is_admin(message.from_user.id):
@@ -696,7 +695,7 @@ await management_router(fake_callback, state)
 finally:
 session.close()
 
-====================== MODES ======================
+# ====================== MODES ======================
 @dp.message(F.text == "📦 دریافت ریسورس پک ریلیز تکسچر")
 async def ask_for_pack(message: types.Message):
 if is_user_banned(message.from_user.id):
@@ -725,7 +724,7 @@ user_modes[message.from_user.id] = "json_to_obj"
 user_data.pop(message.from_user.id, None)
 await message.answer("📤 فایل JSON مدل ماینکرافت را ارسال کنید.", parse_mode="Markdown")
 
-====================== MINECRAFT ASSETS DOWNLOADER ======================
+# ====================== MINECRAFT ASSETS DOWNLOADER ======================
 @dp.message(F.text == "📥 گرفتن فایل‌های ماینکرافت")
 async def minecraft_assets_mode(message: types.Message):
 if is_user_banned(message.from_user.id):
@@ -840,7 +839,7 @@ parse_mode="HTML"
 user_selections[user_id] = []
 user_data[user_id] = {"files": found_files}
 
-====================== FILE HANDLER ======================
+# ====================== FILE HANDLER ======================
 @dp.message(F.document)
 async def handle_document(message: types.Message):
 user_id = message.from_user.id
@@ -963,7 +962,7 @@ pass
 user_modes.pop(user_id, None)
 user_data.pop(user_id, None)
 
-====================== MINECRAFT ASSETS DOWNLOADER ======================
+# ====================== MINECRAFT ASSETS DOWNLOADER ======================
 
 آدرس پایه GitHub برای assets ماینکرافت 1.21
 MC_ASSETS_BASE = "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21/assets/minecraft"
@@ -1218,7 +1217,7 @@ user_selections.pop(user_id, None)
 user_data.pop(user_id, None)
 user_modes.pop(user_id, None)
 
-====================== MAIN ======================
+# ====================== MAIN ======================
 async def main():
 print("🚀 Bot started successfully")
 await dp.start_polling(bot)
