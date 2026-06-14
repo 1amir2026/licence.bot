@@ -926,8 +926,8 @@ ITEM_ALIASES: dict[str, list[str]] = {
     "wooden_spear": ["wooden_spear"],
     "copper spear": ["copper_spear"],
     "copper_spear": ["copper_spear"],
-    "spear_in_hand": ["copper_spear_in_hand", "wooden_spear_in_hand", "stone_spear_in_hand", "diamond_spear_in_hand", "netherite_spear_in_hand", "iron_spear_in_hand"],
-    "spear in hand": ["copper_spear_in_hand", "wooden_spear_in_hand", "stone_spear_in_hand", "diamond_spear_in_hand", "netherite_spear_in_hand", "iron_spear_in_hand"],
+    "spear_in_hand": ["copper_spear_in_hand", "wooden_spear_in_hand", "stone_spear_in_hand", "diamond_spear_in_hand", "netherite_spear_in_hand", "iron_spear_in_hand", "golden_spear_in_hand"],
+    "spear in hand": ["copper_spear_in_hand", "wooden_spear_in_hand", "stone_spear_in_hand", "diamond_spear_in_hand", "netherite_spear_in_hand", "iron_spear_in_hand", "golden_spear_in_hand"],
     
     # Copper tools
     "copper pickaxe": ["copper_pickaxe"],
@@ -966,6 +966,8 @@ ITEM_ALIASES: dict[str, list[str]] = {
     "golden armor": ["golden_helmet", "golden_chestplate", "golden_leggings", "golden_boots"],
     # ابزارهای آهن
     "iron tools": ["iron_sword", "iron_pickaxe", "iron_axe", "iron_shovel", "iron_hoe"],
+    "golden tools": ["golden_sword", "golden_pickaxe", "golden_axe", "golden_shovel", "golden_hoe"],
+    "gold tools": ["golden_sword", "golden_pickaxe", "golden_axe", "golden_shovel", "golden_hoe"],    
     # ابزارهای الماس
     "diamond tools": ["diamond_sword", "diamond_pickaxe", "diamond_axe", "diamond_shovel", "diamond_hoe"],
     # سنگ
