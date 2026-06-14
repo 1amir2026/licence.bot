@@ -755,7 +755,122 @@ async def json_to_obj_mode(message: types.Message):
     user_modes[message.from_user.id] = "json_to_obj"
     user_data.pop(message.from_user.id, None)
     await message.answer("📤 **فایل JSON** مدل ماینکرافت را ارسال کنید.", parse_mode="Markdown")
+
+# ====================== MINECRAFT ASSETS DOWNLOADER ======================
+@dp.message(F.text == "📥 گرفتن فایل‌های ماینکرافت")
+async def minecraft_assets_mode(message: types.Message):
+    if is_user_banned(message.from_user.id):
+        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
+        return
+
+    user_modes[message.from_user.id] = "minecraft_assets"
+    await message.answer(
+        "<b>📥 نام آیتم ماینکرافت را وارد کنید</b>\n\n"
+        "مثال:\n"
+        "<code>diamond_sword</code>\n"
+        "<code>emerald</code>\n"
+        "<code>oak_planks</code>",
+        parse_mode="HTML"
+    )
+
+@dp.message(F.text, lambda m: user_modes.get(m.from_user.id) == "minecraft_assets")
+async def handle_minecraft_asset_name(message: types.Message):
+    if is_user_banned(message.from_user.id):
+        return
+
+    raw_input = message.text.strip()
+    user_id = message.from_user.id
+
+    # ====================== VERY STRONG SMART SEARCH ======================
+    normalized = raw_input.lower().replace(" ", "_").replace("-", "_").replace(".", "").strip("_")
     
+    # تولید ترم‌های جستجو
+    search_terms = [normalized]
+    if "_" in normalized:
+        parts = [p for p in normalized.split("_") if p]
+        search_terms.extend(parts)
+        for i in range(len(parts)):
+            for j in range(i+1, len(parts)+1):
+                search_terms.append("_".join(parts[i:j]))  # ترکیب‌های متوالی
+
+    await message.answer(f"🔍 جستجوی گسترده برای <b>{raw_input}</b> ...", parse_mode="HTML")
+
+    version = "26.1.2"
+    base_url = f"https://assets.mcasset.cloud/{version}/assets/minecraft/"
+
+    folders = ["textures/item/", "textures/block/", "textures/models/armor/", "models/item/", "models/block/"]
+
+    # prefixهای خیلی کامل
+    prefixes = [
+        "", "wooden_", "stone_", "iron_", "golden_", "diamond_", "netherite_",
+        "leather_", "chainmail_", "copper_", "amethyst_", "emerald_", "quartz_",
+        "oak_", "spruce_", "birch_", "jungle_", "acacia_", "dark_oak_", "mangrove_",
+        "cherry_", "bamboo_", "crimson_", "warped_"
+    ]
+
+    found_files = []
+    seen = set()
+
+    async with aiohttp.ClientSession() as session:
+        for term in set(search_terms):  # حذف تکراری
+            for folder in folders:
+                for prefix in prefixes:
+                    for ext in [".png"]:   # فقط PNG
+                        name = f"{prefix}{term}"
+                        url = f"{base_url}{folder}{name}{ext}"
+                        try:
+                            async with session.head(url, timeout=6) as resp:
+                                if resp.status == 200 and url not in seen:
+                                    seen.add(url)
+                                    display_name = f"{name}{ext}"
+                                    found_files.append({
+                                        "name": display_name,
+                                        "url": url,
+                                        "folder": folder
+                                    })
+                        except:
+                            pass
+
+    # حذف تکراری و محدود کردن
+    found_files = list({f['url']: f for f in found_files}.values())[:20]  # حداکثر ۲۰ نتیجه
+
+    if not found_files:
+        await message.answer(
+            "❌ هیچ فایلی پیدا نشد.\n\n"
+            "امتحان کن:\n"
+            "• wooden_sword\n"
+            "• iron_chestplate\n"
+            "• oak_planks\n"
+            "• spear",
+            parse_mode="HTML"
+        )
+        user_modes.pop(user_id, None)
+        return
+
+    # ساخت کیبورد
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    for i, file in enumerate(found_files):
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(
+                text=f"🖼️ {file['name']}",
+                callback_data=f"asset_select:{i}"
+            )
+        ])
+
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="✅ ارسال انتخاب‌ها (حداکثر ۲)", callback_data="asset_send")
+    ])
+
+    await message.answer(
+        f"✅ <b>{len(found_files)} فایل PNG پیدا شد!</b>\n"
+        "تا ۲ فایل را انتخاب کنید و دکمه ارسال را بزنید.",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+
+    user_selections[user_id] = []
+    user_data[user_id] = {"files": found_files}
+
 # ====================== FILE HANDLER ======================
 @dp.message(F.document)
 async def handle_document(message: types.Message):
@@ -878,8 +993,10 @@ async def handle_document(message: types.Message):
                         pass
             user_modes.pop(user_id, None)
             user_data.pop(user_id, None)
-            
-    # ====================== MINECRAFT ASSETS DOWNLOADER ======================
+
+
+# ====================== MINECRAFT ASSETS DOWNLOADER ======================
+
 # آدرس پایه GitHub برای assets ماینکرافت 1.21
 MC_ASSETS_BASE = "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21/assets/minecraft"
 
