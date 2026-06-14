@@ -900,10 +900,42 @@ async def handle_document(message: types.Message):
 # ====================== MINECRAFT ASSETS DOWNLOADER ======================
 
 # آدرس پایه GitHub برای assets ماینکرافت 1.21
-MC_ASSETS_BASE = "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21/assets/minecraft"
+MC_ASSETS_BASE = "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.1/assets/minecraft"
 
 # alias برای کلمات عمومی که کاربر می‌زنه
 ITEM_ALIASES: dict[str, list[str]] = {
+    # ... aliasهای قبلیت رو نگه دار
+
+    # Spears (جدید)
+    "spear": ["wooden_spear", "stone_spear", "copper_spear", "iron_spear", "golden_spear", "diamond_spear", "netherite_spear"],
+    "diamond spear": ["diamond_spear"],
+    "diamond_spear": ["diamond_spear"],
+    "diamond spear in hand": ["diamond_spear_in_hand"],
+    "diamond_spear_in_hand": ["diamond_spear_in_hand"],
+    "wooden spear": ["wooden_spear"],
+    "wooden_spear": ["wooden_spear"],
+    "copper spear": ["copper_spear"],
+    "copper_spear": ["copper_spear"],
+
+    # Copper tools
+    "copper pickaxe": ["copper_pickaxe"],
+    "copper_pickaxe": ["copper_pickaxe"],
+    "copper tool": ["copper_pickaxe", "copper_axe", "copper_shovel", "copper_hoe", "copper_sword"],
+    "copper tools": ["copper_pickaxe", "copper_axe", "copper_shovel", "copper_hoe", "copper_sword"],
+
+    # Variantهای in_hand (held)
+    "in hand": ["_in_hand"],  # این کمک میکنه بعداً گسترش بدی
+    "_in_hand": [],
+
+    # Swordهای معمولی
+    "wooden sword": ["wooden_sword"],
+    "wooden_sword": ["wooden_sword"],
+
+    # مثال‌های بیشتر برای راحتی کاربر
+    "diamond sword": ["diamond_sword"],
+    "iron sword": ["iron_sword"],
+    "pickaxe": ["wooden_pickaxe", "stone_pickaxe", "copper_pickaxe", "iron_pickaxe", "golden_pickaxe", "diamond_pickaxe", "netherite_pickaxe"],
+    
     # چوب‌ها
     "wood": ["oak_log", "oak_planks", "birch_log", "spruce_log", "jungle_log", "acacia_log", "dark_oak_log"],
     "log": ["oak_log", "birch_log", "spruce_log", "jungle_log", "acacia_log", "dark_oak_log"],
@@ -936,6 +968,7 @@ ITEM_ALIASES: dict[str, list[str]] = {
 SEARCH_FOLDERS = [
     ("textures/item", ".png"),
     ("textures/block", ".png"),
+    ("textures/entity", ".png"),
 ]
 
 # ذخیره انتخاب‌های کاربر (user_id -> list of selected files)
