@@ -770,14 +770,16 @@ async def minecraft_assets_mode(message: types.Message):
         "<code>diamond_sword</code>\n"
         "<code>copper tools</code>\n"
         "<code>spear</code>\n"
-       "<code>spear_in_hand</code>\n"
-       "<code>gold armor</code>\n"
+        "<code>spear_in_hand</code>\n"
+        "<code>gold armor</code>\n"
         "<code>emerald</code>\n"
-        "<code>oak_planks</code>"
-        "• برای زره بنویس: <code>iron armor</code> یا <code>diamond armor</code>"
-        "• برای نیزه بنویس: <code>spear</code> یا <code>spear in hand</code>"        
-        "• برای ابزار بنویس: <code>netherite tools</code> یا <code>copper tool</code>"   
+        "<code>oak_planks</code>\n\n"
+    
+        "• برای زره بنویس: <code>iron armor</code> یا <code>diamond armor</code>\n"
+        "• برای نیزه بنویس: <code>spear</code> یا <code>spear in hand</code>\n"
+        "• برای ابزار بنویس: <code>netherite tools</code> یا <code>copper tool</code>\n"
         "• برای ore بنویس: <code>ore</code> یا <code>copper_ore</code>",
+    
         parse_mode="HTML"
     )
     
