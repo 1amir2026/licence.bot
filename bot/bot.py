@@ -19,11 +19,11 @@ from database import Session, License
 
 # ====================== FSM ======================
 class BroadcastState(StatesGroup):
-waiting_message = State()
-waiting_buttons = State()
+    waiting_message = State()
+    waiting_buttons = State()
 
 class AdminState(StatesGroup):
-waiting_search = State()
+    waiting_search = State()
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
