@@ -772,7 +772,7 @@ async def minecraft_assets_mode(message: types.Message):
         "<code>oak_planks</code>",
         parse_mode="HTML"
     )
-
+    
 # ====================== FILE HANDLER ======================
 @dp.message(F.document)
 async def handle_document(message: types.Message):
@@ -936,8 +936,6 @@ ITEM_ALIASES: dict[str, list[str]] = {
 SEARCH_FOLDERS = [
     ("textures/item", ".png"),
     ("textures/block", ".png"),
-    ("models/item", ".json"),
-    ("models/block", ".json"),
 ]
 
 # ذخیره انتخاب‌های کاربر (user_id -> list of selected files)
