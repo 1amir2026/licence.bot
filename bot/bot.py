@@ -32,8 +32,7 @@ user_modes = {}
 user_data = {}  # برای ذخیره اطلاعات بین دو مرحله JSON و Texture
 
 # ====================== PATHS ======================
-BASE_DIR = Path(__file__).resolve().parent.parent
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = Path(__file__).resolve().parent
 PROCESSOR_DIR = os.path.join(BASE_DIR, "..", "processor")
 
 NODE_SCRIPT = os.path.join(PROCESSOR_DIR, "processor.mjs")
