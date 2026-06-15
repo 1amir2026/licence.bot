@@ -1045,49 +1045,50 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
     print(f"[DEBUG] BASE_DIR: {BASE_DIR}")
     print(f"[DEBUG] armors_dir: {armors_dir} | وجود: {armors_dir.exists()}")
 
-for raw_name in names:
-    # پشتیبانی از humanoid/diamond و humanoid_leggings/...
-    if "/" in raw_name:
-        subfolder, name_clean = raw_name.split("/", 1)
-        name_clean = name_clean.strip().lower().replace(".png", "")
-        if subfolder == "humanoid_leggings":
-            label_prefix = "leggings"
+    for raw_name in names:
+        # پشتیبانی از فرمت humanoid/diamond و humanoid_leggings/...
+        if "/" in raw_name:
+            subfolder, name_part = raw_name.split("/", 1)
+            name_clean = name_part.strip().lower().replace(".png", "")
+            if subfolder == "humanoid_leggings":
+                label_prefix = "leggings"
+            else:
+                label_prefix = "main"
+            subfolders_to_check = [(subfolder, label_prefix)]
         else:
-            label_prefix = "main"
-    else:
-        name_clean = raw_name.strip().lower().replace(".png", "")
-        # چک کردن پوشه‌ها
-        subfolders_to_check = [
-            ("humanoid_leggings", "leggings"),
-            ("humanoid", "main"),
-            ("", "main")
-        ]
-        
-for sub, label_prefix in subfolders_to_check:   # اگر از else استفاده کردی
-        local_file = armors_dir / sub / f"{name_clean}.png"
-        
-        if local_file.exists():
-            local_url = str(local_file)
-            if local_url not in seen:
-                seen.add(local_url)
-                found.append({
-                    "name": f"{name_clean}.png",
-                    "url": local_url,
-                    "ext": ".png",
-                    "label": f"🖼 [{label_prefix}] {name_clean}.png"   # lowercase
-                })
-                print(f"✅ پیدا شد: [{label_prefix}] {name_clean}.png")
-                break
-                
+            name_clean = raw_name.strip().lower().replace(".png", "")
+            subfolders_to_check = [
+                ("humanoid_leggings", "leggings"),
+                ("humanoid", "main"),
+                ("", "main")
+            ]
+
+        for sub, label_prefix in subfolders_to_check:
+            local_file = armors_dir / sub / f"{name_clean}.png"
+            
+            if local_file.exists():
+                local_url = str(local_file)
+                if local_url not in seen:
+                    seen.add(local_url)
+                    found.append({
+                        "name": f"{name_clean}.png",
+                        "url": local_url,
+                        "ext": ".png",
+                        "label": f"🖼 [{label_prefix}] {name_clean}.png"
+                    })
+                    print(f"✅ پیدا شد: [{label_prefix}] {name_clean}.png")
+                    break  # فقط یک بار اضافه شود
+
+    # جستجو در گیت‌هاب اگر محلی پیدا نشد
     if not found:
-        print("[DEBUG] محلی پیدا نشد → جستجو در گیت‌هاب")
+        print("[DEBUG] هیچ فایل محلی پیدا نشد → جستجو در گیت‌هاب")
         async with aiohttp.ClientSession() as session:
-            seen_urls = set()  # ← اینجا تعریف شد
+            seen_urls = set()
             tasks = []
             for name in names:
                 name_clean = name.strip().lower().replace(".png", "").replace(".json", "")
                 for folder, ext in SEARCH_FOLDERS:
-                    if "armors" in folder:  
+                    if "armors" in folder:
                         continue
                     url = f"{MC_ASSETS_BASE}/{folder}/{name_clean}{ext}"
                     tasks.append((name_clean, folder, ext, url))
@@ -1104,7 +1105,7 @@ for sub, label_prefix in subfolders_to_check:   # اگر از else استفاد�
                                 "name": f"{name_clean}{ext}",
                                 "url": url,
                                 "ext": ext,
-                                "label": f"{'🖼' if ext == '.png' else '📐'} [{folder_type}] {name_clean}{ext}"
+                                "label": f"🖼 [{folder_type}] {name_clean}{ext}"
                             }
                 except:
                     pass
