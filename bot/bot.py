@@ -911,12 +911,12 @@ async def handle_document(message: types.Message):
 
 # ====================== MINECRAFT ASSETS DOWNLOADER ======================
 
-# آدرس پایه GitHub برای assets ماینکرافت 1.21
+# آدرس پایه GitHub برای assets
 MC_ASSETS_BASE = "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/26.1.2/assets/minecraft"
 
-# alias برای کلمات عمومی که کاربر می‌زنه
+# 
 ITEM_ALIASES: dict[str, list[str]] = {
-    # ... aliasهای قبلیت رو نگه دار
+    # ...     
 
     # Spears (جدید)
     "spear": ["wooden_spear", "stone_spear", "copper_spear", "iron_spear", "golden_spear", "diamond_spear", "netherite_spear"],
@@ -939,7 +939,7 @@ ITEM_ALIASES: dict[str, list[str]] = {
     "copper armor": ["copper_helmet", "copper_chestplate", "copper_leggings", "copper_boots"],
     
     # Variantهای in_hand (held)
-    "in hand": ["_in_hand"],  # این کمک میکنه بعداً گسترش بدی
+    "in hand": ["_in_hand"],  # 
     "_in_hand": [],
 
     # Swordهای معمولی
@@ -949,65 +949,61 @@ ITEM_ALIASES: dict[str, list[str]] = {
     "wooden_tool": ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_hoe", "wooden_sword"],
     "wooden tools": ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_hoe", "wooden_sword"],
     
-    # مثال‌های بیشتر برای راحتی کاربر
     "diamond sword": ["diamond_sword"],
     "iron sword": ["iron_sword"],
     "pickaxe": ["wooden_pickaxe", "stone_pickaxe", "copper_pickaxe", "iron_pickaxe", "golden_pickaxe", "diamond_pickaxe", "netherite_pickaxe"],
     
-    # چوب‌ها
+    # 
     "wood": ["oak_log", "oak_planks", "birch_log", "spruce_log", "jungle_log", "acacia_log", "dark_oak_log"],
     "log": ["oak_log", "birch_log", "spruce_log", "jungle_log", "acacia_log", "dark_oak_log"],
     "planks": ["oak_planks", "birch_planks", "spruce_planks", "jungle_planks", "acacia_planks"],
-    # زره آهن
+    #  
     "iron armor": ["iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots"],
     "iron_armor": ["iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots"],
-    # زره الماس
     "diamond armor": ["diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots"],
     "diamond_armor": ["diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots"],
-    # زره طلا
     "gold armor": ["golden_helmet", "golden_chestplate", "golden_leggings", "golden_boots"],
     "golden armor": ["golden_helmet", "golden_chestplate", "golden_leggings", "golden_boots"],
-    # ابزارهای آهن
+    #  
     "iron tools": ["iron_sword", "iron_pickaxe", "iron_axe", "iron_shovel", "iron_hoe"],
     "golden tools": ["golden_sword", "golden_pickaxe", "golden_axe", "golden_shovel", "golden_hoe"],
     "gold tools": ["golden_sword", "golden_pickaxe", "golden_axe", "golden_shovel", "golden_hoe"],    
-    # ابزارهای الماس
+    #  
     "diamond tools": ["diamond_sword", "diamond_pickaxe", "diamond_axe", "diamond_shovel", "diamond_hoe"],
-    # سنگ
+    # 
     "stone": ["stone", "cobblestone", "smooth_stone", "stone_bricks"],
     "stone tools": ["stone_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_hoe"],
     "netherite tools": ["netherite_sword", "netherite_pickaxe", "netherite_axe", "netherite_shovel", "netherite_hoe"],
-    # سنگ معدن
+    #  
     "ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore", "copper_ore"],
     "_ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore", "copper_ore"],
     " ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore", "copper_ore"],
-    # علف
+    #
     "grass": ["grass_block", "grass"],
-    # آب و لاوا
+    # ا
     "water": ["water_bucket", "water"],
     "lava": ["lava_bucket", "lava"],
-    "armor layer": ["humanoid/diamond", "humanoid/iron", "humanoid/gold", "humanoid/netherite",
-                    "humanoid/chainmail", "humanoid/leather", "humanoid/copper", "humanoid/turtle_scute",
-                    "humanoid_leggings/diamond", "humanoid_leggings/iron", ...],
-
     "armor layers": [
-        "humanoid/diamond", "humanoid/iron", "humanoid/gold", "humanoid/netherite",
+        "humanoid/diamond", "humanoid/iron", "humanoid/golden", "humanoid/netherite",
         "humanoid/chainmail", "humanoid/leather", "humanoid/copper", "humanoid/turtle_scute",
-        "humanoid_leggings/diamond", "humanoid_leggings/iron", "humanoid_leggings/gold",
+        "humanoid_leggings/diamond", "humanoid_leggings/iron", "humanoid_leggings/golden",
         "humanoid_leggings/netherite", "humanoid_leggings/chainmail", "humanoid_leggings/leather",
         "humanoid_leggings/copper",
-],
+    ],
 }
 
-# پوشه‌هایی که باید جستجو بشن
+# 
 SEARCH_FOLDERS = [
-    ("textures/item", ".png"),                    # برای آیکون‌های inventory
+    ("textures/item", ".png"),
     ("textures/block", ".png"),
-    ("textures/entity", ".png"),
-    ("textures/entity/equipment/humanoid", ".png"),           # ← لایه 3D اصلی
-    ("textures/entity/equipment/humanoid_leggings", ".png"),  # ← لایه شلوار
-    ("textures/trims/entity/humanoid", ".png"),               # trimها (اختیاری)
-    ("textures/trims/entity/humanoid_leggings", ".png"),
+    # 
+    ("textures/entity/equipment/humanoid", ".png"),
+    ("textures/entity/equipment/humanoid_leggings", ".png"),
+    
+    # 
+    ("../armors/humanoid", ".png"),           # 
+    ("../armors/humanoid_leggings", ".png"),
+    ("../armors", ".png"),                    # 
 ]
 
 # ذخیره انتخاب‌های کاربر (user_id -> list of selected files)
