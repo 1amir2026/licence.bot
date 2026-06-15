@@ -32,8 +32,8 @@ RUN if [ -d "MCprep_addon" ]; then mv MCprep_addon mcprep; fi && \
 # ---------------- Python dependencies ----------------
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# ---------------- Node.js dependencies ----------------
-RUN cd processor && npm install
+# ---------------- Node.js dependencies (درست) ----------------
+RUN cd processor && npm ci --only=production
 
 # ---------------- Install MCprep into Blender ----------------
 RUN mkdir -p /usr/share/blender/scripts/addons && \
@@ -47,5 +47,6 @@ RUN pip3 install --no-cache-dir pillow
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
+ENV NODE_ENV=production
 
 CMD ["python3", "bot/bot.py"]
