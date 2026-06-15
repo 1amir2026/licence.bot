@@ -1,10 +1,13 @@
-FROM node:18-bullseye
+FROM node:18-bullseye as node_builder
 
-# ---------------- deps ----------------
+WORKDIR /app/processor
+COPY processor/ .
+RUN npm install
+
+
+FROM python:3.11
+
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python-is-python3 \
     blender \
     ffmpeg \
     git \
@@ -14,31 +17,15 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# ---------------- copy project ----------------
 COPY . .
 
-# ---------------- AUTO FIX MCprep FOLDER ----------------
-RUN if [ -d "MCprep_addon" ]; then mv MCprep_addon mcprep; fi && \
-    if [ -d "MCPrep_addon" ]; then mv MCPrep_addon mcprep; fi && \
-    if [ -d "MCPREP_addon" ]; then mv MCPREP_addon mcprep; fi
+# copy node modules from first stage
+COPY --from=node_builder /app/processor /app/processor
 
-# ---------------- python deps ----------------
-RUN pip3 install --no-cache-dir -r requirements.txt
-
-# ---------------- node deps ----------------
-RUN cd processor && npm install
-
-# ---------------- install mcprep into blender path ----------------
-RUN mkdir -p /usr/share/blender/scripts/addons && \
-    cp -r mcprep /usr/share/blender/scripts/addons/mcprep || true
-
-# Download latest jmc2obj.jar
-RUN curl -L -o /app/processor/jmc2obj.jar https://github.com/jmc2obj/j-mc-2-obj/releases/latest/download/jmc2obj.jar || echo "Warning: jmc2obj download failed"
-
-# ---------------- Pillow & extra python packages ----------------
-RUN pip3 install --no-cache-dir pillow
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install pillow
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-CMD ["python3", "bot/bot.py"]
+CMD ["python", "bot/bot.py"]
