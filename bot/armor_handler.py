@@ -2,6 +2,7 @@
 # Claude Genarate ( tnx help )
 from pathlib import Path
 import io
+from typing import Optional
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -101,12 +102,10 @@ def trim_select_keyboard(trims: dict) -> InlineKeyboardMarkup:
 def get_armor_path(armor_key: str, layer: str) -> Path:
     return ARMORS_DIR / layer / f"{ARMOR_FILE_MAP.get(armor_key, armor_key)}.png"
 
-
-def get_trim_path(trim_name: str, layer: str) -> Path | None:
+def get_trim_path(trim_name: str, layer: str) -> Optional[Path]:
     if trim_name == "none":
         return None
     return ARMORS_DIR / "trims" / layer / f"{trim_name}.png"
-
 
 def compose_layer(armor_key: str, trims: dict, layer: str) -> bytes | None:
     """
