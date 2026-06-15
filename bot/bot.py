@@ -40,7 +40,7 @@ user_modes = {}
 user_data = {}  # برای ذخیره اطلاعات بین دو مرحله JSON و Texture
 
 # ====================== PATHS ======================
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent    # ← تغییر به parent.parent
 
 PROCESSOR_DIR = str(BASE_DIR / "processor")
 
