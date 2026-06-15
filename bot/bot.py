@@ -1035,32 +1035,39 @@ def resolve_names(raw: str) -> list[str]:
     # اگه alias نداشت، همون اسم رو با و بدون آندرلاین برمی‌گردونه
     return list(dict.fromkeys([underscored, key.replace("_", " ").replace(" ", "_")]))
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 async def search_mc_assets(names: list[str]) -> list[dict]:
-    """
-    جستجو هم در پوشه محلی armors و هم در گیت‌هاب
-    """
     found = []
-    seen_urls = set()
+    seen = set()
 
     # ====================== جستجوی محلی (اولویت) ======================
-    armors_path = os.path.join(BASE_DIR, "..", "armors")  # مسیر درست نسبت به bot.py
+    armors_dir = BASE_DIR / "armors"
+
+    print(f"[DEBUG] جستجو در: {armors_dir}")  # برای دیباگ
 
     for name in names:
         name_clean = name.strip().lower().replace(".png", "")
-        for subfolder in ["", "humanoid", "humanoid_leggings"]:
-            local_file = os.path.join(armors_path, subfolder, f"{name_clean}.png")
-            if os.path.exists(local_file):
-                rel = f"armors/{subfolder}/{name_clean}.png" if subfolder else f"armors/{name_clean}.png"
-                local_url = f"local://{rel}"
-                if local_url not in seen_urls:
-                    seen_urls.add(local_url)
+        
+        for sub, label_prefix in [
+            ("", "main"),                    # root armors
+            ("humanoid", "main"),            # humanoid → main
+            ("humanoid_leggings", "leggings") # humanoid_leggings → leggings
+        ]:
+            local_file = armors_dir / sub / f"{name_clean}.png"
+            
+            if local_file.exists():
+                local_url = str(local_file)
+                if local_url not in seen:
+                    seen.add(local_url)
                     found.append({
                         "name": f"{name_clean}.png",
-                        "url": local_file,          # مسیر کامل محلی
+                        "url": local_url,
                         "ext": ".png",
-                        "label": f"🖼 [LOCAL ARMOR] {name_clean}.png"
+                        "label": f"🖼 [{label_prefix.upper()}] {name_clean}.png"
                     })
-
+                    print(f"✅ پیدا شد: {label_prefix} / {name_clean}.png")
+                    
     # ====================== جستجوی گیت‌هاب (اگر محلی پیدا نشد) ======================
     if not found:   # فقط اگر محلی چیزی پیدا نکرد، از گیت‌هاب بکشه
         async with aiohttp.ClientSession() as session:
