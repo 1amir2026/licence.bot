@@ -1,3 +1,4 @@
+from pathlib import Path
 import asyncio
 import os
 import random
@@ -5,7 +6,6 @@ import string
 import zipfile
 import json
 from datetime import datetime
-from pathlib import Path
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -1042,8 +1042,9 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
     seen = set()
 
     # ====================== جستجوی محلی ======================
-    armors_dir = BASE_DIR / "armors"
-    print(f"[DEBUG] جستجو در پوشه: {armors_dir} | وجود داره؟ {armors_dir.exists()}")
+    armors_dir = BASE_DIR / "armors"   # حالا BASE_DIR حتماً Path هست
+    print(f"[DEBUG] BASE_DIR: {BASE_DIR}")
+    print(f"[DEBUG] armors_dir: {armors_dir} | وجود داره؟ {armors_dir.exists()}")
 
     for name in names:
         name_clean = name.strip().lower().replace(".png", "")
@@ -1065,7 +1066,7 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
                         "ext": ".png",
                         "label": f"🖼 [{label_prefix.upper()}] {name_clean}.png"
                     })
-                    print(f"✅ پیدا شد محلی → {label_prefix} / {name_clean}.png")
+                    print(f"✅ پیدا شد: {label_prefix} / {name_clean}.png")
                     
     # ====================== جستجوی گیت‌هاب (اگر محلی پیدا نشد) ======================
     if not found:   # فقط اگر محلی چیزی پیدا نکرد، از گیت‌هاب بکشه
