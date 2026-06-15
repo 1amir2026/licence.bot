@@ -5,6 +5,7 @@ import string
 import zipfile
 import json
 from datetime import datetime
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -31,6 +32,7 @@ user_modes = {}
 user_data = {}  # برای ذخیره اطلاعات بین دو مرحله JSON و Texture
 
 # ====================== PATHS ======================
+BASE_DIR = Path(__file__).resolve().parent.parent
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROCESSOR_DIR = os.path.join(BASE_DIR, "..", "processor")
 
@@ -1035,24 +1037,21 @@ def resolve_names(raw: str) -> list[str]:
     # اگه alias نداشت، همون اسم رو با و بدون آندرلاین برمی‌گردونه
     return list(dict.fromkeys([underscored, key.replace("_", " ").replace(" ", "_")]))
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-
 async def search_mc_assets(names: list[str]) -> list[dict]:
     found = []
     seen = set()
 
-    # ====================== جستجوی محلی (اولویت) ======================
+    # ====================== جستجوی محلی ======================
     armors_dir = BASE_DIR / "armors"
-
-    print(f"[DEBUG] جستجو در: {armors_dir}")  # برای دیباگ
+    print(f"[DEBUG] جستجو در پوشه: {armors_dir} | وجود داره؟ {armors_dir.exists()}")
 
     for name in names:
         name_clean = name.strip().lower().replace(".png", "")
         
         for sub, label_prefix in [
-            ("", "main"),                    # root armors
-            ("humanoid", "main"),            # humanoid → main
-            ("humanoid_leggings", "leggings") # humanoid_leggings → leggings
+            ("", "main"),
+            ("humanoid", "main"),
+            ("humanoid_leggings", "leggings")
         ]:
             local_file = armors_dir / sub / f"{name_clean}.png"
             
@@ -1066,7 +1065,7 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
                         "ext": ".png",
                         "label": f"🖼 [{label_prefix.upper()}] {name_clean}.png"
                     })
-                    print(f"✅ پیدا شد: {label_prefix} / {name_clean}.png")
+                    print(f"✅ پیدا شد محلی → {label_prefix} / {name_clean}.png")
                     
     # ====================== جستجوی گیت‌هاب (اگر محلی پیدا نشد) ======================
     if not found:   # فقط اگر محلی چیزی پیدا نکرد، از گیت‌هاب بکشه
