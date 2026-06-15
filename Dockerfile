@@ -32,8 +32,8 @@ RUN if [ -d "MCprep_addon" ]; then mv MCprep_addon mcprep; fi && \
 # ---------------- Python dependencies ----------------
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# ---------------- Node.js dependencies (درست) ----------------
-RUN cd processor && npm ci --only=production
+# ---------------- Node.js dependencies ----------------
+RUN cd processor && npm install --production --no-audit --prefer-offline
 
 # ---------------- Install MCprep into Blender ----------------
 RUN mkdir -p /usr/share/blender/scripts/addons && \
