@@ -984,15 +984,27 @@ ITEM_ALIASES: dict[str, list[str]] = {
     # آب و لاوا
     "water": ["water_bucket", "water"],
     "lava": ["lava_bucket", "lava"],
-    "armors": ["chainmail_1", "chainmail_2", "diamond_1", "diamond_2", "gold_1", "gold_2", "iron_1", "iron_2", "leather_1", "leather_2", "netherite_1", "netherite_2", "turtle_1"],    
+"armors": [
+    # زره‌های معمولی (item icons)
+    "leather_helmet", "leather_chestplate", "leather_leggings", "leather_boots",
+    "chainmail_helmet", "chainmail_chestplate", "chainmail_leggings", "chainmail_boots",
+    "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots",
+    "golden_helmet", "golden_chestplate", "golden_leggings", "golden_boots",
+    "diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots",
+    "netherite_helmet", "netherite_chestplate", "netherite_leggings", "netherite_boots",
+    "turtle_helmet",
+    
+],
 }
 
 # پوشه‌هایی که باید جستجو بشن
 SEARCH_FOLDERS = [
-    ("textures/item", ".png"),
+    ("textures/item", ".png"),           # ← مهمه برای armor icons
     ("textures/block", ".png"),
     ("textures/entity", ".png"),
-    ("textures/models/armor", ".png"),
+    ("textures/trims/entity/humanoid", ".png"),        # trim لایه 1
+    ("textures/trims/entity/humanoid_leggings", ".png"), # trim لایه 2
+    # اگر لازم بود: ("textures/trims/items", ".png"),
 ]
 
 # ذخیره انتخاب‌های کاربر (user_id -> list of selected files)
