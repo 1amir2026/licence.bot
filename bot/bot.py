@@ -1220,36 +1220,46 @@ async def cancel_asset(callback: types.CallbackQuery):
     user_modes.pop(user_id, None)
     await callback.message.edit_text("❌ عملیات لغو شد.")
 
-
 async def _send_asset_files(callback: types.CallbackQuery, files: list, user_id: int):
-    """هلپر مشترک برای ارسال فایل‌ها"""
+    """ارسال فایل‌های محلی و ریموت"""
     await callback.message.answer(f"📤 در حال ارسال {len(files)} فایل...")
 
     success = 0
-    async with aiohttp.ClientSession() as session:
-        for file in files:
-            try:
-                async with session.get(file["url"], timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                    if resp.status == 200:
-                        data = await resp.read()
-                        temp_path = os.path.join(OUTPUT_DIR, file["name"])
-                        with open(temp_path, "wb") as f:
-                            f.write(data)
+    for file in files:
+        try:
+            file_path = file["url"]
+            caption = file.get("label", file["name"])
 
-                        await callback.message.answer_document(
-                            FSInputFile(temp_path),
-                            caption=f"📎 <b>{file['name']}</b>\n<code>{file['url']}</code>",
-                            parse_mode="HTML"
-                        )
-                        os.remove(temp_path)
-                        success += 1
-                    else:
-                        await callback.message.answer(f"❌ دانلود {file['name']} ناموفق (status {resp.status})")
-            except Exception as e:
-                await callback.message.answer(f"❌ خطا در ارسال {file['name']}: {str(e)[:100]}")
+            if os.path.exists(file_path):  # فایل محلی
+                await callback.message.answer_document(
+                    FSInputFile(file_path),
+                    caption=f"🖼 {caption}"
+                )
+                print(f"✅ ارسال محلی موفق: {file_path}")
+            else:  # فایل از گیت‌هاب
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(file_path, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                        if resp.status == 200:
+                            data = await resp.read()
+                            temp_path = os.path.join(OUTPUT_DIR, file["name"])
+                            with open(temp_path, "wb") as f:
+                                f.write(data)
+                            
+                            await callback.message.answer_document(
+                                FSInputFile(temp_path),
+                                caption=f"📎 {file['name']}"
+                            )
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
+            success += 1
 
-    await callback.message.answer(f"✅ {success} از {len(files)} فایل ارسال شد!")
+        except Exception as e:
+            await callback.message.answer(f"❌ خطا در ارسال {file.get('name', 'فایل')}:\n{str(e)[:100]}")
+            print(f"خطا ارسال: {e}")
 
+    await callback.message.answer(f"✅ {success} از {len(files)} فایل با موفقیت ارسال شد!")
+
+    # پاک کردن داده‌ها
     user_selections.pop(user_id, None)
     user_data.pop(user_id, None)
     user_modes.pop(user_id, None)
