@@ -984,27 +984,28 @@ ITEM_ALIASES: dict[str, list[str]] = {
     # آب و لاوا
     "water": ["water_bucket", "water"],
     "lava": ["lava_bucket", "lava"],
-"armors": [
-    # زره‌های معمولی (item icons)
-    "leather_helmet", "leather_chestplate", "leather_leggings", "leather_boots",
-    "chainmail_helmet", "chainmail_chestplate", "chainmail_leggings", "chainmail_boots",
-    "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots",
-    "golden_helmet", "golden_chestplate", "golden_leggings", "golden_boots",
-    "diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots",
-    "netherite_helmet", "netherite_chestplate", "netherite_leggings", "netherite_boots",
-    "turtle_helmet",
-    
+    "armor layer": ["humanoid/diamond", "humanoid/iron", "humanoid/gold", "humanoid/netherite",
+                    "humanoid/chainmail", "humanoid/leather", "humanoid/copper", "humanoid/turtle_scute",
+                    "humanoid_leggings/diamond", "humanoid_leggings/iron", ...],
+
+    "armor layers": [
+        "humanoid/diamond", "humanoid/iron", "humanoid/gold", "humanoid/netherite",
+        "humanoid/chainmail", "humanoid/leather", "humanoid/copper", "humanoid/turtle_scute",
+        "humanoid_leggings/diamond", "humanoid_leggings/iron", "humanoid_leggings/gold",
+        "humanoid_leggings/netherite", "humanoid_leggings/chainmail", "humanoid_leggings/leather",
+        "humanoid_leggings/copper",
 ],
 }
 
 # پوشه‌هایی که باید جستجو بشن
 SEARCH_FOLDERS = [
-    ("textures/item", ".png"),           # ← مهمه برای armor icons
+    ("textures/item", ".png"),                    # برای آیکون‌های inventory
     ("textures/block", ".png"),
     ("textures/entity", ".png"),
-    ("textures/trims/entity/humanoid", ".png"),        # trim لایه 1
-    ("textures/trims/entity/humanoid_leggings", ".png"), # trim لایه 2
-    # اگر لازم بود: ("textures/trims/items", ".png"),
+    ("textures/entity/equipment/humanoid", ".png"),           # ← لایه 3D اصلی
+    ("textures/entity/equipment/humanoid_leggings", ".png"),  # ← لایه شلوار
+    ("textures/trims/entity/humanoid", ".png"),               # trimها (اختیاری)
+    ("textures/trims/entity/humanoid_leggings", ".png"),
 ]
 
 # ذخیره انتخاب‌های کاربر (user_id -> list of selected files)
