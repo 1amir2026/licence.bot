@@ -1035,47 +1035,66 @@ def resolve_names(raw: str) -> list[str]:
     # اگه alias نداشت، همون اسم رو با و بدون آندرلاین برمی‌گردونه
     return list(dict.fromkeys([underscored, key.replace("_", " ").replace(" ", "_")]))
 
-
 async def search_mc_assets(names: list[str]) -> list[dict]:
     """
-    برای هر اسم در لیست، تمام پوشه‌ها رو چک می‌کنه و فایل‌های موجود رو برمی‌گردونه.
+    جستجو هم در پوشه محلی armors و هم در گیت‌هاب
     """
     found = []
     seen_urls = set()
 
-    async with aiohttp.ClientSession() as session:
-        tasks = []
-        for name in names:
-            name_clean = name.strip().lower().replace(".png", "").replace(".json", "")
-            for folder, ext in SEARCH_FOLDERS:
-                url = f"{MC_ASSETS_BASE}/{folder}/{name_clean}{ext}"
-                tasks.append((name_clean, folder, ext, url))
+    # ====================== جستجوی محلی (اولویت) ======================
+    armors_path = os.path.join(BASE_DIR, "..", "armors")  # مسیر درست نسبت به bot.py
 
-        # ارسال همه درخواست‌ها به صورت موازی
-        async def check_url(name_clean, folder, ext, url):
-            if url in seen_urls:
+    for name in names:
+        name_clean = name.strip().lower().replace(".png", "")
+        for subfolder in ["", "humanoid", "humanoid_leggings"]:
+            local_file = os.path.join(armors_path, subfolder, f"{name_clean}.png")
+            if os.path.exists(local_file):
+                rel = f"armors/{subfolder}/{name_clean}.png" if subfolder else f"armors/{name_clean}.png"
+                local_url = f"local://{rel}"
+                if local_url not in seen_urls:
+                    seen_urls.add(local_url)
+                    found.append({
+                        "name": f"{name_clean}.png",
+                        "url": local_file,          # مسیر کامل محلی
+                        "ext": ".png",
+                        "label": f"🖼 [LOCAL ARMOR] {name_clean}.png"
+                    })
+
+    # ====================== جستجوی گیت‌هاب (اگر محلی پیدا نشد) ======================
+    if not found:   # فقط اگر محلی چیزی پیدا نکرد، از گیت‌هاب بکشه
+        async with aiohttp.ClientSession() as session:
+            tasks = []
+            for name in names:
+                name_clean = name.strip().lower().replace(".png", "").replace(".json", "")
+                for folder, ext in SEARCH_FOLDERS:
+                    if "armors" in folder:  # پوشه‌های محلی رو از گیت‌هاب رد کن
+                        continue
+                    url = f"{MC_ASSETS_BASE}/{folder}/{name_clean}{ext}"
+                    tasks.append((name_clean, folder, ext, url))
+
+            async def check_url(name_clean, folder, ext, url):
+                if url in seen_urls:
+                    return None
+                try:
+                    async with session.head(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                        if resp.status == 200:
+                            seen_urls.add(url)
+                            folder_type = "item" if "item" in folder else "block"
+                            return {
+                                "name": f"{name_clean}{ext}",
+                                "url": url,
+                                "ext": ext,
+                                "label": f"{'🖼' if ext == '.png' else '📐'} [{folder_type}] {name_clean}{ext}"
+                            }
+                except:
+                    pass
                 return None
-            try:
-                async with session.head(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                    if resp.status == 200:
-                        seen_urls.add(url)
-                        folder_type = "item" if "item" in folder else "block"
-                        file_type = "texture" if ext == ".png" else "model"
-                        return {
-                            "name": f"{name_clean}{ext}",
-                            "url": url,
-                            "ext": ext,
-                            "label": f"{'🖼' if ext == '.png' else '📐'} [{folder_type}] {name_clean}{ext}"
-                        }
-            except:
-                pass
-            return None
 
-        results = await asyncio.gather(*[check_url(*t) for t in tasks])
-        found = [r for r in results if r is not None]
+            results = await asyncio.gather(*[check_url(*t) for t in tasks])
+            found.extend([r for r in results if r is not None])
 
     return found
-
 
 @dp.message(F.text, lambda m: user_modes.get(m.from_user.id) == "minecraft_assets")
 async def handle_minecraft_asset_name(message: types.Message):
