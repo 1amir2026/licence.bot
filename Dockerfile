@@ -1,12 +1,4 @@
-FROM node:18-bullseye AS node_builder
-
-WORKDIR /app/processor
-
-COPY processor/ .
-
-RUN npm install
-
-
+FROM node:18-bullseye
 FROM python:3.11
 
 # ---------------- deps ----------------
@@ -18,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
     curl \
-    default-jre \
+    openjdk-17-jre \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -31,25 +23,23 @@ RUN if [ -d "MCprep_addon" ]; then mv MCprep_addon mcprep; fi && \
     if [ -d "MCPrep_addon" ]; then mv MCPrep_addon mcprep; fi && \
     if [ -d "MCPREP_addon" ]; then mv MCPREP_addon mcprep; fi
 
-# ---------------- copy node build ----------------
-COPY --from=node_builder /app/processor /app/processor
-
 # ---------------- python deps ----------------
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# ---------------- pillow ----------------
-RUN pip3 install --no-cache-dir pillow
+# ---------------- node deps ----------------
+RUN cd processor && npm install
 
-# ---------------- blender addons ----------------
+# ---------------- install mcprep into blender path ----------------
 RUN mkdir -p /usr/share/blender/scripts/addons && \
     cp -r mcprep /usr/share/blender/scripts/addons/mcprep || true
 
-# ---------------- jmc2obj ----------------
-RUN curl -L -o /app/processor/jmc2obj.jar https://github.com/jmc2obj/j-mc-2-obj/releases/latest/download/jmc2obj.jar || true
+# Download latest jmc2obj.jar
+RUN curl -L -o /app/processor/jmc2obj.jar https://github.com/jmc2obj/j-mc-2-obj/releases/latest/download/jmc2obj.jar || echo "Warning: jmc2obj download failed"
 
-# ---------------- env ----------------
+# ---------------- Pillow & extra python packages ----------------
+RUN pip3 install --no-cache-dir pillow
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-# ---------------- run ----------------
-CMD ["python", "bot/bot.py"]
+CMD ["python3", "bot/bot.py"]
