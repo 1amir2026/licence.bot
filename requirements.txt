@@ -3,3 +3,4 @@ sqlalchemy
 aiosqlite
 python-dotenv
 aiohttp
+pillow
