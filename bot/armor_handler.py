@@ -107,7 +107,7 @@ def get_trim_path(trim_name: str, layer: str) -> Optional[Path]:
         return None
     return ARMORS_DIR / "trims" / layer / f"{trim_name}.png"
 
-def compose_layer(armor_key: str, trims: dict, layer: str) -> bytes | None:
+def compose_layer(armor_key: str, trims: dict, layer: str) -> Optional[bytes]:
     """
     ترکیب تکسچر پایه آرمور با تریم‌ها روی یک لایه.
     layer 'humanoid'         → helmet, chestplate, boots
