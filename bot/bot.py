@@ -389,15 +389,15 @@ async def check_license(message: types.Message):
             license_glb.used_at = datetime.utcnow()
             session.commit()
 
-keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
-        [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
-        [KeyboardButton(text="🔄 تبدیل JSON به OBJ")],
-        [KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")],
-        [KeyboardButton(text="🛡 ساخت آرمور با تریم")],  # ← دکمه جدید
-    ],
-    resize_keyboard=True
+            keyboard = ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
+                    [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
+                    [KeyboardButton(text="🔄 تبدیل JSON به OBJ")],
+                    [KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")],
+                    [KeyboardButton(text="🛡 ساخت آرمور با تریم")],
+                ],
+                resize_keyboard=True
             )
 
             await message.answer("✅ لایسنس فعال شد!\n\nبه پنل خوش آمدید 🎉", reply_markup=keyboard)
