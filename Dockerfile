@@ -35,6 +35,9 @@ RUN mkdir -p /usr/share/blender/scripts/addons && \
 # Download latest jmc2obj.jar
 RUN curl -L -o /app/processor/jmc2obj.jar https://github.com/jmc2obj/j-mc-2-obj/releases/latest/download/jmc2obj.jar || echo "Warning: jmc2obj download failed"
 
+# ---------------- Pillow & extra python packages ----------------
+RUN pip3 install --no-cache-dir pillow
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
