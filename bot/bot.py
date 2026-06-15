@@ -32,8 +32,9 @@ user_modes = {}
 user_data = {}  # برای ذخیره اطلاعات بین دو مرحله JSON و Texture
 
 # ====================== PATHS ======================
-BASE_DIR = Path(__file__).resolve().parent
-PROCESSOR_DIR = os.path.join(BASE_DIR, "..", "processor")
+BASE_DIR = Path(__file__).resolve().parent.parent   # ← مهم: parent.parent
+
+PROCESSOR_DIR = str(BASE_DIR / "processor")
 
 NODE_SCRIPT = os.path.join(PROCESSOR_DIR, "processor.mjs")
 ITEM3D_SCRIPT = os.path.join(PROCESSOR_DIR, "item3d.mjs")
@@ -1041,9 +1042,11 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
     seen = set()
 
     # ====================== جستجوی محلی (اولویت) ======================
+# جستجوی محلی
     armors_dir = BASE_DIR / "armors"
     print(f"[DEBUG] BASE_DIR: {BASE_DIR}")
     print(f"[DEBUG] armors_dir: {armors_dir} | وجود داره؟ {armors_dir.exists()}")
+    print(f"[DEBUG] محتوای armors: {list(armors_dir.iterdir()) if armors_dir.exists() else 'ندارد'}")
 
     for name in names:
         name_clean = name.strip().lower().replace(".png", "")
@@ -1054,7 +1057,6 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
             ("humanoid_leggings", "leggings")
         ]:
             local_file = armors_dir / sub / f"{name_clean}.png"
-            
             if local_file.exists():
                 local_url = str(local_file)
                 if local_url not in seen:
@@ -1065,7 +1067,7 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
                         "ext": ".png",
                         "label": f"🖼 [{label_prefix.upper()}] {name_clean}.png"
                     })
-                    print(f"✅ پیدا شد محلی: {label_prefix} / {name_clean}.png")
+                    print(f"✅ پیدا شد: {label_prefix} / {name_clean}.png")
 
     # ====================== جستجوی گیت‌هاب (فقط اگر محلی پیدا نشد) ======================
     if not found:
