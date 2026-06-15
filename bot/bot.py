@@ -1045,36 +1045,40 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
     print(f"[DEBUG] BASE_DIR: {BASE_DIR}")
     print(f"[DEBUG] armors_dir: {armors_dir} | وجود: {armors_dir.exists()}")
 
-    for raw_name in names:
-        # پشتیبانی از مسیر مثل humanoid/diamond
-        if "/" in raw_name:
-            subfolder, name_clean = raw_name.split("/", 1)
-            name_clean = name_clean.strip().lower().replace(".png", "")
-            subfolders_to_check = [(subfolder, subfolder.replace("humanoid_leggings", "leggings").upper() or "main")]
+for raw_name in names:
+    # پشتیبانی از humanoid/diamond و humanoid_leggings/...
+    if "/" in raw_name:
+        subfolder, name_clean = raw_name.split("/", 1)
+        name_clean = name_clean.strip().lower().replace(".png", "")
+        if subfolder == "humanoid_leggings":
+            label_prefix = "leggings"
         else:
-            name_clean = raw_name.strip().lower().replace(".png", "")
-            subfolders_to_check = [
-                ("", "main"),
-                ("humanoid", "main"),
-                ("humanoid_leggings", "leggings")
-            ]
-
-        for sub, label_prefix in subfolders_to_check:
-            local_file = armors_dir / sub / f"{name_clean}.png"
-            
-            if local_file.exists():
-                local_url = str(local_file)
-                if local_url not in seen:
-                    seen.add(local_url)
-                    found.append({
-                        "name": f"{name_clean}.png",
-                        "url": local_url,
-                        "ext": ".png",
-                        "label": f"🖼 [{label_prefix}] {name_clean}.png"
-                    })
-                    print(f"✅ پیدا شد: [{label_prefix}] {name_clean}.png")
-                    break  # فقط یک بار اضافه کنه
-
+            label_prefix = "main"
+    else:
+        name_clean = raw_name.strip().lower().replace(".png", "")
+        # چک کردن پوشه‌ها
+        subfolders_to_check = [
+            ("humanoid_leggings", "leggings"),
+            ("humanoid", "main"),
+            ("", "main")
+        ]
+        
+for sub, label_prefix in subfolders_to_check:   # اگر از else استفاده کردی
+        local_file = armors_dir / sub / f"{name_clean}.png"
+        
+        if local_file.exists():
+            local_url = str(local_file)
+            if local_url not in seen:
+                seen.add(local_url)
+                found.append({
+                    "name": f"{name_clean}.png",
+                    "url": local_url,
+                    "ext": ".png",
+                    "label": f"🖼 [{label_prefix}] {name_clean}.png"   # lowercase
+                })
+                print(f"✅ پیدا شد: [{label_prefix}] {name_clean}.png")
+                break
+                
     if not found:
         print("[DEBUG] محلی پیدا نشد → جستجو در گیت‌هاب")
         async with aiohttp.ClientSession() as session:
@@ -1228,41 +1232,54 @@ async def cancel_asset(callback: types.CallbackQuery):
     await callback.message.edit_text("❌ عملیات لغو شد.")
 
 async def _send_asset_files(callback: types.CallbackQuery, files: list, user_id: int):
+    """هلپر ارسال فایل‌ها با فرمت دلخواه"""
     await callback.message.answer(f"📤 در حال ارسال {len(files)} فایل...")
 
     success = 0
     for file in files:
         try:
             file_path = file["url"]
-            label = file.get("label", file["name"])
+            file_name = file["name"]
 
-            if os.path.exists(file_path):  # فایل محلی
-                caption = f"{label}\n<code>{file_path}</code>"
+            # Caption دقیقاً طبق خواسته شما
+            if os.path.exists(file_path):  # فایل محلی (مثل armor layers)
+                caption = f"<b>{file_name}</b>\n<code>{file_path}</code>"
+            else:  # فایل از گیت‌هاب
+                caption = f"<b>{file_name}</b>\n<code>{file_path}</code>"
+
+            # ارسال فایل
+            if os.path.exists(file_path):
                 await callback.message.answer_document(
                     FSInputFile(file_path),
                     caption=caption,
                     parse_mode="HTML"
                 )
-            else:  # فایل اینترنتی
+            else:
+                # دانلود و ارسال فایل ریموت
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(file_path, timeout=15) as resp:
+                    async with session.get(file_path, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                         if resp.status == 200:
                             data = await resp.read()
-                            temp_path = os.path.join(OUTPUT_DIR, file["name"])
+                            temp_path = os.path.join(OUTPUT_DIR, file_name)
                             with open(temp_path, "wb") as f:
                                 f.write(data)
+                            
                             await callback.message.answer_document(
                                 FSInputFile(temp_path),
-                                caption=f"{file['name']}\n<code>{file_path}</code>",
+                                caption=caption,
                                 parse_mode="HTML"
                             )
                             os.remove(temp_path)
+                        else:
+                            await callback.message.answer(f"❌ دانلود {file_name} ناموفق")
             success += 1
+
         except Exception as e:
-            await callback.message.answer(f"❌ خطا در ارسال {file.get('name')}: {str(e)[:100]}")
+            await callback.message.answer(f"❌ خطا در ارسال {file_name}:\n{str(e)[:100]}")
 
     await callback.message.answer(f"✅ {success} از {len(files)} فایل ارسال شد!")
 
+    # پاک کردن داده‌ها
     user_selections.pop(user_id, None)
     user_data.pop(user_id, None)
     user_modes.pop(user_id, None)
