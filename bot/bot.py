@@ -32,7 +32,7 @@ user_modes = {}
 user_data = {}  # برای ذخیره اطلاعات بین دو مرحله JSON و Texture
 
 # ====================== PATHS ======================
-BASE_DIR = Path(__file__).resolve().parent.parent   # ← مهم: parent.parent
+BASE_DIR = Path(__file__).resolve().parent
 
 PROCESSOR_DIR = str(BASE_DIR / "processor")
 
@@ -1041,12 +1041,10 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
     found = []
     seen = set()
 
-    # ====================== جستجوی محلی (اولویت) ======================
-# جستجوی محلی
-    armors_dir = BASE_DIR / "armors"
+    armors_dir = BASE_DIR / "armors"   # داخل bot/armors
+
     print(f"[DEBUG] BASE_DIR: {BASE_DIR}")
-    print(f"[DEBUG] armors_dir: {armors_dir} | وجود داره؟ {armors_dir.exists()}")
-    print(f"[DEBUG] محتوای armors: {list(armors_dir.iterdir()) if armors_dir.exists() else 'ندارد'}")
+    print(f"[DEBUG] armors_dir: {armors_dir} | وجود: {armors_dir.exists()}")
 
     for name in names:
         name_clean = name.strip().lower().replace(".png", "")
