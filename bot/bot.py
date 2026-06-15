@@ -984,11 +984,15 @@ ITEM_ALIASES: dict[str, list[str]] = {
     "water": ["water_bucket", "water"],
     "lava": ["lava_bucket", "lava"],
     "armor layers": [
-        "humanoid/diamond", "humanoid/iron", "humanoid/golden", "humanoid/netherite",
+        "humanoid/diamond", "humanoid/iron", "humanoid/gold", "humanoid/netherite",
         "humanoid/chainmail", "humanoid/leather", "humanoid/copper", "humanoid/turtle_scute",
-        "humanoid_leggings/diamond", "humanoid_leggings/iron", "humanoid_leggings/golden",
+        "humanoid_leggings/diamond", "humanoid_leggings/iron", "humanoid_leggings/gold",
         "humanoid_leggings/netherite", "humanoid_leggings/chainmail", "humanoid_leggings/leather",
         "humanoid_leggings/copper",
+    
+        # 
+        "diamond.png", "iron.png", "gold.png", "netherite.png", "chainmail.png",
+        "leather.png", "copper.png", "turtle_scute.png",
     ],
 }
 
@@ -996,17 +1000,14 @@ ITEM_ALIASES: dict[str, list[str]] = {
 SEARCH_FOLDERS = [
     ("textures/item", ".png"),
     ("textures/block", ".png"),
-    # 
-    ("textures/entity/equipment/humanoid", ".png"),
-    ("textures/entity/equipment/humanoid_leggings", ".png"),
+    ("textures/entity", ".png"),
     
     # 
-    ("../armors/humanoid", ".png"),           # 
-    ("../armors/humanoid_leggings", ".png"),
-    ("../armors", ".png"),                    # 
+    ("armors/humanoid", ".png"),
+    ("armors/humanoid_leggings", ".png"),
+    ("armors", ".png"),                    #  
 ]
-
-# ذخیره انتخاب‌های کاربر (user_id -> list of selected files)
+# 
 user_selections: dict[int, list] = {}
 
 
