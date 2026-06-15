@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
     curl \
-    openjdk-17-jre \
+    default-jre \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
