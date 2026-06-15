@@ -1046,26 +1046,27 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
     print(f"[DEBUG] BASE_DIR: {BASE_DIR}")
     print(f"[DEBUG] armors_dir: {armors_dir} | وجود: {armors_dir.exists()}")
 
-    for name in names:
-        name_clean = name.strip().lower().replace(".png", "")
+for name in names:
+    name_clean = name.strip().lower().replace(".png", "")
+    
+    for sub, label_prefix in [
+        ("", "main"),
+        ("humanoid", "main"),
+        ("humanoid_leggings", "leggings")
+    ]:
+local_file = armors_dir / sub / f"{name_clean}.png"
         
-        for sub, label_prefix in [
-            ("", "main"),
-            ("humanoid", "main"),
-            ("humanoid_leggings", "leggings")
-        ]:
-            local_file = armors_dir / sub / f"{name_clean}.png"
-            if local_file.exists():
-                local_url = str(local_file)
-                if local_url not in seen:
-                    seen.add(local_url)
-                    found.append({
-                        "name": f"{name_clean}.png",
-                        "url": local_url,
-                        "ext": ".png",
-                        "label": f"🖼 [{label_prefix.upper()}] {name_clean}.png"
-                    })
-                    print(f"✅ پیدا شد: {label_prefix} / {name_clean}.png")
+        if local_file.exists():
+            local_url = str(local_file)
+            if local_url not in seen:
+                seen.add(local_url)
+                found.append({
+                    "name": f"{name_clean}.png",
+                    "url": local_url,
+                    "ext": ".png",
+                    "label": f"🖼 [{label_prefix.upper()}] {name_clean}.png"   # اینجا درست کار می‌کنه
+                })
+                print(f"✅ پیدا شد: {label_prefix} / {name_clean}.png")
 
     # ====================== جستجوی گیت‌هاب (فقط اگر محلی پیدا نشد) ======================
     if not found:
@@ -1221,45 +1222,40 @@ async def cancel_asset(callback: types.CallbackQuery):
     await callback.message.edit_text("❌ عملیات لغو شد.")
 
 async def _send_asset_files(callback: types.CallbackQuery, files: list, user_id: int):
-    """ارسال فایل‌های محلی و ریموت"""
     await callback.message.answer(f"📤 در حال ارسال {len(files)} فایل...")
 
     success = 0
     for file in files:
         try:
             file_path = file["url"]
-            caption = file.get("label", file["name"])
-
+            
             if os.path.exists(file_path):  # فایل محلی
+                caption = f"🖼 {file.get('label', file['name'])}\n<code>{file_path}</code>"
                 await callback.message.answer_document(
                     FSInputFile(file_path),
-                    caption=f"🖼 {caption}"
+                    caption=caption,
+                    parse_mode="HTML"
                 )
-                print(f"✅ ارسال محلی موفق: {file_path}")
             else:  # فایل از گیت‌هاب
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(file_path, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    async with session.get(file_path, timeout=15) as resp:
                         if resp.status == 200:
                             data = await resp.read()
                             temp_path = os.path.join(OUTPUT_DIR, file["name"])
                             with open(temp_path, "wb") as f:
                                 f.write(data)
-                            
                             await callback.message.answer_document(
                                 FSInputFile(temp_path),
-                                caption=f"📎 {file['name']}"
+                                caption=f"📎 {file['name']}\n<code>{file_path}</code>",
+                                parse_mode="HTML"
                             )
-                            if os.path.exists(temp_path):
-                                os.remove(temp_path)
+                            os.remove(temp_path)
             success += 1
-
         except Exception as e:
-            await callback.message.answer(f"❌ خطا در ارسال {file.get('name', 'فایل')}:\n{str(e)[:100]}")
-            print(f"خطا ارسال: {e}")
+            await callback.message.answer(f"❌ خطا در ارسال {file.get('name')}:\n{str(e)[:80]}")
 
-    await callback.message.answer(f"✅ {success} از {len(files)} فایل با موفقیت ارسال شد!")
+    await callback.message.answer(f"✅ {success} از {len(files)} فایل ارسال شد!")
 
-    # پاک کردن داده‌ها
     user_selections.pop(user_id, None)
     user_data.pop(user_id, None)
     user_modes.pop(user_id, None)
