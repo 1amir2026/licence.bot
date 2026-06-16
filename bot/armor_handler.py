@@ -2,6 +2,7 @@
 #  Kafan tarin armor make  minecraft
 #  baray estefade local :
 # pip install Pillow
+#  with a little AI help (: tnx ( grok.ccom ) 
 
 from pathlib import Path
 import io
@@ -246,7 +247,7 @@ def apply_leather_color(base: Image.Image, overlay_path: Path, color_rgb: tuple)
 
 def apply_enchant_glint(img: Image.Image) -> Image.Image:
     """
-    افکت Enchant Glint واقعی — هوشمند و تطبیقی با روشنایی آرمور
+    افکت Enchant Glint — نسخه متعادل و تطبیقی (بر اساس نسخه‌ای که راضی بودی)
     """
     base = img.convert("RGBA")
     w, h = base.size
@@ -260,7 +261,7 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
     try:
         glint_tex = Image.open(glint_path).convert("RGBA")
         
-        # Tile کردن بهتر
+        # Tile کردن (مهم برای تکرار الگو)
         if glint_tex.size != (w, h):
             tiled = Image.new("RGBA", (w, h), (0, 0, 0, 0))
             gw, gh = glint_tex.size
@@ -269,39 +270,32 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
                     tiled.paste(glint_tex, (tx, ty))
             glint_tex = tiled
 
-        # محاسبه روشنایی متوسط آرمور برای تنظیم خودکار شدت
-        base_px = base.load()
-        total_brightness = 0
-        pixel_count = 0
-        
-        for y in range(h):
-            for x in range(w):
-                r, g, b, a = base_px[x, y]
-                if a > 50:  # فقط پیکسل‌های قابل دید
-                    total_brightness += (r + g + b) / 3
-                    pixel_count += 1
-        
-        avg_brightness = total_brightness / pixel_count if pixel_count > 0 else 128
-        brightness_factor = avg_brightness / 255.0
+        # شدت پایه پایین‌تر + تنظیم هوشمند
+        GLINT_STRENGTH = 0.65   # کاهش یافت (قبلاً 0.82 بود)
 
-        # شدت glint بر اساس نوع آرمور
-        GLINT_STRENGTH = 0.88 * (0.75 + 0.45 * brightness_factor)  # بین ۰.۶ تا ۱.۱
-
-        # اعمال glint
         glint_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         gl_px = glint_layer.load()
         tex_px = glint_tex.load()
+        base_px = base.load()
 
         for y in range(h):
             for x in range(w):
                 tr, tg, tb, ta = tex_px[x, y]
                 if ta == 0:
                     continue
+                
+                # شدت بر اساس خود تکسچر
                 intensity = (tr + tg + tb) / (3 * 255.0)
+                
+                # ماسک آرمور (روی قسمت‌های شفاف glint نگذاریم)
                 armor_a = base_px[x, y][3]
-                if armor_a < 30:
+                if armor_a < 40:
                     continue
-                alpha = int(ta * (armor_a / 255.0) * GLINT_STRENGTH)
+                
+                # کاهش بیشتر روی آرمورهای تیره
+                dark_factor = min(1.0, (armor_a / 255.0) * 1.3)
+                alpha = int(ta * dark_factor * GLINT_STRENGTH)
+                
                 gl_px[x, y] = (103, 25, 255, min(255, alpha))
 
         # Screen Blend
@@ -313,18 +307,20 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
             for x in range(w):
                 br, bg, bb, ba = base_px[x, y]
                 gr, gg, gb, ga = gl2[x, y]
+                
                 if ga == 0:
                     res_px[x, y] = (br, bg, bb, ba)
                     continue
 
                 t = ga / 255.0
-                sr = 255 - int((255 - br) * (255 - gr) / 255)
-                sg = 255 - int((255 - bg) * (255 - gg) / 255)
-                sb = 255 - int((255 - bb) * (255 - gb) / 255)
+                
+                screen_r = 255 - int((255 - br) * (255 - gr) / 255)
+                screen_g = 255 - int((255 - bg) * (255 - gg) / 255)
+                screen_b = 255 - int((255 - bb) * (255 - gb) / 255)
 
-                nr = int(br + (sr - br) * t)
-                ng = int(bg + (sg - bg) * t)
-                nb = int(bb + (sb - bb) * t)
+                nr = int(br + (screen_r - br) * t)
+                ng = int(bg + (screen_g - bg) * t)
+                nb = int(bb + (screen_b - bb) * t)
 
                 res_px[x, y] = (min(255, nr), min(255, ng), min(255, nb), ba)
 
