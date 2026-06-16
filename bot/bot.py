@@ -1132,6 +1132,33 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
 
     return found
     
+def build_asset_keyboard(files: list, selected: list) -> InlineKeyboardMarkup:
+    """ساخت کیبورد با دکمه‌های سبز برای موارد انتخاب‌شده"""
+    selected_urls = {f["url"] for f in selected}
+    kb_rows = []
+    for i, file in enumerate(files):
+        is_selected = file["url"] in selected_urls
+        if is_selected:
+            btn_text = f"✅ {file['label']}"
+        else:
+            btn_text = file["label"]
+        kb_rows.append([
+            InlineKeyboardButton(
+                text=btn_text,
+                callback_data=f"asset_select:{i}"
+            )
+        ])
+
+    kb_rows.append([
+        InlineKeyboardButton(text="📤 ارسال انتخاب‌ها (حداکثر ۵)", callback_data="asset_send"),
+        InlineKeyboardButton(text="✅ ارسال همه", callback_data="asset_send_all"),
+    ])
+    kb_rows.append([
+        InlineKeyboardButton(text="❌ لغو", callback_data="asset_cancel")
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=kb_rows)
+
+
 @dp.message(F.text, lambda m: user_modes.get(m.from_user.id) == "minecraft_assets")
 async def handle_minecraft_asset_name(message: types.Message):
     if is_user_banned(message.from_user.id):
@@ -1157,36 +1184,24 @@ async def handle_minecraft_asset_name(message: types.Message):
         user_modes.pop(user_id, None)
         return
 
+    user_selections[user_id] = []
+    user_data[user_id] = {"files": found_files, "item_name": raw_input}
+
     # ساخت کیبورد
-    kb_rows = []
-    for i, file in enumerate(found_files):
-        kb_rows.append([
-            InlineKeyboardButton(
-                text=file["label"],
-                callback_data=f"asset_select:{i}"
-            )
-        ])
+    kb = build_asset_keyboard(found_files, user_selections[user_id])
 
-    kb_rows.append([
-        InlineKeyboardButton(text="📤 ارسال انتخاب‌ها (حداکثر ۵)", callback_data="asset_send"),
-        InlineKeyboardButton(text="✅ ارسال همه", callback_data="asset_send_all"),
-    ])
-    kb_rows.append([
-        InlineKeyboardButton(text="❌ لغو", callback_data="asset_cancel")
-    ])
-
-    kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
-
-    await message.answer(
+    sent = await message.answer(
         f"✅ <b>{len(found_files)} فایل پیدا شد!</b>\n"
         f"(جستجو در {len(names_to_search)} نام: {', '.join(names_to_search[:5])}{'...' if len(names_to_search) > 5 else ''})\n\n"
+        "🔘 <b>۰ از ۵ فایل انتخاب شده</b>\n"
         "فایل‌های مورد نظر رو انتخاب کن، سپس ارسال بزن:",
         reply_markup=kb,
         parse_mode="HTML"
     )
 
-    user_selections[user_id] = []
-    user_data[user_id] = {"files": found_files, "item_name": raw_input}
+    user_data[user_id]["msg_id"] = sent.message_id
+    user_data[user_id]["found_count"] = len(found_files)
+    user_data[user_id]["names_to_search"] = names_to_search
 
 
 @dp.callback_query(F.data.startswith("asset_select:"))
@@ -1206,14 +1221,36 @@ async def select_asset(callback: types.CallbackQuery):
     already = any(f["url"] == selected["url"] for f in user_selections[user_id])
 
     if already:
-        # toggle: حذف اگه قبلاً انتخاب شده
         user_selections[user_id] = [f for f in user_selections[user_id] if f["url"] != selected["url"]]
-        await callback.answer(f"❎ {selected['name']} از انتخاب حذف شد")
+        toast = f"❎ {selected['name']} از انتخاب حذف شد"
     elif len(user_selections[user_id]) >= 5:
         await callback.answer("⚠️ حداکثر ۵ فایل می‌تونی انتخاب کنی!", show_alert=True)
+        return
     else:
         user_selections[user_id].append(selected)
-        await callback.answer(f"✅ {selected['name']} انتخاب شد ({len(user_selections[user_id])}/5)")
+        toast = f"✅ {selected['name']} انتخاب شد ({len(user_selections[user_id])}/5)"
+
+    # به‌روزرسانی متن و کیبورد پیام
+    count = len(user_selections[user_id])
+    selected_names = "، ".join(f["name"] for f in user_selections[user_id]) if count > 0 else "هیچی انتخاب نشده"
+    names_to_search = user_data[user_id].get("names_to_search", [])
+    found_count = user_data[user_id].get("found_count", len(files))
+
+    new_text = (
+        f"✅ <b>{found_count} فایل پیدا شد!</b>\n"
+        f"(جستجو در {len(names_to_search)} نام: {', '.join(names_to_search[:5])}{'...' if len(names_to_search) > 5 else ''})\n\n"
+        f"🟢 <b>{count} از ۵ فایل انتخاب شده</b>\n"
+        f"{'📋 انتخاب‌ها: ' + selected_names if count > 0 else '🔘 هنوز چیزی انتخاب نشده'}\n\n"
+        "فایل‌های مورد نظر رو انتخاب کن، سپس ارسال بزن:"
+    )
+    new_kb = build_asset_keyboard(files, user_selections[user_id])
+
+    try:
+        await callback.message.edit_text(new_text, reply_markup=new_kb, parse_mode="HTML")
+    except Exception:
+        pass  # اگر متن تغییر نکرده باشه تلگرام خطا می‌ده، نادیده می‌گیریم
+
+    await callback.answer(toast)
 
 
 @dp.callback_query(F.data == "asset_send")
