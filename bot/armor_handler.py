@@ -198,23 +198,33 @@ def kb_enchant(enchanted: bool) -> InlineKeyboardMarkup:
 # ====================== IMAGE PROCESSING ======================
 def colorize_grayscale(img: Image.Image, color_rgb: tuple) -> Image.Image:
     """
-    رنگ‌آمیزی تکسچر trim با رنگ ماده.
-    فقط از کانال R استفاده می‌کند (trim های ماینکرافت در کانال R ذخیره‌اند).
+    رنگ‌آمیزی trim با رنگ ماده.
+    از روش HSL استفاده می‌کند:
+    - Hue و Saturation از رنگ ماده می‌آید
+    - Lightness از پیکسل اصلی trim حفظ می‌شود
+    این روش برای همه trim ها از جمله silence کار می‌کند.
     """
+    import colorsys
     rgba = img.convert("RGBA")
     w, h = rgba.size
     result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     src = rgba.load()
     dst = result.load()
     mr, mg, mb = color_rgb
+
+    # H و S رنگ ماده
+    mh, ms, ml = colorsys.rgb_to_hls(mr/255.0, mg/255.0, mb/255.0)
+
     for y in range(h):
         for x in range(w):
             r, g, b, a = src[x, y]
             if a == 0:
                 continue
-            # trim های ماینکرافت: شدت در کانال R ذخیره است نه luminance
-            intensity = r / 255.0
-            dst[x, y] = (int(mr * intensity), int(mg * intensity), int(mb * intensity), a)
+            # L (روشنایی) از پیکسل trim
+            _, pl, ps = colorsys.rgb_to_hls(r/255.0, g/255.0, b/255.0)
+            # ترکیب: H و S از ماده، L از trim
+            nr, ng, nb = colorsys.hls_to_rgb(mh, pl, ms)
+            dst[x, y] = (int(nr*255), int(ng*255), int(nb*255), a)
     return result
 
 def lighten_color(color_rgb: tuple, factor: float = 1.42) -> tuple:
