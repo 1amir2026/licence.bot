@@ -246,7 +246,7 @@ def apply_leather_color(base: Image.Image, overlay_path: Path, color_rgb: tuple)
 
 def apply_enchant_glint(img: Image.Image) -> Image.Image:
     """
-    افکت Enchant Glint واقعی با تکسچر ماینکرافت
+    افکت Enchant Glint واقعی — هوشمند و تطبیقی با روشنایی آرمور
     """
     base = img.convert("RGBA")
     w, h = base.size
@@ -254,14 +254,13 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
     glint_path = ARMORS_DIR / "enchanted_glint.png"
     
     if not glint_path.exists():
-        print(f"[armor] ⚠️ فایل enchanted_glint.png پیدا نشد: {glint_path}")
-        # fallback به glint ساده
-        return apply_enchant_glint_fallback(base)
+        print(f"[armor] ⚠️ فایل enchanted_glint.png پیدا نشد")
+        return base
 
     try:
         glint_tex = Image.open(glint_path).convert("RGBA")
         
-        # Tile کردن تکسچر (مهم!)
+        # Tile کردن بهتر
         if glint_tex.size != (w, h):
             tiled = Image.new("RGBA", (w, h), (0, 0, 0, 0))
             gw, gh = glint_tex.size
@@ -270,13 +269,28 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
                     tiled.paste(glint_tex, (tx, ty))
             glint_tex = tiled
 
-        GLINT_STRENGTH = 0.77   # ← این عدد رو تست کن (0.7 تا 1.0)
+        # محاسبه روشنایی متوسط آرمور برای تنظیم خودکار شدت
+        base_px = base.load()
+        total_brightness = 0
+        pixel_count = 0
+        
+        for y in range(h):
+            for x in range(w):
+                r, g, b, a = base_px[x, y]
+                if a > 50:  # فقط پیکسل‌های قابل دید
+                    total_brightness += (r + g + b) / 3
+                    pixel_count += 1
+        
+        avg_brightness = total_brightness / pixel_count if pixel_count > 0 else 128
+        brightness_factor = avg_brightness / 255.0
+
+        # شدت glint بر اساس نوع آرمور
+        GLINT_STRENGTH = 0.88 * (0.75 + 0.45 * brightness_factor)  # بین ۰.۶ تا ۱.۱
 
         # اعمال glint
         glint_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         gl_px = glint_layer.load()
         tex_px = glint_tex.load()
-        base_px = base.load()
 
         for y in range(h):
             for x in range(w):
@@ -284,9 +298,8 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
                 if ta == 0:
                     continue
                 intensity = (tr + tg + tb) / (3 * 255.0)
-                # فقط روی قسمت‌های غیرشفاف آرمور
                 armor_a = base_px[x, y][3]
-                if armor_a == 0:
+                if armor_a < 30:
                     continue
                 alpha = int(ta * (armor_a / 255.0) * GLINT_STRENGTH)
                 gl_px[x, y] = (103, 25, 255, min(255, alpha))
@@ -318,8 +331,8 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
         return result
 
     except Exception as e:
-        print(f"[armor] خطا در glint texture: {e}")
-        return apply_enchant_glint_fallback(base)
+        print(f"[armor] خطا در glint: {e}")
+        return base
 
 def apply_enchant_glint_fallback(base: Image.Image) -> Image.Image:
     """fallback ساده در صورت نبود فایل glint"""
