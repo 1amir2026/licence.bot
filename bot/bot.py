@@ -363,7 +363,15 @@ async def create_license(message: types.Message):
     session.commit()
     session.close()
 
-    await message.answer(f"✅ لایسنس جدید ساخته شد:\n\n`{key}`\n\nکپی کن و بفرست.")
+await message.answer(
+    f"<b>✅ لایسنس شما آماده است</b>\n\n"
+    f"<code>{key}</code>\n\n"
+    "⚠️ این لایسنس <b>یک‌بار مصرف</b> میباشد.\n"
+    "لطفاً آن را فقط در اکانتی وارد نمایید که از <b>امنیت آن اطمینان کامل</b> دارید.\n\n"
+    "⚠️ لایسنس ها مجدد ساخته نمیشوند. هیچ پاسخی از طرف بنده در قبال دریافت مجدد لایسنس پذیرا نخواهم شد\n\n"
+    "مبارکتون باشه 🌹",
+    parse_mode='HTML'
+)
 
 
 # ====================== LICENSE CHECK ======================
