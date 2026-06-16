@@ -197,22 +197,24 @@ def kb_enchant(enchanted: bool) -> InlineKeyboardMarkup:
 
 # ====================== IMAGE PROCESSING ======================
 def colorize_grayscale(img: Image.Image, color_rgb: tuple) -> Image.Image:
-    """رنگ‌آمیزی دقیق grayscale — فقط luminance استفاده می‌شود"""
+    """
+    رنگ‌آمیزی تکسچر trim با رنگ ماده.
+    فقط از کانال R استفاده می‌کند (trim های ماینکرافت در کانال R ذخیره‌اند).
+    """
     rgba = img.convert("RGBA")
     w, h = rgba.size
     result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     src = rgba.load()
     dst = result.load()
     mr, mg, mb = color_rgb
-    
     for y in range(h):
         for x in range(w):
             r, g, b, a = src[x, y]
             if a == 0:
                 continue
-            # luminance استاندارد
-            lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
-            dst[x, y] = (int(mr * lum), int(mg * lum), int(mb * lum), a)
+            # trim های ماینکرافت: شدت در کانال R ذخیره است نه luminance
+            intensity = r / 255.0
+            dst[x, y] = (int(mr * intensity), int(mg * intensity), int(mb * intensity), a)
     return result
 
 def lighten_color(color_rgb: tuple, factor: float = 1.42) -> tuple:
