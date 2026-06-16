@@ -1,25 +1,6 @@
 # ====================== ARMOR TRIM HANDLER ======================
-# قرار دادن کنار bot.py  →  /app/bot/armor_handler.py
-#
-# در bot.py:
-#   from armor_handler import register_armor_handlers
-#   register_armor_handlers(dp, bot)
-#   کیبورد: [KeyboardButton(text="🛡 ساخت آرمور با تریم")]
-#
-# ساختار پوشه armors/ کنار bot.py:
-#   armors/
-#     humanoid/
-#       leather.png                  ← تکسچر پایه چرم (خاکستری/سفید)
-#       leather_overlay.png          ← ماسک رنگ چرم (grayscale، روی leather.png رنگ می‌شود)
-#       iron.png, diamond.png, gold.png, chainmail.png, netherite.png
-#     humanoid_leggings/
-#       leather.png
-#       leather_overlay.png
-#       iron.png, diamond.png, ...
-#     trims/
-#       humanoid/          coat.png, dune.png, ...  (grayscale)
-#       humanoid_leggings/ coat.png, dune.png, ...
-#
+#  Kafan tarin armor make  minecraft
+#  baray estefade local :
 # pip install Pillow
 
 from pathlib import Path
@@ -214,30 +195,24 @@ def kb_enchant(enchanted: bool) -> InlineKeyboardMarkup:
 
 
 # ====================== IMAGE PROCESSING ======================
-
 def colorize_grayscale(img: Image.Image, color_rgb: tuple) -> Image.Image:
-    """
-    رنگ‌آمیزی تصویر با رنگ داده‌شده.
-    ابتدا تصویر به luminance خالص تبدیل می‌شود، سپس رنگ اعمال می‌شود.
-    این تضمین می‌کند رنگ اصلی تکسچر تأثیری نگذارد.
-    فرمول: output = color * (luminance / 255)
-    """
+    """رنگ‌آمیزی دقیق grayscale — فقط luminance استفاده می‌شود"""
     rgba = img.convert("RGBA")
     w, h = rgba.size
     result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     src = rgba.load()
     dst = result.load()
     mr, mg, mb = color_rgb
+    
     for y in range(h):
         for x in range(w):
             r, g, b, a = src[x, y]
             if a == 0:
                 continue
-            # luminance استاندارد — رنگ اصلی پیکسل نادیده گرفته می‌شود
+            # luminance استاندارد
             lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
             dst[x, y] = (int(mr * lum), int(mg * lum), int(mb * lum), a)
     return result
-
 
 def lighten_color(color_rgb: tuple, factor: float = 1.42) -> tuple:
     """
@@ -252,58 +227,19 @@ def lighten_color(color_rgb: tuple, factor: float = 1.42) -> tuple:
         min(255, int(b * factor)),
     )
 
-
 def apply_leather_color(base: Image.Image, overlay_path: Path, color_rgb: tuple) -> Image.Image:
-    """
-    رنگ‌آمیزی دقیق آرمور چرمی مثل ماینکرافت Java:
+    """رنگ‌آمیزی دقیق آرمور چرمی مثل ماینکرافت"""
+    # مرحله ۱: base را به grayscale تبدیل و رنگ‌آمیزی کن
+    result = colorize_grayscale(base, color_rgb)
 
-    مشکل: leather.png یک تکسچر رنگی است (قهوه‌ای/خاکستری).
-    اگر مستقیم colorize_grayscale بزنیم، رنگ اصلی تکسچر با رنگ
-    کاربر ضرب می‌شود و نتیجه اشتباه می‌دهد.
-
-    راه‌حل صحیح (مثل ماینکرافت Java):
-      ۱. leather.png را به grayscale تبدیل کن (فقط روشنایی بگیر)
-      ۲. آن grayscale را با رنگ کاربر رنگ کن  ← رنگ دقیق
-      ۳. leather_overlay.png را با رنگ روشن‌تر رنگ کن و روی نتیجه بگذار
-    """
-    # مرحله ۱: تبدیل به grayscale خالص (حفظ آلفا)
-    rgba = base.convert("RGBA")
-    w, h = rgba.size
-    gray_base = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    src = rgba.load()
-    dst = gray_base.load()
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = src[x, y]
-            if a == 0:
-                continue
-            # luminance استاندارد
-            lum = int(0.299 * r + 0.587 * g + 0.114 * b)
-            dst[x, y] = (lum, lum, lum, a)
-
-    # مرحله ۲: رنگ‌آمیزی grayscale با رنگ کاربر
-    result = colorize_grayscale(gray_base, color_rgb)
-
-    # مرحله ۳: overlay با رنگ روشن‌تر (highlight)
+    # مرحله ۲: overlay (highlight)
     if overlay_path and overlay_path.exists():
         overlay_img = Image.open(overlay_path).convert("RGBA")
-        if overlay_img.size != (w, h):
-            overlay_img = overlay_img.resize((w, h), Image.NEAREST)
-
-        # overlay هم باید grayscale شود قبل از رنگ‌آمیزی
-        ov_rgba = overlay_img.load()
-        gray_ov = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        gray_ov_px = gray_ov.load()
-        for y in range(h):
-            for x in range(w):
-                r, g, b, a = ov_rgba[x, y]
-                if a == 0:
-                    continue
-                lum = int(0.299 * r + 0.587 * g + 0.114 * b)
-                gray_ov_px[x, y] = (lum, lum, lum, a)
-
+        if overlay_img.size != base.size:
+            overlay_img = overlay_img.resize(base.size, Image.NEAREST)
+        
         highlight_color = lighten_color(color_rgb, factor=1.42)
-        colored_overlay = colorize_grayscale(gray_ov, highlight_color)
+        colored_overlay = colorize_grayscale(overlay_img, highlight_color)
         result = Image.alpha_composite(result, colored_overlay)
 
     return result
@@ -426,16 +362,18 @@ def build_layer(armor_key: str, leather_color_key: str,
         else:
             result = base.copy()
 
-        # مرحله ۳: تریم — با رنگ ماده تریم، کاملاً مستقل از رنگ چرم
+        # مرحله ۳: تریم — کاملاً مستقل
         if trim_name != "none":
             trim_path = ARMORS_DIR / "trims" / layer / f"{trim_name}.png"
             if trim_path.exists():
                 trim_img = Image.open(trim_path).convert("RGBA")
                 if trim_img.size != result.size:
                     trim_img = trim_img.resize(result.size, Image.NEAREST)
-                # mat_color = رنگ ماده تریم (emerald, diamond, ...)
-                # این کاملاً جدا از leather_color است
+                
+                # رنگ تریم را فقط روی خودش اعمال کن (بدون تأثیر از رنگ چرم)
                 colored_trim = colorize_grayscale(trim_img, mat_color)
+                
+                # alpha_composite درست — تریم روی آرمور
                 result = Image.alpha_composite(result, colored_trim)
             else:
                 print(f"[armor] ⚠️ تریم پیدا نشد: {trim_path}")
