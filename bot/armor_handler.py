@@ -308,149 +308,82 @@ def apply_leather_color(base: Image.Image, overlay_path: Path, color_rgb: tuple)
 
     return result
 
-
 def apply_enchant_glint(img: Image.Image) -> Image.Image:
     """
-    افکت enchant glint بنفش/آبی.
-    - آرمور روشن (iron, diamond): glint واضح
-    - آرمور تیره (netherite): glint ملایم ولی قابل دید
-    - آرمور چرمی: glint متوسط
+    افکت Enchant Glint واقعی با تکسچر ماینکرافت
     """
     base = img.convert("RGBA")
     w, h = base.size
-    GR, GG, GB = 103, 25, 255
-    MAX_ALPHA = 80    # حداکثر برای روشن‌ترین پیکسل‌ها
-    MIN_ALPHA = 30    # حداقل برای تاریک‌ترین (netherite همیشه دیده شود)
 
-    glint_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    src = base.load()
-    gl_px = glint_layer.load()
-
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = src[x, y]
-            if a == 0:
-                continue
-            intensity = (r + g + b) / (3 * 255.0)
-            # MIN_ALPHA تضمین می‌کند آرمور تیره هم glint دارد
-            glint_a = int(MIN_ALPHA + (MAX_ALPHA - MIN_ALPHA) * intensity)
-            gl_px[x, y] = (GR, GG, GB, min(255, glint_a))
-
-    # screen blend با وزن آلفای glint
-    result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    res = result.load()
-    gl2 = glint_layer.load()
-
-    for y in range(h):
-        for x in range(w):
-            br, bg, bb, ba = src[x, y]
-            gr, gg, gb, ga = gl2[x, y]
-            if ba == 0:
-                continue
-            t = ga / 255.0
-            screen_r = 255 - int((255 - br) * (255 - gr) / 255)
-            screen_g = 255 - int((255 - bg) * (255 - gg) / 255)
-            screen_b = 255 - int((255 - bb) * (255 - gb) / 255)
-            # blend بین base و screen با وزن t
-            nr = int(br + (screen_r - br) * t)
-            ng = int(bg + (screen_g - bg) * t)
-            nb = int(bb + (screen_b - bb) * t)
-            res[x, y] = (min(255, nr), min(255, ng), min(255, nb), ba)
-
-    return result
-
-
-def apply_enchant_glint(img: Image.Image) -> Image.Image:
-    """
-    اعمال enchanted_glint.png از فایل واقعی ماینکرافت.
-    
-    در ماینکرافت Java، glint با blend mode خاصی اعمال می‌شود:
-    - glint.png روی تمام سطح آرمور tile می‌شود
-    - فقط روی پیکسل‌های غیرشفاف آرمور نمایش داده می‌شود
-    - با آلفای ~50% و screen/additive blend
-    """
     glint_path = ARMORS_DIR / "enchanted_glint.png"
-    base = img.convert("RGBA")
-    w, h = base.size
+    
+    if not glint_path.exists():
+        print(f"[armor] ⚠️ فایل enchanted_glint.png پیدا نشد: {glint_path}")
+        # fallback به glint ساده
+        return apply_enchant_glint_fallback(base)
 
-    if glint_path.exists():
-        glint_src = Image.open(glint_path).convert("RGBA")
+    try:
+        glint_tex = Image.open(glint_path).convert("RGBA")
         
-        # tile کردن glint روی کل canvas اگر کوچک‌تر بود
-        if glint_src.size != (w, h):
+        # Tile کردن تکسچر (مهم!)
+        if glint_tex.size != (w, h):
             tiled = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-            gw, gh = glint_src.size
+            gw, gh = glint_tex.size
             for ty in range(0, h, gh):
                 for tx in range(0, w, gw):
-                    tiled.paste(glint_src, (tx, ty))
-            glint_src = tiled.crop((0, 0, w, h))
-        
-        # mask: فقط جایی که آرمور غیرشفاف است glint نمایش داده شود
-        armor_mask = base.split()[3]  # آلفای آرمور
-        
-        # آلفای glint را با mask آرمور ضرب کن + کاهش به 60%
-        glint_rgba = glint_src.copy()
-        glint_pixels = glint_rgba.load()
-        mask_pixels = armor_mask.load()
-        
+                    tiled.paste(glint_tex, (tx, ty))
+            glint_tex = tiled
+
+        GLINT_STRENGTH = 0.85   # ← این عدد رو تست کن (0.7 تا 1.0)
+
+        # اعمال glint
+        glint_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        gl_px = glint_layer.load()
+        tex_px = glint_tex.load()
+        base_px = base.load()
+
         for y in range(h):
             for x in range(w):
-                gr, gg, gb, ga = glint_pixels[x, y]
-                armor_a = mask_pixels[x, y]
-                # glint فقط روی آرمور، با 60% شفافیت
-                new_a = int(ga * (armor_a / 255.0) * 0.60)
-                glint_pixels[x, y] = (gr, gg, gb, new_a)
-        
-        # screen blend: glint روی آرمور
-        result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        src_px = base.load()
-        gl_px = glint_rgba.load()
-        res_px = result.load()
-        
-        for y in range(h):
-            for x in range(w):
-                br, bg, bb, ba = src_px[x, y]
-                gr, gg, gb, ga = gl_px[x, y]
-                if ba == 0:
+                tr, tg, tb, ta = tex_px[x, y]
+                if ta == 0:
                     continue
+                intensity = (tr + tg + tb) / (3 * 255.0)
+                # فقط روی قسمت‌های غیرشفاف آرمور
+                armor_a = base_px[x, y][3]
+                if armor_a == 0:
+                    continue
+                alpha = int(ta * (armor_a / 255.0) * GLINT_STRENGTH)
+                gl_px[x, y] = (103, 25, 255, min(255, alpha))
+
+        # Screen Blend
+        result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        res_px = result.load()
+        gl2 = glint_layer.load()
+
+        for y in range(h):
+            for x in range(w):
+                br, bg, bb, ba = base_px[x, y]
+                gr, gg, gb, ga = gl2[x, y]
+                if ga == 0:
+                    res_px[x, y] = (br, bg, bb, ba)
+                    continue
+
                 t = ga / 255.0
-                # screen blend
                 sr = 255 - int((255 - br) * (255 - gr) / 255)
                 sg = 255 - int((255 - bg) * (255 - gg) / 255)
                 sb = 255 - int((255 - bb) * (255 - gb) / 255)
-                # mix بین base و screen
+
                 nr = int(br + (sr - br) * t)
                 ng = int(bg + (sg - bg) * t)
                 nb = int(bb + (sb - bb) * t)
+
                 res_px[x, y] = (min(255, nr), min(255, ng), min(255, nb), ba)
-        
+
         return result
 
-    else:
-        # fallback اگر فایل نبود: glint ساده بنفش
-        print(f"[armor] ⚠️ enchanted_glint.png پیدا نشد: {glint_path}")
-        result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        src_px = base.load()
-        res_px = result.load()
-        GR, GG, GB = 103, 25, 255
-        for y in range(h):
-            for x in range(w):
-                br, bg, bb, ba = src_px[x, y]
-                if ba == 0:
-                    continue
-                intensity = (r + g + b) / (3 * 255.0) if False else (br + bg + bb) / (3 * 255.0)
-                t = 0.25 + 0.20 * intensity
-                sr = 255 - int((255 - br) * (255 - GR) / 255)
-                sg = 255 - int((255 - bg) * (255 - GG) / 255)
-                sb = 255 - int((255 - bb) * (255 - GB) / 255)
-                res_px[x, y] = (
-                    min(255, int(br + (sr - br) * t)),
-                    min(255, int(bg + (sg - bg) * t)),
-                    min(255, int(bb + (sb - bb) * t)),
-                    ba
-                )
-        return result
-
+    except Exception as e:
+        print(f"[armor] خطا در glint texture: {e}")
+        return apply_enchant_glint_fallback(base)
 
 def build_layer(armor_key: str, leather_color_key: str,
                 trim_name: str, mat_color: tuple, layer: str,
