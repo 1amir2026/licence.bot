@@ -270,7 +270,7 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
                     tiled.paste(glint_tex, (tx, ty))
             glint_tex = tiled
 
-        GLINT_STRENGTH = 0.85   # ← این عدد رو تست کن (0.7 تا 1.0)
+        GLINT_STRENGTH = 0.92   # ← این عدد رو تست کن (0.7 تا 1.0)
 
         # اعمال glint
         glint_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
@@ -320,6 +320,32 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
     except Exception as e:
         print(f"[armor] خطا در glint texture: {e}")
         return apply_enchant_glint_fallback(base)
+
+def apply_enchant_glint_fallback(base: Image.Image) -> Image.Image:
+    """fallback ساده در صورت نبود فایل glint"""
+    print("[armor] استفاده از glint fallback")
+    w, h = base.size
+    GR, GG, GB = 103, 25, 255
+    result = base.copy()
+    px = result.load()
+    
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            intensity = (r + g + b) / (3 * 255.0)
+            t = 0.22 + 0.18 * intensity  # شدت ملایم fallback
+            sr = 255 - int((255 - r) * (255 - GR) / 255)
+            sg = 255 - int((255 - g) * (255 - GG) / 255)
+            sb = 255 - int((255 - b) * (255 - GB) / 255)
+            px[x, y] = (
+                min(255, int(r + (sr - r) * t)),
+                min(255, int(g + (sg - g) * t)),
+                min(255, int(b + (sb - b) * t)),
+                a
+            )
+    return result
 
 def build_layer(armor_key: str, leather_color_key: str,
                 trim_name: str, mat_color: tuple, layer: str,
