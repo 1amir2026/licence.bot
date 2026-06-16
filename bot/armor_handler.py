@@ -203,24 +203,44 @@ def colorize_grayscale(img: Image.Image, color_rgb: tuple) -> Image.Image:
     return result
 
 
+def lighten_color(color_rgb: tuple, factor: float = 1.42) -> tuple:
+    """
+    رنگ روشن‌تر برای overlay چرم.
+    ماینکرافت از فاکتور ~1.42 استفاده می‌کند (مقدار دقیق از کد Java).
+    مقادیر بالاتر از 255 کلمپ می‌شوند.
+    """
+    r, g, b = color_rgb
+    return (
+        min(255, int(r * factor)),
+        min(255, int(g * factor)),
+        min(255, int(b * factor)),
+    )
+
+
 def apply_leather_color(base: Image.Image, overlay_path: Path, color_rgb: tuple) -> Image.Image:
     """
-    رنگ‌آمیزی آرمور چرمی:
-    1. base = leather.png (تکسچر پایه، معمولاً خاکستری)
-    2. overlay = leather_overlay.png (ماسک grayscale)
-    3. overlay را با رنگ انتخابی رنگ‌آمیزی کن
-    4. overlay رنگ‌شده را روی base بگذار
+    رنگ‌آمیزی دقیق آرمور چرمی مثل ماینکرافت Java:
+
+    مرحله ۱: leather.png را با رنگ اصلی کاربر رنگ کن
+             (colorize_grayscale → هر پیکسل = color * intensity)
+
+    مرحله ۲: leather_overlay.png را با رنگ روشن‌تر (highlight) رنگ کن
+             و روی نتیجه مرحله ۱ بگذار
+
+    نتیجه: بدنه آرمور رنگ اصلی دارد، لبه‌ها/جزئیات روشن‌تر هستند.
     """
-    result = base.convert("RGBA").copy()
+    # مرحله ۱: رنگ‌آمیزی base با رنگ اصلی
+    result = colorize_grayscale(base, color_rgb)
+
+    # مرحله ۲: overlay با رنگ روشن‌تر
     if overlay_path and overlay_path.exists():
         overlay_img = Image.open(overlay_path).convert("RGBA")
         if overlay_img.size != base.size:
             overlay_img = overlay_img.resize(base.size, Image.NEAREST)
-        colored_overlay = colorize_grayscale(overlay_img, color_rgb)
+        highlight_color = lighten_color(color_rgb, factor=1.42)
+        colored_overlay = colorize_grayscale(overlay_img, highlight_color)
         result = Image.alpha_composite(result, colored_overlay)
-    else:
-        # اگر overlay نبود، خود base را رنگ‌آمیزی کن
-        result = colorize_grayscale(base, color_rgb)
+
     return result
 
 
@@ -500,3 +520,4 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             await cb.message.answer("✅ آرمور با موفقیت ساخته شد!")
 
         armor_build_state.pop(uid, None)
+
