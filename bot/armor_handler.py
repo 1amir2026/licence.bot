@@ -288,7 +288,12 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
     base = img.convert("RGBA")
     w, h = base.size
     GR, GG, GB = 103, 25, 255
-    MAX_ALPHA = 78   # حداکثر آلفای glint (کاهش از 90 به 55)
+    MAX_ALPHA = 85
+    
+    
+    
+    
+    # حداکثر آلفای glint (کاهش از 90 به 55)
 
     glint_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     src = base.load()
