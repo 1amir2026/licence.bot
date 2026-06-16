@@ -391,10 +391,9 @@ def build_layer(armor_key: str, leather_color_key: str,
                 trim_img = Image.open(trim_path).convert("RGBA")
                 if trim_img.size != result.size:
                     trim_img = trim_img.resize(result.size, Image.NEAREST)
-                
-colored_trim = colorize_grayscale(trim_img, mat_color)
-                # trim را با blend دستی overlay کن نه alpha_composite
-                # چون trim های مثل silence آلفای 255 دارند و کل آرمور را می‌پوشانند
+                colored_trim = colorize_grayscale(trim_img, mat_color)
+                # blend دستی به جای alpha_composite
+                # چون trim هایی مثل silence آلفای 255 دارند و کل آرمور را می‌پوشانند
                 res_px = result.load()
                 tr_px = colored_trim.load()
                 tw, th = result.size
@@ -410,7 +409,7 @@ colored_trim = colorize_grayscale(trim_img, mat_color)
                             int(bg + (tg - bg) * t),
                             int(bb + (tb - bb) * t),
                             ba if ba > 0 else ta
-        )
+                        )
             else:
                 print(f"[armor] ⚠️ تریم پیدا نشد: {trim_path}")
 
