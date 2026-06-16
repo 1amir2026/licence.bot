@@ -207,7 +207,7 @@ function addCube(origin, size, uvData, rot3x3, pivot, groupName, materialName) {
   faces_out.push(`g ${groupName || "cube_" + groupCounter++}`);
   faces_out.push(`usemtl ${materialName || "mat_default"}`);
 
-  filteredFaces.forEach(({ key, vi, nk }) {
+  filteredFaces.forEach(({ key, vi, nk }) => {
     const uv = uvData[key] || uvData[nk];
     if (!uv) return;  // فیس حذف شده
 
