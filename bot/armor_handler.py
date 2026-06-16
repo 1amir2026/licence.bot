@@ -1,23 +1,5 @@
 # ====================== ARMOR TRIM HANDLER ======================
-# قرار دادن این فایل کنار bot.py
-#
-# در bot.py اضافه کنید:
-#   from armor_handler import register_armor_handlers
-#   register_armor_handlers(dp, bot)
-#
-# دکمه جدید در کیبورد (تابع check_license):
-#   [KeyboardButton(text="🛡 ساخت آرمور با تریم")]
-#
-# ساختار پوشه (کنار bot.py):
-#   armors/
-#     humanoid/            ← layer 1 آرمور: diamond.png, iron.png, ...
-#     humanoid_leggings/   ← layer 2 آرمور: diamond.png, iron.png, ...
-#     trims/
-#       humanoid/          ← تریم grayscale layer 1: coast.png, dune.png, ...
-#       humanoid_leggings/ ← تریم grayscale layer 2: coast.png, dune.png, ...
-#
-# pip install Pillow
-
+# connected to bot.py - va inke
 from pathlib import Path
 import io
 
@@ -32,11 +14,10 @@ except ImportError:
 
 # ====================== CONSTANTS ======================
 
-ARMOR_TYPES = ["wooden", "stone", "iron", "chainmail", "golden", "diamond", "netherite"]
+ARMOR_TYPES = ["leather", "iron", "chainmail", "golden", "diamond", "netherite"]
 
 ARMOR_FILE_MAP = {
-    "wooden":    "wooden",
-    "stone":     "stone",
+    "leather":    "leather",
     "iron":      "iron",
     "chainmail": "chainmail",
     "golden":    "gold",
