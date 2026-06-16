@@ -1,7 +1,24 @@
 # ====================== ARMOR TRIM HANDLER ======================
-#   →  /app/bot/armor_handler.py
+# قرار دادن کنار bot.py  →  /app/bot/armor_handler.py
 #
-# 
+# در bot.py:
+#   from armor_handler import register_armor_handlers
+#   register_armor_handlers(dp, bot)
+#   کیبورد: [KeyboardButton(text="🛡 ساخت آرمور با تریم")]
+#
+# ساختار پوشه armors/ کنار bot.py:
+#   armors/
+#     humanoid/
+#       leather.png                  ← تکسچر پایه چرم (خاکستری/سفید)
+#       leather_overlay.png          ← ماسک رنگ چرم (grayscale، روی leather.png رنگ می‌شود)
+#       iron.png, diamond.png, gold.png, chainmail.png, netherite.png
+#     humanoid_leggings/
+#       leather.png
+#       leather_overlay.png
+#       iron.png, diamond.png, ...
+#     trims/
+#       humanoid/          coat.png, dune.png, ...  (grayscale)
+#       humanoid_leggings/ coat.png, dune.png, ...
 #
 # pip install Pillow
 
@@ -266,12 +283,12 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
     افکت enchant glint بنفش/آبی روی تکسچر آرمور.
     فقط روی پیکسل‌های غیرشفاف اعمال می‌شود.
     از screen blend mode استفاده می‌کند مثل ماینکرافت.
-    رنگ glint: بنفش آبی (103, 25, 255) با آلفای متغیر.
+    آلفا کاملاً وابسته به روشنایی پیکسل است — آرمور تیره glint کمتری می‌گیرد.
     """
     base = img.convert("RGBA")
     w, h = base.size
     GR, GG, GB = 103, 25, 255
-    BASE_ALPHA = 90
+    MAX_ALPHA = 55   # حداکثر آلفای glint (کاهش از 90 به 55)
 
     glint_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     src = base.load()
@@ -282,11 +299,12 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
             r, g, b, a = src[x, y]
             if a == 0:
                 continue
+            # آلفا فقط از روشنایی پیکسل — پیکسل تیره = glint خیلی کم
             intensity = (r + g + b) / (3 * 255.0)
-            glint_a = int(BASE_ALPHA * (0.4 + 0.6 * intensity))
+            glint_a = int(MAX_ALPHA * (intensity ** 1.5))  # توان 1.5 → تیره‌ها خیلی کمتر
             gl_px[x, y] = (GR, GG, GB, min(255, glint_a))
 
-    # screen blend: result = 1 - (1-base)*(1-glint)
+    # screen blend
     result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     res = result.load()
     gl2 = glint_layer.load()
@@ -297,9 +315,10 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
             gr, gg, gb, ga = gl2[x, y]
             if ba == 0:
                 continue
-            nr = 255 - int((255 - br) * (255 - gr) / 255)
-            ng = 255 - int((255 - bg) * (255 - gg) / 255)
-            nb = 255 - int((255 - bb) * (255 - gb) / 255)
+            t = ga / 255.0
+            nr = int(br + (255 - int((255 - br) * (255 - gr) / 255) - br) * t)
+            ng = int(bg + (255 - int((255 - bg) * (255 - gg) / 255) - bg) * t)
+            nb = int(bb + (255 - int((255 - bb) * (255 - gb) / 255) - bb) * t)
             res[x, y] = (min(255, nr), min(255, ng), min(255, nb), ba)
 
     return result
@@ -621,3 +640,4 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             await cb.message.answer("✅ آرمور با موفقیت ساخته شد!")
 
         armor_build_state.pop(uid, None)
+
