@@ -217,9 +217,10 @@ def kb_enchant(enchanted: bool) -> InlineKeyboardMarkup:
 
 def colorize_grayscale(img: Image.Image, color_rgb: tuple) -> Image.Image:
     """
-    رنگ‌آمیزی یک تصویر grayscale با رنگ داده‌شده.
-    فرمول: new = color * (gray / 255)
-    آلفا حفظ می‌شود.
+    رنگ‌آمیزی تصویر با رنگ داده‌شده.
+    ابتدا تصویر به luminance خالص تبدیل می‌شود، سپس رنگ اعمال می‌شود.
+    این تضمین می‌کند رنگ اصلی تکسچر تأثیری نگذارد.
+    فرمول: output = color * (luminance / 255)
     """
     rgba = img.convert("RGBA")
     w, h = rgba.size
@@ -232,8 +233,9 @@ def colorize_grayscale(img: Image.Image, color_rgb: tuple) -> Image.Image:
             r, g, b, a = src[x, y]
             if a == 0:
                 continue
-            intensity = (r + g + b) / (3 * 255.0)
-            dst[x, y] = (int(mr * intensity), int(mg * intensity), int(mb * intensity), a)
+            # luminance استاندارد — رنگ اصلی پیکسل نادیده گرفته می‌شود
+            lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+            dst[x, y] = (int(mr * lum), int(mg * lum), int(mb * lum), a)
     return result
 
 
@@ -255,24 +257,53 @@ def apply_leather_color(base: Image.Image, overlay_path: Path, color_rgb: tuple)
     """
     رنگ‌آمیزی دقیق آرمور چرمی مثل ماینکرافت Java:
 
-    مرحله ۱: leather.png را با رنگ اصلی کاربر رنگ کن
-             (colorize_grayscale → هر پیکسل = color * intensity)
+    مشکل: leather.png یک تکسچر رنگی است (قهوه‌ای/خاکستری).
+    اگر مستقیم colorize_grayscale بزنیم، رنگ اصلی تکسچر با رنگ
+    کاربر ضرب می‌شود و نتیجه اشتباه می‌دهد.
 
-    مرحله ۲: leather_overlay.png را با رنگ روشن‌تر (highlight) رنگ کن
-             و روی نتیجه مرحله ۱ بگذار
-
-    نتیجه: بدنه آرمور رنگ اصلی دارد، لبه‌ها/جزئیات روشن‌تر هستند.
+    راه‌حل صحیح (مثل ماینکرافت Java):
+      ۱. leather.png را به grayscale تبدیل کن (فقط روشنایی بگیر)
+      ۲. آن grayscale را با رنگ کاربر رنگ کن  ← رنگ دقیق
+      ۳. leather_overlay.png را با رنگ روشن‌تر رنگ کن و روی نتیجه بگذار
     """
-    # مرحله ۱: رنگ‌آمیزی base با رنگ اصلی
-    result = colorize_grayscale(base, color_rgb)
+    # مرحله ۱: تبدیل به grayscale خالص (حفظ آلفا)
+    rgba = base.convert("RGBA")
+    w, h = rgba.size
+    gray_base = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    src = rgba.load()
+    dst = gray_base.load()
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = src[x, y]
+            if a == 0:
+                continue
+            # luminance استاندارد
+            lum = int(0.299 * r + 0.587 * g + 0.114 * b)
+            dst[x, y] = (lum, lum, lum, a)
 
-    # مرحله ۲: overlay با رنگ روشن‌تر
+    # مرحله ۲: رنگ‌آمیزی grayscale با رنگ کاربر
+    result = colorize_grayscale(gray_base, color_rgb)
+
+    # مرحله ۳: overlay با رنگ روشن‌تر (highlight)
     if overlay_path and overlay_path.exists():
         overlay_img = Image.open(overlay_path).convert("RGBA")
-        if overlay_img.size != base.size:
-            overlay_img = overlay_img.resize(base.size, Image.NEAREST)
+        if overlay_img.size != (w, h):
+            overlay_img = overlay_img.resize((w, h), Image.NEAREST)
+
+        # overlay هم باید grayscale شود قبل از رنگ‌آمیزی
+        ov_rgba = overlay_img.load()
+        gray_ov = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        gray_ov_px = gray_ov.load()
+        for y in range(h):
+            for x in range(w):
+                r, g, b, a = ov_rgba[x, y]
+                if a == 0:
+                    continue
+                lum = int(0.299 * r + 0.587 * g + 0.114 * b)
+                gray_ov_px[x, y] = (lum, lum, lum, a)
+
         highlight_color = lighten_color(color_rgb, factor=1.42)
-        colored_overlay = colorize_grayscale(overlay_img, highlight_color)
+        colored_overlay = colorize_grayscale(gray_ov, highlight_color)
         result = Image.alpha_composite(result, colored_overlay)
 
     return result
