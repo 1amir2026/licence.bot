@@ -280,20 +280,16 @@ def apply_leather_color(base: Image.Image, overlay_path: Path, color_rgb: tuple)
 
 def apply_enchant_glint(img: Image.Image) -> Image.Image:
     """
-    افکت enchant glint بنفش/آبی روی تکسچر آرمور.
-    فقط روی پیکسل‌های غیرشفاف اعمال می‌شود.
-    از screen blend mode استفاده می‌کند مثل ماینکرافت.
-    آلفا کاملاً وابسته به روشنایی پیکسل است — آرمور تیره glint کمتری می‌گیرد.
+    افکت enchant glint بنفش/آبی.
+    - آرمور روشن (iron, diamond): glint واضح
+    - آرمور تیره (netherite): glint ملایم ولی قابل دید
+    - آرمور چرمی: glint متوسط
     """
     base = img.convert("RGBA")
     w, h = base.size
     GR, GG, GB = 103, 25, 255
-    MAX_ALPHA = 85
-    
-    
-    
-    
-    # حداکثر آلفای glint (کاهش از 90 به 55)
+    MAX_ALPHA = 80    # حداکثر برای روشن‌ترین پیکسل‌ها
+    MIN_ALPHA = 30    # حداقل برای تاریک‌ترین (netherite همیشه دیده شود)
 
     glint_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     src = base.load()
@@ -304,12 +300,12 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
             r, g, b, a = src[x, y]
             if a == 0:
                 continue
-            # آلفا فقط از روشنایی پیکسل — پیکسل تیره = glint خیلی کم
             intensity = (r + g + b) / (3 * 255.0)
-            glint_a = int(MAX_ALPHA * (intensity ** 1.5))  # توان 1.5 → تیره‌ها خیلی کمتر
+            # MIN_ALPHA تضمین می‌کند آرمور تیره هم glint دارد
+            glint_a = int(MIN_ALPHA + (MAX_ALPHA - MIN_ALPHA) * intensity)
             gl_px[x, y] = (GR, GG, GB, min(255, glint_a))
 
-    # screen blend
+    # screen blend با وزن آلفای glint
     result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     res = result.load()
     gl2 = glint_layer.load()
@@ -321,9 +317,13 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
             if ba == 0:
                 continue
             t = ga / 255.0
-            nr = int(br + (255 - int((255 - br) * (255 - gr) / 255) - br) * t)
-            ng = int(bg + (255 - int((255 - bg) * (255 - gg) / 255) - bg) * t)
-            nb = int(bb + (255 - int((255 - bb) * (255 - gb) / 255) - bb) * t)
+            screen_r = 255 - int((255 - br) * (255 - gr) / 255)
+            screen_g = 255 - int((255 - bg) * (255 - gg) / 255)
+            screen_b = 255 - int((255 - bb) * (255 - gb) / 255)
+            # blend بین base و screen با وزن t
+            nr = int(br + (screen_r - br) * t)
+            ng = int(bg + (screen_g - bg) * t)
+            nb = int(bb + (screen_b - bb) * t)
             res[x, y] = (min(255, nr), min(255, ng), min(255, nb), ba)
 
     return result
@@ -645,4 +645,3 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             await cb.message.answer("✅ آرمور با موفقیت ساخته شد!")
 
         armor_build_state.pop(uid, None)
-
