@@ -270,7 +270,7 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
                     tiled.paste(glint_tex, (tx, ty))
             glint_tex = tiled
 
-        GLINT_STRENGTH = 0.92   # ← این عدد رو تست کن (0.7 تا 1.0)
+        GLINT_STRENGTH = 0.77   # ← این عدد رو تست کن (0.7 تا 1.0)
 
         # اعمال glint
         glint_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
