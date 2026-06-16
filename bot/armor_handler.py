@@ -1,4 +1,7 @@
 # ====================== ARMOR TRIM HANDLER ======================
+#   →  /app/bot/armor_handler.py
+#
+# 
 #
 # pip install Pillow
 
@@ -173,6 +176,20 @@ def kb_material(current: str) -> InlineKeyboardMarkup:
             callback_data="a_mat_cycle"
         )],
         [InlineKeyboardButton(
+            text="➡️ مرحله بعد: اینچنت",
+            callback_data="a_to_enchant"
+        )],
+    ])
+
+
+def kb_enchant(enchanted: bool) -> InlineKeyboardMarkup:
+    status = "✨ روشن" if enchanted else "⬛ خاموش"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"🔄 اینچنت: {status}",
+            callback_data="a_enchant_toggle"
+        )],
+        [InlineKeyboardButton(
             text="✅ پایان و ساخت آرمور",
             callback_data="a_finish"
         )],
@@ -244,12 +261,57 @@ def apply_leather_color(base: Image.Image, overlay_path: Path, color_rgb: tuple)
     return result
 
 
+def apply_enchant_glint(img: Image.Image) -> Image.Image:
+    """
+    افکت enchant glint بنفش/آبی روی تکسچر آرمور.
+    فقط روی پیکسل‌های غیرشفاف اعمال می‌شود.
+    از screen blend mode استفاده می‌کند مثل ماینکرافت.
+    رنگ glint: بنفش آبی (103, 25, 255) با آلفای متغیر.
+    """
+    base = img.convert("RGBA")
+    w, h = base.size
+    GR, GG, GB = 103, 25, 255
+    BASE_ALPHA = 90
+
+    glint_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    src = base.load()
+    gl_px = glint_layer.load()
+
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = src[x, y]
+            if a == 0:
+                continue
+            intensity = (r + g + b) / (3 * 255.0)
+            glint_a = int(BASE_ALPHA * (0.4 + 0.6 * intensity))
+            gl_px[x, y] = (GR, GG, GB, min(255, glint_a))
+
+    # screen blend: result = 1 - (1-base)*(1-glint)
+    result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    res = result.load()
+    gl2 = glint_layer.load()
+
+    for y in range(h):
+        for x in range(w):
+            br, bg, bb, ba = src[x, y]
+            gr, gg, gb, ga = gl2[x, y]
+            if ba == 0:
+                continue
+            nr = 255 - int((255 - br) * (255 - gr) / 255)
+            ng = 255 - int((255 - bg) * (255 - gg) / 255)
+            nb = 255 - int((255 - bb) * (255 - gb) / 255)
+            res[x, y] = (min(255, nr), min(255, ng), min(255, nb), ba)
+
+    return result
+
+
 def build_layer(armor_key: str, leather_color_key: str,
-                trim_name: str, mat_color: tuple, layer: str) -> bytes | None:
+                trim_name: str, mat_color: tuple, layer: str,
+                enchanted: bool = False) -> bytes | None:
     """
     ساخت یک لایه نهایی آرمور:
-    - اگر چرم: base + overlay رنگ‌شده + تریم رنگ‌شده
-    - سایرین: base + تریم رنگ‌شده
+    - اگر چرم: base رنگ‌شده + overlay highlight + تریم + (glint)
+    - سایرین: base + تریم + (glint)
     """
     if not PIL_AVAILABLE:
         return None
@@ -284,6 +346,10 @@ def build_layer(armor_key: str, leather_color_key: str,
             else:
                 print(f"[armor] ⚠️ تریم پیدا نشد: {trim_path}")
 
+        # اعمال enchant glint
+        if enchanted:
+            result = apply_enchant_glint(result)
+
         buf = io.BytesIO()
         result.save(buf, format="PNG")
         buf.seek(0)
@@ -315,6 +381,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             "leather_color": "none",
             "trim":          0,
             "material":      list(TRIM_MATERIALS.keys())[0],
+            "enchanted":     False,
         }
         await message.answer(
             "🛡 <b>مرحله ۱ — نوع آرمور</b>\n\n"
@@ -428,11 +495,15 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
 
         trim_name = ARMOR_TRIMS[s["trim"]]
         if trim_name == "none":
+            # بدون تریم → مستقیم به مرحله اینچنت
             await cb.message.edit_text(
-                "⚙️ تریم <b>none</b> — ساخت آرمور بدون تریم...",
-                parse_mode="HTML"
+                f"✨ <b>مرحله آخر — اینچنت</b>\n\n"
+                f"آرمور: <b>{s['armor'].upper()}</b>  |  تریم: <b>none</b>\n\n"
+                f"آیا می‌خواهید آرمور اینچنت باشد؟\n"
+                f"(افکت بنفش درخشان روی تکسچر)",
+                parse_mode="HTML",
+                reply_markup=kb_enchant(s.get("enchanted", False)),
             )
-            await _build_and_send(cb, s)
             return
 
         await cb.message.edit_text(
@@ -457,6 +528,35 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         await cb.message.edit_reply_markup(reply_markup=kb_material(s["material"]))
         await cb.answer(s["material"])
 
+    @dp.callback_query(F.data == "a_to_enchant")
+    async def to_enchant(cb: types.CallbackQuery):
+        uid = cb.from_user.id
+        s = armor_build_state.get(uid)
+        if not s:
+            await cb.answer("دوباره از منو شروع کنید.", show_alert=True); return
+        trim_name = ARMOR_TRIMS[s["trim"]]
+        await cb.message.edit_text(
+            f"✨ <b>مرحله آخر — اینچنت</b>\n\n"
+            f"آرمور: <b>{s['armor'].upper()}</b>  |  تریم: <b>{trim_name}</b>  |  ماده: <b>{s['material']}</b>\n\n"
+            f"آیا می‌خواهید آرمور اینچنت باشد؟\n"
+            f"(افکت بنفش درخشان روی تکسچر)",
+            parse_mode="HTML",
+            reply_markup=kb_enchant(s.get("enchanted", False)),
+        )
+
+    # ─── مرحله آخر: toggle اینچنت ────────────────────────────────
+
+    @dp.callback_query(F.data == "a_enchant_toggle")
+    async def enchant_toggle(cb: types.CallbackQuery):
+        uid = cb.from_user.id
+        s = armor_build_state.get(uid)
+        if not s:
+            await cb.answer("خطا", show_alert=True); return
+        s["enchanted"] = not s.get("enchanted", False)
+        await cb.message.edit_reply_markup(reply_markup=kb_enchant(s["enchanted"]))
+        status = "✨ روشن" if s["enchanted"] else "⬛ خاموش"
+        await cb.answer(f"اینچنت: {status}")
+
     @dp.callback_query(F.data == "a_finish")
     async def finish(cb: types.CallbackQuery):
         uid = cb.from_user.id
@@ -469,11 +569,12 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
 
     async def _build_and_send(cb: types.CallbackQuery, s: dict):
         uid = cb.from_user.id
-        armor        = s["armor"]
-        leather_color= s.get("leather_color", "none")
-        trim_name    = ARMOR_TRIMS[s["trim"]]
-        material     = s["material"]
-        mat_color    = TRIM_MATERIALS.get(material, (255, 255, 255))
+        armor         = s["armor"]
+        leather_color = s.get("leather_color", "none")
+        trim_name     = ARMOR_TRIMS[s["trim"]]
+        material      = s["material"]
+        mat_color     = TRIM_MATERIALS.get(material, (255, 255, 255))
+        enchanted     = s.get("enchanted", False)
 
         await cb.message.answer("⏳ در حال ساخت تکسچر آرمور...")
 
@@ -485,7 +586,6 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             armor_build_state.pop(uid, None)
             return
 
-        # ساخت caption
         lines = [f"🛡 <b>{armor.upper()}</b>"]
         if armor == "leather":
             fa    = LEATHER_COLOR_NAMES_FA.get(leather_color, leather_color)
@@ -494,6 +594,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         lines.append(f"تریم: <b>{trim_name}</b>")
         if trim_name != "none":
             lines.append(f"ماده تریم: <b>{material}</b>")
+        lines.append(f"اینچنت: {'✨ بله' if enchanted else '⬛ خیر'}")
         caption = "\n".join(lines)
 
         sent = 0
@@ -501,7 +602,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             ("humanoid",          "Layer 1 — Main Body", "🔵"),
             ("humanoid_leggings", "Layer 2 — Leggings",  "🟢"),
         ]:
-            data = build_layer(armor, leather_color, trim_name, mat_color, layer)
+            data = build_layer(armor, leather_color, trim_name, mat_color, layer, enchanted)
             if data:
                 await cb.message.answer_document(
                     types.BufferedInputFile(data, filename=f"{armor}_{layer}.png"),
@@ -520,4 +621,3 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             await cb.message.answer("✅ آرمور با موفقیت ساخته شد!")
 
         armor_build_state.pop(uid, None)
-
