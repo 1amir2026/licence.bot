@@ -247,7 +247,8 @@ def apply_leather_color(base: Image.Image, overlay_path: Path, color_rgb: tuple)
 
 def apply_enchant_glint(img: Image.Image) -> Image.Image:
     """
-    افکت Enchant Glint — نسخه متعادل و تطبیقی (بر اساس نسخه‌ای که راضی بودی)
+    افکت Enchant Glint واقعی با تکسچر استخراج‌شده از ماینکرافت
+    (شبیه Mine-imator و خود بازی)
     """
     base = img.convert("RGBA")
     w, h = base.size
@@ -256,51 +257,35 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
     
     if not glint_path.exists():
         print(f"[armor] ⚠️ فایل enchanted_glint.png پیدا نشد")
-        return base
+        return base  # fallback
 
     try:
         glint_tex = Image.open(glint_path).convert("RGBA")
         
-        # Tile کردن (مهم برای تکرار الگو)
+        # تطبیق اندازه با روش پیکسلی (مهم برای تکسچر ماینکرافت)
         if glint_tex.size != (w, h):
-            tiled = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-            gw, gh = glint_tex.size
-            for ty in range(0, h, gh):
-                for tx in range(0, w, gw):
-                    tiled.paste(glint_tex, (tx, ty))
-            glint_tex = tiled
+            glint_tex = glint_tex.resize((w, h), Image.NEAREST)
 
-        # شدت پایه پایین‌تر + تنظیم هوشمند
-        GLINT_STRENGTH = 0.65   # کاهش یافت (قبلاً 0.82 بود)
+        GLINT_STRENGTH = 0.82   # ← این عدد رو می‌تونی تنظیم کنی (0.6 تا 1.0)
 
+        # ساخت لایه glint
         glint_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         gl_px = glint_layer.load()
         tex_px = glint_tex.load()
-        base_px = base.load()
 
         for y in range(h):
             for x in range(w):
-                tr, tg, tb, ta = tex_px[x, y]
-                if ta == 0:
+                r, g, b, a = tex_px[x, y]
+                if a == 0:
                     continue
-                
-                # شدت بر اساس خود تکسچر
-                intensity = (tr + tg + tb) / (3 * 255.0)
-                
-                # ماسک آرمور (روی قسمت‌های شفاف glint نگذاریم)
-                armor_a = base_px[x, y][3]
-                if armor_a < 40:
-                    continue
-                
-                # کاهش بیشتر روی آرمورهای تیره
-                dark_factor = min(1.0, (armor_a / 255.0) * 1.3)
-                alpha = int(ta * dark_factor * GLINT_STRENGTH)
-                
+                intensity = (r + g + b) / (3 * 255.0)
+                alpha = int(255 * intensity * GLINT_STRENGTH)
                 gl_px[x, y] = (103, 25, 255, min(255, alpha))
 
-        # Screen Blend
+        # Screen Blend — دقیقاً مثل ماینکرافت
         result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        res_px = result.load()
+        res = result.load()
+        base_px = base.load()
         gl2 = glint_layer.load()
 
         for y in range(h):
@@ -309,7 +294,7 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
                 gr, gg, gb, ga = gl2[x, y]
                 
                 if ga == 0:
-                    res_px[x, y] = (br, bg, bb, ba)
+                    res[x, y] = (br, bg, bb, ba)
                     continue
 
                 t = ga / 255.0
@@ -322,14 +307,14 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
                 ng = int(bg + (screen_g - bg) * t)
                 nb = int(bb + (screen_b - bb) * t)
 
-                res_px[x, y] = (min(255, nr), min(255, ng), min(255, nb), ba)
+                res[x, y] = (min(255, nr), min(255, ng), min(255, nb), ba)
 
         return result
 
     except Exception as e:
-        print(f"[armor] خطا در glint: {e}")
+        print(f"[armor] خطا در اعمال glint texture: {e}")
         return base
-
+        
 def apply_enchant_glint_fallback(base: Image.Image) -> Image.Image:
     """fallback ساده در صورت نبود فایل glint"""
     print("[armor] استفاده از glint fallback")
