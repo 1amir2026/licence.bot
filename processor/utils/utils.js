@@ -44,7 +44,18 @@ export async function getScale(spriteSheetPath) {
 }
 
 export function checkAndMkdir(folderPath) {
-    if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath);
+    if (!folderPath) return;
+    
+    try {
+        if (!fs.existsSync(folderPath)) {
+            fs.mkdirSync(folderPath, { recursive: true });
+        }
+    } catch (err) {
+        // اگر مسیر فایل بود (مثل icons.png) نادیده بگیر
+        if (!folderPath.endsWith('.png') && !folderPath.endsWith('.json')) {
+            console.error(`Failed to create directory: ${folderPath}`, err.message);
+        }
+    }
 }
 
 export function checkBedrock(packPath) {
