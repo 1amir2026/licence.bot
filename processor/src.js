@@ -33,6 +33,9 @@ async function initialize(
         // Unzip pack
         await unzipFile(packZipBuffer, folderPaths.packFolder);
 
+        // لاگ برای دیباگ (بعد از unzip)
+        console.log("Unzip completed. Root contents:", fs.readdirSync(folderPaths.packFolder));
+
         const bedrock = checkBedrock(folderPaths.packFolder);
         if (bedrock) convertBedrock(folderPaths.packFolder);
 
@@ -40,7 +43,17 @@ async function initialize(
 
         initializePaths(getPaths("SYS"));
 
-        const scalingFactor = await getScale(getPaths("SYS").packIconsPath);
+        // چک icons.png
+        const iconsPath = getPaths("SYS").packIconsPath;
+        if (!fs.existsSync(iconsPath)) {
+            console.error("Missing icons.png at:", iconsPath);
+            console.log("GUI folder contents:", fs.existsSync(getPaths("SYS").packGuiFolder) 
+                ? fs.readdirSync(getPaths("SYS").packGuiFolder) 
+                : "GUI folder not found");
+            throw new Error(`Missing sprite sheet: ${iconsPath}`);
+        }
+
+        const scalingFactor = await getScale(iconsPath);
         setValue("scalingFactor", scalingFactor, "insert");
 
         setValue("upscaleRate", upscaleRate, "insert");
@@ -58,7 +71,6 @@ export default async function main(
     upscaleRate,
     xpPercent
 ) {
-    // Initialize config and paths
     await initialize(packName, packZipBuffer, upscaleRate, xpPercent);
 
     const systemPaths = getPaths("SYS");
