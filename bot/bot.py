@@ -6,7 +6,7 @@ import random
 import string
 import zipfile
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -32,6 +32,22 @@ class BroadcastState(StatesGroup):
 
 class AdminState(StatesGroup):
     waiting_search = State()
+
+class LicenseCreateState(StatesGroup):
+    waiting_custom_minutes = State()
+
+# گزینه‌های زمانی لایسنس به ترتیب چرخش: (متن نمایشی, مقدار به دقیقه / None برای همیشگی / "custom" برای دلخواه)
+LICENSE_TIME_OPTIONS = [
+    ("♾️ همیشگی", None),
+    ("📅 5 روز", 5 * 24 * 60),
+    ("📅 10 روز", 10 * 24 * 60),
+    ("📅 15 روز", 15 * 24 * 60),
+    ("📅 30 روز", 30 * 24 * 60),
+    ("✏️ دلخواه", "custom"),
+]
+
+# نگهداری وضعیت انتخاب زمان لایسنس برای هر چت ادمین (حافظه موقت، نه دیتابیس)
+license_selection = {}  # chat_id -> {"index": int, "custom_minutes": int|None, "message_id": int}
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -154,6 +170,29 @@ def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
         z.write(texture_path, texture_name)
     
     return zip_path
+
+
+# ====================== LICENSE TIME SELECTION HELPERS ======================
+def license_time_label(index: int, custom_minutes: int = None) -> str:
+    label, value = LICENSE_TIME_OPTIONS[index]
+    if value == "custom" and custom_minutes:
+        return f"✏️ دلخواه ({custom_minutes} دقیقه)"
+    return label
+
+
+def license_time_minutes(index: int, custom_minutes: int = None):
+    """مقدار نهایی دقیقه برای ساخت لایسنس. None یعنی همیشگی."""
+    label, value = LICENSE_TIME_OPTIONS[index]
+    if value == "custom":
+        return custom_minutes
+    return value
+
+
+def build_license_time_kb(index: int, custom_minutes: int = None) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=license_time_label(index, custom_minutes), callback_data=make_cb("lic_cycle"))],
+        [InlineKeyboardButton(text="✅ ساخت لایسنس", callback_data=make_cb("lic_build"))],
+    ])
 
 
 # ====================== ADMIN PANEL HELPERS ======================
@@ -352,26 +391,56 @@ async def start(message: types.Message):
         )
 
 @dp.message(F.text == "🔑 ساخت لایسنس جدید")
-async def create_license(message: types.Message):
+async def create_license(message: types.Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
 
-    key = generate_license()
-    session = Session()
-    session.add(License(key=key))
-    session.commit()
-    session.close()
+    await state.clear()
+    license_selection[message.chat.id] = {"index": 0, "custom_minutes": None}
 
-    # ✅ پیام ارسال لایسنس (اصلاح شده)
-    await message.answer(
-        f"<b>✅ لایسنس جدید شما آماده است</b>\n\n"
-        f"<code>{key}</code>\n\n"
-        "⚠️ این لایسنس <b>یک‌بار مصرف</b> میباشد.\n"
-        "لطفاً آن را فقط در اکانتی وارد نمایید که از <b>امنیت آن اطمینان کامل</b> دارید.\n\n"
-        "⚠️ لایسنس‌ها مجدد ساخته نمی‌شوند. هیچ پاسخی از طرف بنده در قبال دریافت مجدد لایسنس پذیرا نخواهم شد.\n\n"
-        "<b>مبارکتون باشه 🌹</b>",
-        parse_mode='HTML'
+    sent = await message.answer(
+        "⏱ انتخاب تایم لایسنس",
+        reply_markup=build_license_time_kb(0)
     )
+    license_selection[message.chat.id]["message_id"] = sent.message_id
+
+
+@dp.message(LicenseCreateState.waiting_custom_minutes)
+async def receive_custom_license_minutes(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    text = message.text.strip() if message.text else ""
+    if not text.isdigit() or int(text) <= 0:
+        await message.answer("❌ لطفاً فقط یک عدد صحیح و مثبت به دقیقه ارسال کنید.")
+        return
+
+    minutes = int(text)
+    chat_id = message.chat.id
+    sel = license_selection.get(chat_id)
+
+    if not sel:
+        await message.answer("❌ ابتدا روی «🔑 ساخت لایسنس جدید» بزنید.")
+        await state.clear()
+        return
+
+    sel["custom_minutes"] = minutes
+    await state.clear()
+
+    time_text = license_time_label(sel["index"], minutes)
+    new_text = f"⏱ تایم شد این: {time_text}"
+    new_kb = build_license_time_kb(sel["index"], minutes)
+
+    try:
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=sel["message_id"],
+            text=new_text,
+            reply_markup=new_kb
+        )
+    except Exception:
+        sent = await message.answer(new_text, reply_markup=new_kb)
+        sel["message_id"] = sent.message_id
 
 
 # ====================== LICENSE CHECK ======================
@@ -395,6 +464,10 @@ async def check_license(message: types.Message):
             license_glb.user_id = message.from_user.id
             license_glb.username = message.from_user.username or "بدون یوزرنیم"
             license_glb.used_at = datetime.utcnow()
+            if license_glb.duration_minutes:
+                license_glb.expires_at = license_glb.used_at + timedelta(minutes=license_glb.duration_minutes)
+            else:
+                license_glb.expires_at = None
             session.commit()
 
             keyboard = ReplyKeyboardMarkup(
@@ -696,6 +769,64 @@ async def management_router(callback: types.CallbackQuery, state: FSMContext):
             "`ABCD-EFGH-IJKL-MNOP`",
             parse_mode="Markdown"
         )
+
+    elif action == "lic_cycle":
+        chat_id = callback.message.chat.id
+        sel = license_selection.setdefault(chat_id, {"index": 0, "custom_minutes": None})
+        sel["index"] = (sel["index"] + 1) % len(LICENSE_TIME_OPTIONS)
+        sel["message_id"] = callback.message.message_id
+        sel["custom_minutes"] = None
+        _, value = LICENSE_TIME_OPTIONS[sel["index"]]
+
+        if value == "custom":
+            await state.set_state(LicenseCreateState.waiting_custom_minutes)
+            await callback.message.edit_text("⏱ تایم لایسنس رو به دقیقه وارد کنید:")
+        else:
+            await state.clear()
+            await callback.message.edit_text(
+                "⏱ انتخاب تایم لایسنس",
+                reply_markup=build_license_time_kb(sel["index"])
+            )
+        await callback.answer()
+
+    elif action == "lic_build":
+        chat_id = callback.message.chat.id
+        sel = license_selection.get(chat_id)
+        if not sel:
+            await callback.answer("❌ ابتدا روی «🔑 ساخت لایسنس جدید» بزنید.", show_alert=True)
+            return
+
+        _, value = LICENSE_TIME_OPTIONS[sel["index"]]
+        if value == "custom" and not sel.get("custom_minutes"):
+            await callback.answer("❌ ابتدا تایم دلخواه را وارد کنید.", show_alert=True)
+            return
+
+        duration_minutes = license_time_minutes(sel["index"], sel.get("custom_minutes"))
+        time_text = license_time_label(sel["index"], sel.get("custom_minutes"))
+
+        key = generate_license()
+        session = Session()
+        try:
+            session.add(License(key=key, duration_minutes=duration_minutes))
+            session.commit()
+        finally:
+            session.close()
+
+        await callback.message.edit_text(f"✅ لایسنس با تایم «{time_text}» ساخته شد.")
+
+        await callback.message.answer(
+            f"<b>✅ لایسنس جدید شما آماده است</b>\n\n"
+            f"<code>{key}</code>\n\n"
+            f"⏱ مدت اعتبار: {time_text}\n\n"
+            "⚠️ این لایسنس <b>یک‌بار مصرف</b> میباشد.\n"
+            "لطفاً آن را فقط در اکانتی وارد نمایید که از <b>امنیت آن اطمینان کامل</b> دارید.\n\n"
+            "⚠️ لایسنس‌ها مجدد ساخته نمی‌شوند. هیچ پاسخی از طرف بنده در قبال دریافت مجدد لایسنس پذیرا نخواهم شد.\n\n"
+            "<b>مبارکتون باشه 🌹</b>",
+            parse_mode='HTML'
+        )
+
+        license_selection.pop(chat_id, None)
+        await callback.answer()
 
     elif action == "back":
         kb = build_management_panel_kb()
@@ -1338,9 +1469,47 @@ async def _send_asset_files(callback: types.CallbackQuery, files: list, user_id:
     user_data.pop(user_id, None)
     user_modes.pop(user_id, None)
     
+# ====================== LICENSE EXPIRY CHECKER ======================
+async def license_expiry_checker():
+    """هر دقیقه لایسنس‌های منقضی‌شده رو پیدا می‌کند و یک‌بار به کاربر اطلاع می‌دهد."""
+    while True:
+        try:
+            session = Session()
+            try:
+                now = datetime.utcnow()
+                expired = session.query(License).filter(
+                    License.used == True,
+                    License.expires_at.isnot(None),
+                    License.expires_at <= now,
+                    License.expired_notified == False
+                ).all()
+
+                for lic in expired:
+                    lic.expired_notified = True
+                    if lic.user_id:
+                        try:
+                            await bot.send_message(
+                                lic.user_id,
+                                "❌ لایسنس شما تموم شده.\n\n"
+                                "میتونید برای خرید مجدد به @AmirMah198 برید."
+                            )
+                        except Exception as e:
+                            print(f"Failed to notify expired license user {lic.user_id}: {e}")
+
+                if expired:
+                    session.commit()
+            finally:
+                session.close()
+        except Exception as e:
+            print(f"Error in license_expiry_checker: {e}")
+
+        await asyncio.sleep(60)
+
+
 # ====================== MAIN ======================
 async def main():
     print("🚀 Bot started successfully")
+    asyncio.create_task(license_expiry_checker())
     await dp.start_polling(bot)
 
 
