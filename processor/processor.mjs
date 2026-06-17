@@ -43,4 +43,24 @@ async function main() {
     }
 }
 
+if (args[0] === "--paths") {
+    const { getPaths } = await import("./helpers/paths.js");
+    console.log(JSON.stringify(getPaths("SYS")));
+    process.exit(0);
+}
+
+if (args[0] === "--resume") {
+    const [, outputPath, xpPercentRaw, upscaleRateRaw] = args;
+    try {
+        const imgBuffer = await continueProcessing(Number(upscaleRateRaw), Number(xpPercentRaw));
+        fs.writeFileSync(outputPath, imgBuffer);
+        console.log("OK");
+        process.exit(0);
+    } catch (err) {
+        console.error("Error while resuming:", err);
+        process.exit(1);
+    }
+}
+
+
 main();
