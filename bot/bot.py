@@ -1008,21 +1008,26 @@ async def handle_document(message: types.Message):
         try:
             await run_node_processor(input_path, output_path)
             user_modes.pop(user_id, None)
-            await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
-    except Exception as e:
-        err_text = str(e)
-        if "MANUAL_SPRITE_NEEDED" in err_text:
-            user_modes[user_id] = "resource_pack_manual_sprite"
-            user_data[user_id] = {"output_path": output_path}
-            await message.answer(
-                "⚠️ بات نتونست فایل icons.png یا gui.png رو داخل پک پیدا کنه.\n\n"
-                "معمولاً این فایل اینجاست:\n"
-                "• Bedrock: textures/gui/gui.png\n"
-                "• Java: assets/minecraft/textures/gui/icons.png\n\n"
-                "📤 خودتون زیپ رو باز کنید، همون فایل png رو پیدا کنید و فقط همون یک فایل (نه کل پک) رو برام بفرستید تا ادامه بدم."
+            await message.answer_document(
+                FSInputFile(output_path),
+                caption="✅ ریسورس پک پردازش و UI ساخته شد!"
             )
-    else:
-        await message.answer(f"❌ خطا:\n{e}")
+
+        except Exception as e:
+            err_text = str(e)
+            if "MANUAL_SPRITE_NEEDED" in err_text:
+                user_modes[user_id] = "resource_pack_manual_sprite"
+                user_data[user_id] = {"output_path": output_path}
+                await message.answer(
+                    "⚠️ بات نتونست فایل icons.png یا gui.png رو داخل پک پیدا کنه.\n\n"
+                    "معمولاً این فایل اینجاست:\n"
+                    "• Bedrock: textures/gui/gui.png\n"
+                    "• Java: assets/minecraft/textures/gui/icons.png\n\n"
+                    "📤 خودتون زیپ رو باز کنید، همون فایل png رو پیدا کنید و فقط همون یک فایل (نه کل پک) رو برام بفرستید تا ادامه بدم."
+                )
+            else:
+                await message.answer(f"❌ خطا:\n{e}")
+
     # MINECRAFT 3D ITEM
     elif mode == "minecraft_3d":
         if not doc.file_name.lower().endswith(".png"):
