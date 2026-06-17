@@ -12,7 +12,6 @@ import {
     findWidgetsSprite
 } from "./utils/utils.js";
 import { crop, imageDimsFix, processImage } from "./helpers/imageProcessing.js";
-import { findGuiSprite, findWidgetsSprite } from "./utils/utils.js";
 
 async function initialize(
     packFileName,
