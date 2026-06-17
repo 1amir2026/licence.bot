@@ -1,14 +1,13 @@
 // processor/processor.mjs
 import fs from "fs";
 import path from "path";
-import make, { continueProcessing } from "./src.js";
+import make from "./src.js"; // همون main از src.txt
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
-// Read CLI arguments globally
-const args = process.argv.slice(2);
-
 async function main() {
+    const args = process.argv.slice(2);
+
     if (args.length < 4) {
         console.error("Usage: node processor.mjs <inputPack> <outputPng> <xpPercent> <upscaleRate>");
         process.exit(1);
@@ -40,30 +39,6 @@ async function main() {
         process.exit(0);
     } catch (err) {
         console.error("Error while processing pack:", err);
-        process.exit(1);
-    }
-}
-
-// Handle --paths
-if (args[0] === "--paths") {
-    const { getPaths } = await import("./helpers/paths.js");
-    console.log(JSON.stringify(getPaths("SYS")));
-    process.exit(0);
-}
-
-// Handle --resume
-if (args[0] === "--resume") {
-    const [, outputPath, xpPercentRaw, upscaleRateRaw] = args;
-    try {
-        const imgBuffer = await continueProcessing(
-            Number(upscaleRateRaw),
-            Number(xpPercentRaw)
-        );
-        fs.writeFileSync(outputPath, imgBuffer);
-        console.log("OK");
-        process.exit(0);
-    } catch (err) {
-        console.error("Error while resuming:", err);
         process.exit(1);
     }
 }
