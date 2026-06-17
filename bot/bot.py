@@ -935,101 +935,122 @@ async def minecraft_assets_mode(message: types.Message):
         parse_mode="HTML"
     )
     
-# ====================== FILE HANDLER ======================
-@dp.message(F.document)
-async def handle_document(message: types.Message):
+# ====================== FILE HANDLER (اصلاح شده) ======================
+@dp.message(F.document | F.photo)
+async def handle_file(message: types.Message):
     user_id = message.from_user.id
 
     if is_user_banned(user_id):
-        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
+        await message.answer("❌ شما بن شده‌اید.")
         return
 
     mode = user_modes.get(user_id)
-    doc = message.document
+    if not mode:
+        return  # حالت تنظیم نشده
 
-    if not doc or not mode:
+    # گرفتن فایل (چه Document چه Photo)
+    if message.document:
+        doc = message.document
+        file_name = doc.file_name or "file"
+        file_id = doc.file_id
+    elif message.photo:
+        doc = message.photo[-1]  # بزرگ‌ترین سایز
+        file_name = f"image_{user_id}_{random.randint(1000,9999)}.png"
+        file_id = doc.file_id
+    else:
         return
 
-    # RESOURCE PACK
+    await message.answer("🔄 در حال پردازش...")
+
+    # ==================== RESOURCE PACK ====================
     if mode == "resource_pack":
-        if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcpack")):
-            await message.answer("❌ فقط ZIP یا MCPACK")
+        if not file_name.lower().endswith(('.zip', '.mcpack')):
+            await message.answer("❌ فقط فایل ZIP یا MCPACK قبول است.")
+            user_modes.pop(user_id, None)
             return
 
-        await message.answer("🔄 در حال پردازش...")
-        input_path = os.path.join(INPUT_DIR, doc.file_name)
-        output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
+        input_path = os.path.join(INPUT_DIR, file_name)
+        output_name = os.path.splitext(file_name)[0] + "_ui.png"
         output_path = os.path.join(OUTPUT_DIR, output_name)
 
-        file = await bot.get_file(doc.file_id)
+        file = await bot.get_file(file_id)
         await bot.download_file(file.file_path, destination=input_path)
 
         try:
             await run_node_processor(input_path, output_path)
-            user_modes.pop(user_id, None)
-            await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
+            await message.answer_document(
+                FSInputFile(output_path), 
+                caption="✅ ریسورس پک پردازش و UI ساخته شد!"
+            )
         except Exception as e:
-            await message.answer(f"❌ خطا:\n{e}")
+            await message.answer(f"❌ خطا در پردازش:\n{str(e)[:500]}")
+        finally:
+            user_modes.pop(user_id, None)
 
-    # MINECRAFT 3D ITEM
+    # ==================== MINECRAFT 3D ITEM ====================
     elif mode == "minecraft_3d":
-        if not doc.file_name.lower().endswith(".png"):
-            await message.answer("❌ فقط فایل PNG مجاز است")
+        if not file_name.lower().endswith('.png'):
+            await message.answer("❌ فقط فایل PNG قبول است.")
+            user_modes.pop(user_id, None)
             return
 
-        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
-        input_path = os.path.join(INPUT_DIR, doc.file_name)
-        output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + ".obj")
+        input_path = os.path.join(INPUT_DIR, file_name)
+        output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(file_name)[0] + ".obj")
 
-        file = await bot.get_file(doc.file_id)
+        file = await bot.get_file(file_id)
         await bot.download_file(file.file_path, destination=input_path)
 
         try:
             output_file = await run_item3d(input_path, output_obj)
+            await message.answer_document(
+                FSInputFile(output_file), 
+                caption="✅ مدل سه‌بعدی با موفقیت ساخته شد!"
+            )
+        except Exception as e:
+            await message.answer(f"❌ خطا در ساخت مدل:\n{str(e)[:500]}")
+        finally:
             user_modes.pop(user_id, None)
-            await message.answer_document(FSInputFile(output_file), caption="✅ مدل سه‌بعدی با موفقیت ساخته شد!")
             if os.path.exists(input_path):
                 os.remove(input_path)
-        except Exception as e:
-            await message.answer(f"❌ خطا در ساخت مدل:\n{str(e)}")
 
-    # JSON TO OBJ - STEP 1
+    # ==================== JSON TO OBJ - STEP 1 ====================
     elif mode == "json_to_obj":
-        if not doc.file_name.lower().endswith(".json"):
-            await message.answer("❌ فقط فایل JSON مجاز است.")
+        if not file_name.lower().endswith('.json'):
+            await message.answer("❌ فقط فایل JSON قبول است.")
+            user_modes.pop(user_id, None)
             return
 
-        await message.answer("✅ JSON دریافت شد.\n\n📤 حالا **فایل تکسچر (PNG)** را ارسال کنید.")
-
-        json_path = os.path.join(INPUT_DIR, doc.file_name)
-        file = await bot.get_file(doc.file_id)
+        json_path = os.path.join(INPUT_DIR, file_name)
+        file = await bot.get_file(file_id)
         await bot.download_file(file.file_path, destination=json_path)
 
         user_data[user_id] = {
             "json_path": json_path,
-            "base_name": os.path.splitext(doc.file_name)[0]
+            "base_name": os.path.splitext(file_name)[0]
         }
         user_modes[user_id] = "json_to_obj_waiting_texture"
+        await message.answer("✅ JSON دریافت شد.\n\n📤 حالا فایل تکسچر **PNG** را ارسال کنید.")
 
-    # JSON TO OBJ - STEP 2
+    # ==================== JSON TO OBJ - STEP 2 ====================
     elif mode == "json_to_obj_waiting_texture":
-        if not doc.file_name.lower().endswith(".png"):
-            await message.answer("❌ فقط فایل PNG مجاز است.")
+        if not file_name.lower().endswith('.png'):
+            await message.answer("❌ فقط فایل PNG قبول است.")
             return
 
-        await message.answer("🔄 در حال ساخت OBJ + MTL + ZIP...")
+        await message.answer("🔄 در حال تبدیل به OBJ + ZIP...")
 
         data = user_data.get(user_id)
         if not data:
-            await message.answer("❌ خطا: اطلاعات مدل پیدا نشد.")
+            await message.answer("❌ اطلاعات مدل پیدا نشد.")
+            user_modes.pop(user_id, None)
             return
 
         json_path = data["json_path"]
         base_name = data["base_name"]
-        texture_path = os.path.join(INPUT_DIR, doc.file_name)
+        texture_path = os.path.join(INPUT_DIR, file_name)
         output_obj = os.path.join(OUTPUT_DIR, base_name + ".obj")
 
-        file = await bot.get_file(doc.file_id)
+        file = await bot.get_file(file_id)
         await bot.download_file(file.file_path, destination=texture_path)
 
         try:
@@ -1038,17 +1059,12 @@ async def handle_document(message: types.Message):
 
             await message.answer_document(
                 FSInputFile(zip_path),
-                caption=f"✅ تبدیل با موفقیت انجام شد!\n\n"
-                        f"📦 فایل‌ها داخل ZIP:\n"
-                        f"• {base_name}.obj\n"
-                        f"• {base_name}.mtl\n"
-                        f"• {os.path.basename(texture_path)}"
+                caption=f"✅ تبدیل با موفقیت انجام شد!\n\n📦 شامل:\n• {base_name}.obj\n• {base_name}.mtl\n• {os.path.basename(texture_path)}"
             )
-
         except Exception as e:
-            await message.answer(f"❌ خطا:\n{str(e)}")
-
+            await message.answer(f"❌ خطا:\n{str(e)[:500]}")
         finally:
+            # پاکسازی فایل‌ها
             for p in [json_path, texture_path, output_obj, output_obj.replace('.obj', '.mtl')]:
                 if os.path.exists(p):
                     try:
@@ -1058,6 +1074,10 @@ async def handle_document(message: types.Message):
             user_modes.pop(user_id, None)
             user_data.pop(user_id, None)
 
+    else:
+        await message.answer("❌ حالت نامعتبر.")
+        user_modes.pop(user_id, None)
+        
 # ====================== MINECRAFT ASSETS DOWNLOADER ======================
 
 # آدرس پایه GitHub برای assets
