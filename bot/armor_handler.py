@@ -116,6 +116,7 @@ BASE_DIR = Path(__file__).resolve().parent
 ARMORS_DIR = BASE_DIR / "armors"
 
 # state هر کاربر
+user_skins: dict[int, bytes] = {}
 armor_build_state: dict[int, dict] = {}
 
 
@@ -316,6 +317,18 @@ def apply_enchant_glint(img: Image.Image) -> Image.Image:
     except Exception as e:
         print(f"[armor] خطا در اعمال glint texture: {e}")
         return base
+
+def apply_armor_on_skin(armor_layer: Image.Image, skin_bytes: bytes) -> Image.Image:
+    """چسباندن آرمور روی اسکین"""
+    skin = Image.open(io.BytesIO(skin_bytes)).convert("RGBA")
+    
+    # resize armor به اندازه اسکین (معمولاً ۱۶x۱۶ → ۶۴x۶۴)
+    if armor_layer.size != skin.size:
+        armor_layer = armor_layer.resize(skin.size, Image.NEAREST)
+    
+    # composite
+    result = Image.alpha_composite(skin, armor_layer)
+    return result
         
 def apply_enchant_glint_fallback(base: Image.Image) -> Image.Image:
     """fallback ساده در صورت نبود فایل glint"""
@@ -523,6 +536,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             "material":      list(TRIM_MATERIALS.keys())[0],
             "enchanted":     False,
             "preview_msg_id": None,
+            "skin_enabled":  False,
         }
         await message.answer(
             "🛡 <b>مرحله ۱ — نوع آرمور</b>\n\n"
@@ -552,6 +566,12 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             await cb.answer("دوباره از منو شروع کنید.", show_alert=True); return
 
         await _send_preview(cb, s)
+
+        def kb_with_skin_option() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📤 آپلود اسکین (اختیاری)", callback_data="a_upload_skin")],
+        [InlineKeyboardButton(text="➡️ ادامه بدون اسکین", callback_data="a_skip_skin")],
+    ])
 
         # اگر چرم → مرحله رنگ چرم
         if s["armor"] == "leather":
@@ -691,7 +711,38 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         await _send_preview(cb, s)
 
     # ─── مرحله آخر: toggle اینچنت ────────────────────────────────
+    @dp.message(F.photo | F.document)
+    async def handle_skin_upload(message: types.Message):
+        uid = message.from_user.id
+        s = armor_build_state.get(uid)
+        if not s or not s.get("waiting_for_skin", False):
+            return
 
+        try:
+            if message.photo:
+                photo = message.photo[-1]
+                file = await bot.get_file(photo.file_id)
+            else:
+                file = await bot.get_file(message.document.file_id)
+
+            downloaded = await bot.download_file(file.file_path)
+            skin_bytes = downloaded.read()
+
+            # چک کردن اندازه تقریبی اسکین
+            img = Image.open(io.BytesIO(skin_bytes))
+            if img.size not in [(64, 64), (64, 32)]:
+                await message.answer("❌ فایل باید اسکین ماینکرافت (64x64 یا 64x32) باشد.")
+                return
+
+            user_skins[uid] = skin_bytes
+            s["skin_enabled"] = True
+            s["waiting_for_skin"] = False
+
+            await message.answer("✅ اسکین با موفقیت بارگذاری شد!\nحالا ادامه دهید.", 
+                               reply_markup=kb_trim(s["trim"]))  # یا مرحله بعدی
+        except Exception as e:
+            await message.answer(f"خطا در آپلود اسکین: {e}")
+            
     @dp.callback_query(F.data == "a_enchant_toggle")
     async def enchant_toggle(cb: types.CallbackQuery):
         uid = cb.from_user.id
@@ -714,59 +765,80 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
 
     # ─── ساخت و ارسال ─────────────────────────────────────────────
 
-    async def _build_and_send(cb: types.CallbackQuery, s: dict):
-        uid = cb.from_user.id
-        armor         = s["armor"]
-        leather_color = s.get("leather_color", "none")
-        trim_name     = ARMOR_TRIMS[s["trim"]]
-        material      = s["material"]
-        mat_color     = TRIM_MATERIALS.get(material, (255, 255, 255))
-        enchanted     = s.get("enchanted", False)
+async def _build_and_send(cb: types.CallbackQuery, s: dict):
+    uid = cb.from_user.id
+    armor         = s["armor"]
+    leather_color = s.get("leather_color", "none")
+    trim_name     = ARMOR_TRIMS[s["trim"]]
+    material      = s["material"]
+    mat_color     = TRIM_MATERIALS.get(material, (255, 255, 255))
+    enchanted     = s.get("enchanted", False)
 
-        await cb.message.answer("⏳ در حال ساخت تکسچر آرمور...")
+    await cb.message.answer("⏳ در حال ساخت تکسچر آرمور...")
 
-        if not PIL_AVAILABLE:
-            await cb.message.answer(
-                "❌ Pillow نصب نیست:\n<code>pip install Pillow</code>",
-                parse_mode="HTML"
-            )
-            armor_build_state.pop(uid, None)
-            return
-
-        lines = [f"🛡 <b>{armor.upper()}</b>"]
-        if armor == "leather":
-            fa    = LEATHER_COLOR_NAMES_FA.get(leather_color, leather_color)
-            emoji = LEATHER_COLOR_EMOJI.get(leather_color, "")
-            lines.append(f"رنگ چرم: {emoji} {fa}")
-        lines.append(f"تریم: <b>{trim_name}</b>")
-        if trim_name != "none":
-            lines.append(f"ماده تریم: <b>{material}</b>")
-        lines.append(f"اینچنت: {'✨ بله' if enchanted else '⬛ خیر'}")
-        caption = "\n".join(lines)
-
-        sent = 0
-        for layer, label, emoji in [
-            ("humanoid",          "Layer 1 — Main Body", "🔵"),
-            ("humanoid_leggings", "Layer 2 — Leggings",  "🟢"),
-        ]:
-            data = build_layer(armor, leather_color, trim_name, mat_color, layer, enchanted)
-            if data:
-                await cb.message.answer_document(
-                    types.BufferedInputFile(data, filename=f"{armor}_{layer}.png"),
-                    caption=caption + f"\n\n{emoji} <b>{label}</b>",
-                    parse_mode="HTML",
-                )
-                sent += 1
-            else:
-                fname = ARMOR_FILE_MAP.get(armor, armor)
-                await cb.message.answer(
-                    f"⚠️ فایل پیدا نشد:\n<code>armors/{layer}/{fname}.png</code>",
-                    parse_mode="HTML"
-                )
-
-        if sent:
-            await cb.message.answer("✅ آرمور با موفقیت ساخته شد!")
-
+    if not PIL_AVAILABLE:
+        await cb.message.answer("❌ Pillow نصب نیست...", parse_mode="HTML")
         armor_build_state.pop(uid, None)
+        return
+
+    # ==================== تولید دستور /give ====================
+    item_type = "chestplate" if "humanoid" in "humanoid" else "leggings"  # فعلاً فقط chestplate و leggings
+    
+    trim_nbt = ""
+    if trim_name != "none":
+        trim_nbt = f'trim={{pattern:"minecraft:{trim_name}",material:"minecraft:{material}"}}'
+
+    leather_nbt = ""
+    if armor == "leather":
+        r, g, b = LEATHER_COLORS.get(leather_color, LEATHER_COLORS["none"])
+        color_int = (r << 16) | (g << 8) | b
+        leather_nbt = f',color:{color_int}'
+
+    # ساخت دستور نهایی
+    nbt_parts = [trim_nbt, leather_nbt]
+    nbt_str = ",".join([p for p in nbt_parts if p])
+    if nbt_str:
+        nbt_str = f'[{nbt_str}]'
+
+    give_cmd = f"/give @p minecraft:{armor}_{item_type}{nbt_str} 1"
+
+    # ==================== ساخت و ارسال فایل‌ها ====================
+    lines = [f"🛡 <b>{armor.upper()}</b>"]
+    if armor == "leather":
+        fa = LEATHER_COLOR_NAMES_FA.get(leather_color, leather_color)
+        emoji = LEATHER_COLOR_EMOJI.get(leather_color, "")
+        lines.append(f"رنگ چرم: {emoji} {fa}")
+    lines.append(f"تریم: <b>{trim_name}</b>")
+    if trim_name != "none":
+        lines.append(f"ماده: <b>{material}</b>")
+    lines.append(f"اینچنت: {'✨ بله' if enchanted else '⬛ خیر'}")
+    caption = "\n".join(lines)
+
+    sent = 0
+    for layer, label, emoji in [
+        ("humanoid",          "Layer 1 — Main Body", "🔵"),
+        ("humanoid_leggings", "Layer 2 — Leggings",  "🟢"),
+    ]:
+        data = build_layer(armor, leather_color, trim_name, mat_color, layer, enchanted)
+        if data:
+            await cb.message.answer_document(
+                types.BufferedInputFile(data, filename=f"{armor}_{layer}.png"),
+                caption=caption + f"\n\n{emoji} <b>{label}</b>",
+                parse_mode="HTML",
+            )
+            sent += 1
+
+    # ارسال دستور give
+    await cb.message.answer(
+        f"📋 <b>دستور /give آماده:</b>\n"
+        f"<code>{give_cmd}</code>\n\n"
+        f"این دستور را در چت بازی (Java Edition) پیست کنید.",
+        parse_mode="HTML"
+    )
+
+    if sent:
+        await cb.message.answer("✅ آرمور با موفقیت ساخته شد!")
+
+    armor_build_state.pop(uid, None)
         # نکته: preview_msg_id داخل s بود و با pop شدن state پاک می‌شود؛
         # خود عکس پیش‌نمایش در چت باقی می‌ماند تا کاربر بتواند مقایسه کند.
