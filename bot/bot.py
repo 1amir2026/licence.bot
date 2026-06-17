@@ -1102,6 +1102,9 @@ async def handle_document(message: types.Message):
                         f"• {os.path.basename(texture_path)}"
             )
 
+        except Exception as e:
+            await message.answer(f"❌ خطا:\n{e}")
+
     elif mode == "resource_pack_manual_sprite":
         if not doc.file_name.lower().endswith(".png"):
             await message.answer("❌ فقط فایل PNG مجاز است.")
