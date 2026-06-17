@@ -427,52 +427,83 @@ def build_layer(armor_key: str, leather_color_key: str,
         import traceback; traceback.print_exc()
         return None
 
-# ====================== PREVIEW FUNCTIONS ======================
 
-def generate_preview(s: dict, show_player: bool = True) -> bytes | None:
-    """تولید پیش‌نمایش کامل برای نمایش در چت"""
-    if not PIL_AVAILABLE:
+def build_preview(armor_key: str, leather_color_key: str,
+                   trim_name: str, mat_color: tuple,
+                   enchanted: bool = False) -> bytes | None:
+    """
+    پیش‌نمایش سبک: فقط لایه ۱ (humanoid)، resize شده برای سرعت.
+    خروجی JPEG کوچک برای ارسال سریع به صورت عکس.
+    """
+    data = build_layer(armor_key, leather_color_key, trim_name, mat_color,
+                        "humanoid", enchanted)
+    if not data:
         return None
-
-    armor = s["armor"]
-    leather_color = s.get("leather_color", "none")
-    trim_name = ARMOR_TRIMS[s["trim"]]
-    material = s.get("material", "iron")
-    mat_color = TRIM_MATERIALS.get(material, (216, 216, 216))
-    enchanted = s.get("enchanted", False)
-
-    # برای پیش‌نمایش از لایه humanoid استفاده می‌کنیم (بدنه اصلی)
-    layer = "humanoid"
-
     try:
-        # استفاده از همان تابع build_layer که قبلاً داری
-        data = build_layer(armor, leather_color, trim_name, mat_color, layer, enchanted)
-        return data
+        img = Image.open(io.BytesIO(data)).convert("RGBA")
+        # بزرگ‌نمایی pixel-art با NEAREST تا واضح بماند (نه بلور)
+        preview = img.resize((img.width * 6, img.height * 6), Image.NEAREST)
+
+        # پس‌زمینه خاکستری ساده برای دیده شدن بهتر قسمت‌های شفاف
+        bg = Image.new("RGBA", preview.size, (54, 57, 63, 255))
+        bg.alpha_composite(preview)
+
+        buf = io.BytesIO()
+        bg.convert("RGB").save(buf, format="JPEG", quality=80)
+        buf.seek(0)
+        return buf.read()
     except Exception as e:
-        print(f"[armor preview] خطا: {e}")
+        print(f"[armor] خطا در build_preview: {e}")
         return None
 
 
-# ====================== به‌روزرسانی HANDLERS ======================
-
-async def _update_preview(cb: types.CallbackQuery, s: dict, title: str):
-    """ارسال یا ویرایش پیام با پیش‌نمایش"""
-    preview_data = generate_preview(s)
-    
-    if preview_data:
-        try:
-            await cb.message.answer_photo(
-                types.BufferedInputFile(preview_data, filename="preview.png"),
-                caption=f"🛡️ **پیش‌نمایش**:\n{title}",
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass  # اگر خطا داد مهم نیست
-
-# ─── مرحله بعد از انتخاب آرمور ──────────────────────────────────────
 # ====================== HANDLERS ======================
 
 def register_armor_handlers(dp: Dispatcher, bot: Bot):
+
+    async def _send_preview(cb: types.CallbackQuery, s: dict):
+        """
+        ارسال یا آپدیت عکس پیش‌نمایش بالای پیام.
+        اگر پیش‌نمایش قبلی وجود داشته باشد، عکسش edit می‌شود (سریع‌تر و تمیزتر).
+        در غیر این صورت یک عکس جدید فرستاده می‌شود.
+        """
+        if not PIL_AVAILABLE:
+            return
+
+        armor         = s["armor"]
+        leather_color = s.get("leather_color", "none")
+        trim_name     = ARMOR_TRIMS[s["trim"]]
+        material      = s["material"]
+        mat_color     = TRIM_MATERIALS.get(material, (255, 255, 255))
+        enchanted     = s.get("enchanted", False)
+
+        preview_bytes = build_preview(armor, leather_color, trim_name, mat_color, enchanted)
+        if not preview_bytes:
+            return
+
+        chat_id = cb.message.chat.id
+        photo_file = types.BufferedInputFile(preview_bytes, filename="preview.jpg")
+        preview_msg_id = s.get("preview_msg_id")
+
+        try:
+            if preview_msg_id:
+                await bot.edit_message_media(
+                    chat_id=chat_id,
+                    message_id=preview_msg_id,
+                    media=types.InputMediaPhoto(media=photo_file),
+                )
+            else:
+                msg = await bot.send_photo(chat_id=chat_id, photo=photo_file)
+                s["preview_msg_id"] = msg.message_id
+        except Exception as e:
+            # اگر edit شکست خورد (مثلاً پیام پاک شده)، یک عکس جدید بفرست
+            print(f"[armor] خطا در آپدیت پیش‌نمایش: {e}")
+            try:
+                msg = await bot.send_photo(chat_id=chat_id, photo=photo_file)
+                s["preview_msg_id"] = msg.message_id
+            except Exception as e2:
+                print(f"[armor] خطا در ارسال پیش‌نمایش جدید: {e2}")
+
 
     @dp.message(F.text == "🛡 ساخت آرمور با تریم")
     async def start(message: types.Message):
@@ -491,6 +522,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             "trim":          0,
             "material":      list(TRIM_MATERIALS.keys())[0],
             "enchanted":     False,
+            "preview_msg_id": None,
         }
         await message.answer(
             "🛡 <b>مرحله ۱ — نوع آرمور</b>\n\n"
@@ -518,6 +550,8 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         s = armor_build_state.get(uid)
         if not s:
             await cb.answer("دوباره از منو شروع کنید.", show_alert=True); return
+
+        await _send_preview(cb, s)
 
         # اگر چرم → مرحله رنگ چرم
         if s["armor"] == "leather":
@@ -594,6 +628,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         s["trim"] = (s["trim"] + 1) % len(ARMOR_TRIMS)
         await cb.message.edit_reply_markup(reply_markup=kb_trim(s["trim"]))
         await cb.answer(ARMOR_TRIMS[s["trim"]])
+        await _send_preview(cb, s)
 
     @dp.callback_query(F.data == "a_to_material")
     async def to_material(cb: types.CallbackQuery):
@@ -613,6 +648,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
                 parse_mode="HTML",
                 reply_markup=kb_enchant(s.get("enchanted", False)),
             )
+            await _send_preview(cb, s)
             return
 
         await cb.message.edit_text(
@@ -652,6 +688,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             parse_mode="HTML",
             reply_markup=kb_enchant(s.get("enchanted", False)),
         )
+        await _send_preview(cb, s)
 
     # ─── مرحله آخر: toggle اینچنت ────────────────────────────────
 
@@ -665,6 +702,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         await cb.message.edit_reply_markup(reply_markup=kb_enchant(s["enchanted"]))
         status = "✨ روشن" if s["enchanted"] else "⬛ خاموش"
         await cb.answer(f"اینچنت: {status}")
+        await _send_preview(cb, s)
 
     @dp.callback_query(F.data == "a_finish")
     async def finish(cb: types.CallbackQuery):
@@ -730,3 +768,5 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             await cb.message.answer("✅ آرمور با موفقیت ساخته شد!")
 
         armor_build_state.pop(uid, None)
+        # نکته: preview_msg_id داخل s بود و با pop شدن state پاک می‌شود؛
+        # خود عکس پیش‌نمایش در چت باقی می‌ماند تا کاربر بتواند مقایسه کند.
