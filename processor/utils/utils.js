@@ -6,14 +6,28 @@ import { Readable } from "stream";
 
 export function unzipFile(zipBuffer, outputDir) {
     return new Promise((resolve, reject) => {
+        if (!zipBuffer || zipBuffer.length === 0) {
+            return reject(new Error("Empty or invalid zip buffer"));
+        }
+
         const stream = new Readable();
         stream.push(zipBuffer);
         stream.push(null);
 
         stream
             .pipe(unzipper.Extract({ path: outputDir }))
-            .on("close", resolve)
-            .on("error", reject);
+            .on("close", () => {
+                // چک اضافی بعد از unzip
+                if (!fs.existsSync(outputDir) || fs.readdirSync(outputDir).length === 0) {
+                    reject(new Error("Unzip failed - no files extracted"));
+                } else {
+                    resolve();
+                }
+            })
+            .on("error", (err) => {
+                console.error("Unzip error:", err.message);
+                reject(new Error("Unzip failed: " + err.message));
+            });
     });
 }
 
