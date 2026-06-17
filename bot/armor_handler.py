@@ -700,7 +700,10 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         await _send_preview(cb, s)
 
     # ─── مرحله آخر: toggle اینچنت ────────────────────────────────
-    @dp.message(F.photo | F.document)
+    @dp.message(
+        (F.photo | F.document),
+        lambda m: armor_build_state.get(m.from_user.id, {}).get("waiting_for_skin", False)
+    )
     async def handle_skin_upload(message: types.Message):
         uid = message.from_user.id
         s = armor_build_state.get(uid)
