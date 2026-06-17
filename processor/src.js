@@ -1,4 +1,5 @@
 // processor/src.js
+import fs from "fs";
 import { configPath, createConfig, setValue } from "./utils/configUtils.js";
 import { getPaths, initializePaths } from "./helpers/paths.js";
 import {
