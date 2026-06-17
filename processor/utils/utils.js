@@ -17,6 +17,7 @@ export function unzipFile(zipBuffer, outputDir) {
         stream
             .pipe(unzipper.Extract({ path: outputDir }))
             .on("close", () => {
+                // چک اضافی بعد از unzip
                 if (!fs.existsSync(outputDir) || fs.readdirSync(outputDir).length === 0) {
                     reject(new Error("Unzip failed - no files extracted"));
                 } else {
@@ -84,135 +85,49 @@ export function convertBedrock(parentDir) {
     fs.rmdirSync(subfolder);
 }
 
-/**
- * جستجوی بازگشتی در تمام فولدرها برای پیدا کردن icons.png یا gui.png
- * @param {string} dir - دایرکتوری برای جستجو
- * @param {number} maxDepth - حداکثر عمق جستجو
- * @returns {string|null}
- */
-
-// به جای امضای فعلی:
-function findPngRecursive(dir, targetNames, maxDepth = 6) {
-    if (maxDepth <= 0 || !fs.existsSync(dir)) return null;
-    let entries;
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return null; }
-    for (const entry of entries) {
-        if (entry.isFile() && targetNames.includes(entry.name.toLowerCase())) {
-            return path.join(dir, entry.name);
-        }
-    }
-    for (const entry of entries) {
-        if (entry.isDirectory()) {
-            const found = findPngRecursive(path.join(dir, entry.name), targetNames, maxDepth - 1);
-            if (found) return found;
-        }
-    }
-    return null;
-}
-
 export function findGuiSprite(packRoot) {
-    const candidates = [];
-
-    const possibleDirs = [
-        `${packRoot}/assets/minecraft/textures/gui`,
-        `${packRoot}/assets/minecraft/textures/gui/container`,
-        `${packRoot}/assets/minecraft/textures/ui`,
-        `${packRoot}/assets/minecraft/textures/gui/sprites`,
-        `${packRoot}/textures/gui`,
-        `${packRoot}/textures/gui/container`,
-        `${packRoot}/textures/ui`,
-        `${packRoot}/textures/gui/sprites`,
-    ];
-
-    const possibleNames = [
-        "icons.png",
-        "gui.png",
-        "icon.png",
-        "icons1.png",
-        "widgets.png",
-        "ui.png",
-        "hud.png",
-        "hotbar.png"
-    ];
-
-    for (const dir of possibleDirs) {
-        if (!fs.existsSync(dir)) continue;
-
-        const files = fs.readdirSync(dir);
-        for (const file of files) {
-            if (possibleNames.includes(file.toLowerCase())) {
-                candidates.push(path.join(dir, file));
-            }
-        }
-    }
-
-    // اگر چند فایل پیدا شد، icons.png را اولویت بده
-    const best = candidates.find(p => p.toLowerCase().includes("icons.png"))
-        || candidates.find(p => p.toLowerCase().includes("gui.png"))
-        || candidates[0];
-
-    if (best) {
-        console.log("✅ GUI sprite found:", best);
-        return best;
-    }
-
-    // fallback: deep search
-    const deep = findPngRecursive(packRoot, possibleNames, 6);
-    if (deep) {
-        console.log("🔎 Found via deep search:", deep);
-        return deep;
-    }
-
-    return null;
-}
-
-/**
- * ساختار فایل‌های پک رو برای نمایش در پیام خطا لاگ می‌کنه
- * @param {string} packRoot
- * @returns {string} - لیست فایل‌ها به صورت متن
- */
-export function getPackStructureInfo(packRoot) {
-    const lines = [];
-    function walk(dir, depth = 0) {
-        if (depth > 4) return;
-        let entries;
-        try {
-            entries = fs.readdirSync(dir, { withFileTypes: true });
-        } catch {
-            return;
-        }
-        for (const entry of entries) {
-            const indent = "  ".repeat(depth);
-            lines.push(`${indent}${entry.isDirectory() ? "📁" : "📄"} ${entry.name}`);
-            if (entry.isDirectory() && depth < 3) {
-                walk(path.join(dir, entry.name), depth + 1);
-            }
-        }
-    }
-    walk(packRoot);
-    return lines.slice(0, 40).join("\n"); // حداکثر ۴۰ خط
-}
-
-export function findWidgetsSprite(packRoot) {
-    const directPaths = [
-        `${packRoot}/assets/minecraft/textures/gui/widgets.png`,
+    const possiblePaths = [
+        // مسیر اصلی
+        `${packRoot}/assets/minecraft/textures/gui/icons.png`,
+        `${packRoot}/assets/minecraft/textures/gui/gui.png`,
+        `${packRoot}/textures/gui/icons.png`,
         `${packRoot}/textures/gui/gui.png`,
-        `${packRoot}/textures/gui/widgets.png`,
+        `${packRoot}/textures/gui/icon.png`,
+        `${packRoot}/textures/gui/icons1.png`,
+        
+        // مسیرهای رایج Bedrock
+        `${packRoot}/assets/minecraft/textures/gui/container/icons.png`,
+        `${packRoot}/textures/gui/container/icons.png`,
+        
+        // جستجوی عمیق‌تر (اگر لازم شد)
+        // `${packRoot}/**/*icons*.png`  ← بعداً اگر لازم شد پیاده‌سازی کن
     ];
-    for (const p of directPaths) if (fs.existsSync(p)) return p;
 
+    for (const path of possiblePaths) {
+        if (fs.existsSync(path)) {
+            return path;
+        }
+    }
+
+    // جستجوی ساده در gui فولدر
     const guiFolders = [
         `${packRoot}/assets/minecraft/textures/gui`,
         `${packRoot}/textures/gui`,
+        `${packRoot}/assets/minecraft/textures/gui/container`
     ];
+
     for (const guiDir of guiFolders) {
         if (fs.existsSync(guiDir)) {
-            for (const file of fs.readdirSync(guiDir)) {
-                if (file.toLowerCase().includes("widget") && file.endsWith(".png")) {
-                    return path.join(guiDir, file);
+            const files = fs.readdirSync(guiDir);
+            console.log(`GUI folder ${guiDir} contains:`, files);
+            
+            for (const file of files) {
+                if (file.toLowerCase().includes('icon') && file.endsWith('.png')) {
+                    return `${guiDir}/${file}`;
                 }
             }
         }
     }
-    return findPngRecursive(packRoot, ["widgets.png", "gui.png", "icon.png"], 6);
+
+    return null;
 }
