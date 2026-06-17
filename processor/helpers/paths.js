@@ -86,13 +86,13 @@ export function initializePaths(paths) {
         const p = paths[key];
         if (!p) continue;
 
-        try {
-            // فقط برای فولدرها mkdir بزنیم
-            if (isDirectoryPath(key)) {
+        // فقط برای مسیرهای فولدر mkdir بزن (نه فایل)
+        if (!p.endsWith('.png') && !p.endsWith('.json')) {
+            try {
                 checkAndMkdir(p);
+            } catch (err) {
+                console.error(`Error while initialising path ${key}:`, err.message);
             }
-        } catch (err) {
-            console.error(`Error while initialising path ${key}:`, err);
         }
     }
 }
