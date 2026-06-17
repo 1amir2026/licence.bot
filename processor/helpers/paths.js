@@ -80,14 +80,28 @@ function getConfigValues() {
     }
 }
 
+// جایگزین تابع initializePaths کن
 export function initializePaths(paths) {
     for (const key in paths) {
         const p = paths[key];
         if (!p) continue;
+
         try {
-            checkAndMkdir(p);
+            // فقط برای فولدرها mkdir بزنیم
+            if (isDirectoryPath(key)) {
+                checkAndMkdir(p);
+            }
         } catch (err) {
-            console.error("Error while initialising paths: " + err);
+            console.error(`Error while initialising path ${key}:`, err);
         }
     }
+}
+
+// تابع کمکی جدید
+function isDirectoryPath(key) {
+    const dirKeys = [
+        'tempPath', 'packFolder', 'packGuiFolder',
+        'tempIconsPath', 'tempWidgetsPath'
+    ];
+    return dirKeys.includes(key);
 }
