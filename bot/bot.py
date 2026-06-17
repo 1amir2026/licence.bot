@@ -828,44 +828,41 @@ async def management_router(callback: types.CallbackQuery, state: FSMContext):
             )
         await callback.answer()
 
-elif action == "lic_build":
-    chat_id = callback.message.chat.id
-    sel = license_selection.get(chat_id)
-    if not sel:
-        await callback.answer("❌ ابتدا روی «🔑 ساخت لایسنس جدید» بزنید.", show_alert=True)
-        return
+    elif action == "lic_build":
+        chat_id = callback.message.chat.id
+        sel = license_selection.get(chat_id)
+        if not sel:
+            await callback.answer("❌ ابتدا روی «🔑 ساخت لایسنس جدید» بزنید.", show_alert=True)
+            return
 
-    _, value = LICENSE_TIME_OPTIONS[sel["index"]]
-    if value == "custom" and not sel.get("custom_minutes"):
-        await callback.answer("❌ ابتدا تایم دلخواه را وارد کنید.", show_alert=True)
-        return
+        _, value = LICENSE_TIME_OPTIONS[sel["index"]]
+        if value == "custom" and not sel.get("custom_minutes"):
+            await callback.answer("❌ ابتدا تایم دلخواه را وارد کنید.", show_alert=True)
+            return
 
-    duration_minutes = license_time_minutes(sel["index"], sel.get("custom_minutes"))
-    time_text = license_time_label(sel["index"], sel.get("custom_minutes"))
+        duration_minutes = license_time_minutes(sel["index"], sel.get("custom_minutes"))
+        time_text = license_time_label(sel["index"], sel.get("custom_minutes"))
 
-    key = generate_license()
-    session = Session()
-    try:
-        session.add(License(key=key, duration_minutes=duration_minutes))
-        session.commit()
-    finally:
-        session.close()
+        key = generate_license()
+        session = Session()
+        try:
+            session.add(License(key=key, duration_minutes=duration_minutes))
+            session.commit()
+        finally:
+            session.close()
 
-    await callback.message.edit_text(f"✅ لایسنس با تایم «{time_text}» ساخته شد.")
+        await callback.message.edit_text(f"✅ لایسنس با تایم «{time_text}» ساخته شد.")
 
-    await callback.message.answer(
-        f"<b>✅ لایسنس جدید شما آماده است</b>\n\n"
-        f"<code>{key}</code>\n\n"
-        f"⏱ مدت اعتبار: {time_text}\n\n"
-        "⚠️ این لایسنس <b>یک‌بار مصرف</b> میباشد.\n"
-        "لطفاً آن را فقط در اکانتی وارد نمایید که از <b>امنیت آن اطمینان کامل</b> دارید.\n\n"
-        "⚠️ لایسنس‌ها مجدد ساخته نمی‌شوند. هیچ پاسخی از طرف بنده در قبال دریافت مجدد لایسنس پذیرا نخواهم شد.\n\n"
-        "<b>مبارکتون باشه 🌹</b>",
-        parse_mode='HTML'
-    )
+        await callback.message.answer(
+            f"<b>🔑 لایسنس جدید ساخته شد</b>\n\n"
+            f"<code>{key}</code>\n\n"
+            f"⏱ مدت اعتبار: {time_text}\n\n"
+            "⚠️ لایسنس یک‌بار مصرف است.",
+            parse_mode="HTML"
+        )
 
-    license_selection.pop(chat_id, None)
-    await callback.answer()
+        license_selection.pop(chat_id, None)
+        await callback.answer()
 
     elif action == "back":
         kb = build_management_panel_kb()
