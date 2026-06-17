@@ -9,7 +9,7 @@ export function getPaths(type) {
         throw new Error("Couldn't fetch config - paths.");
     }
 
-    let { bedrock, packFileName } = configValues;
+    let { bedrock, packFileName, overrideIconsPath, overrideWidgetsPath } = configValues;
 
     const tempPath = path.join(process.cwd(), "temp");
     let packSavePath = path.join(tempPath, packFileName);
@@ -21,13 +21,11 @@ export function getPaths(type) {
             ? path.join(packSavePath, "assets", "minecraft", "textures", "gui")
             : "";
 
-    const iconsPath = path.join(guiFolderPath, "icons.png");
-    const widgetsPath =
-        bedrock === true
-            ? path.join(guiFolderPath, "gui.png")
-            : bedrock === false
-            ? path.join(guiFolderPath, "widgets.png")
-            : "";
+    const iconsPath = overrideIconsPath || path.join(guiFolderPath, "icons.png");
+    const widgetsPath = overrideWidgetsPath || (
+        bedrock === true ? path.join(guiFolderPath, "gui.png") :
+        bedrock === false ? path.join(guiFolderPath, "widgets.png") : ""
+    );
 
     const iconsSavePath = path.join(tempPath, "icons");
     const widgetsSavePath = path.join(tempPath, "widgets");
@@ -71,9 +69,12 @@ export function getPaths(type) {
 function getConfigValues() {
     try {
         const config = getConfig();
-        const bedrock = config.bedrock ?? undefined;
-        const packFileName = config.packFileName ?? undefined;
-        return { bedrock, packFileName };
+        return {
+            bedrock: config.bedrock ?? undefined,
+            packFileName: config.packFileName ?? undefined,
+            overrideIconsPath: config.packIconsPath ?? undefined,
+            overrideWidgetsPath: config.packWidgetsPath ?? undefined,
+        };
     } catch (err) {
         console.error("Error fetching config: ", err);
         return undefined;
