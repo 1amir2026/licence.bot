@@ -8,6 +8,7 @@ import {
     convertBedrock,
     getScale,
     unzipFile,
+    findGuiSprite,
 } from "./utils/utils.js";
 import { crop, imageDimsFix, processImage } from "./helpers/imageProcessing.js";
 
