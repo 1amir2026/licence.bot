@@ -1011,25 +1011,9 @@ async def handle_document(message: types.Message):
         try:
             await run_node_processor(input_path, output_path)
             user_modes.pop(user_id, None)
-            await message.answer_document(
-                FSInputFile(output_path),
-                caption="✅ ریسورس پک پردازش و UI ساخته شد!"
-            )
-
+            await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
         except Exception as e:
-            err_text = str(e)
-            if "MANUAL_SPRITE_NEEDED" in err_text:
-                user_modes[user_id] = "resource_pack_manual_sprite"
-                user_data[user_id] = {"output_path": output_path}
-                await message.answer(
-                    "⚠️ بات نتونست فایل icons.png یا gui.png رو داخل پک پیدا کنه.\n\n"
-                    "معمولاً این فایل اینجاست:\n"
-                    "• Bedrock: textures/gui/gui.png\n"
-                    "• Java: assets/minecraft/textures/gui/icons.png\n\n"
-                    "📤 خودتون زیپ رو باز کنید، همون فایل png رو پیدا کنید و فقط همون یک فایل (نه کل پک) رو برام بفرستید تا ادامه بدم."
-                )
-            else:
-                await message.answer(f"❌ خطا:\n{e}")
+            await message.answer(f"❌ خطا:\n{e}")
 
     # MINECRAFT 3D ITEM
     elif mode == "minecraft_3d":
@@ -1106,55 +1090,15 @@ async def handle_document(message: types.Message):
             )
 
         except Exception as e:
-            await message.answer(f"❌ خطا:\n{e}")
+            await message.answer(f"❌ خطا:\n{str(e)}")
 
-    elif mode == "resource_pack_manual_sprite":
-        if not doc.file_name.lower().endswith(".png"):
-            await message.answer("❌ فقط فایل PNG مجاز است.")
-            return
-
-        info = user_data.get(user_id)
-        if not info:
-            await message.answer("❌ اطلاعات قبلی پیدا نشد. دوباره زیپ پک رو بفرستید.")
-            user_modes.pop(user_id, None)
-            return
-
-        sprite_path = os.path.join(INPUT_DIR, f"manual_sprite_{user_id}.png")
-        file = await bot.get_file(doc.file_id)
-        await bot.download_file(file.file_path, destination=sprite_path)
-
-        try:
-            p = await asyncio.create_subprocess_exec(
-                "node", NODE_SCRIPT, "--paths",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=PROCESSOR_DIR
-            )
-            out, err = await p.communicate()
-            if p.returncode != 0:
-                raise RuntimeError(err.decode())
-            paths = json.loads(out.decode())
-
-            os.makedirs(os.path.dirname(paths["packIconsPath"]), exist_ok=True)
-            shutil.copyfile(sprite_path, paths["packIconsPath"])
-            if not os.path.exists(paths["packWidgetsPath"]):
-                os.makedirs(os.path.dirname(paths["packWidgetsPath"]), exist_ok=True)
-                shutil.copyfile(sprite_path, paths["packWidgetsPath"])
-
-            await message.answer("🔄 در حال ادامه پردازش...")
-            output_path = info["output_path"]
-            rp = await asyncio.create_subprocess_exec(
-                "node", NODE_SCRIPT, "--resume", output_path, "0.7", "1",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=PROCESSOR_DIR
-            )
-            rout, rerr = await rp.communicate()
-            if rp.returncode != 0:
-                raise RuntimeError(rerr.decode())
-
-            await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
-        except Exception as e:
-            await message.answer(f"❌ هنوز هم نشد:\n{e}")
         finally:
-            if os.path.exists(sprite_path):
-                os.remove(sprite_path)
+            for p in [json_path, texture_path, output_obj, output_obj.replace('.obj', '.mtl')]:
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except:
+                        pass
             user_modes.pop(user_id, None)
             user_data.pop(user_id, None)
 
