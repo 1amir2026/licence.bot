@@ -546,7 +546,6 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         )
 
     # ─── مرحله ۱: چرخش آرمور ──────────────────────────────────────
-
     @dp.callback_query(F.data == "a_armor_cycle")
     async def armor_cycle(cb: types.CallbackQuery):
         uid = cb.from_user.id
@@ -567,19 +566,9 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
 
         await _send_preview(cb, s)
 
-        def kb_with_skin_option() -> InlineKeyboardMarkup:
-            return InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📤 آپلود اسکین (اختیاری)", callback_data="a_upload_skin")],
-                [InlineKeyboardButton(text="➡️ ادامه بدون اسکین", callback_data="a_skip_skin")],
-            ])
-
         # اگر چرم → مرحله رنگ چرم
         if s["armor"] == "leather":
             s["leather_color"] = "none"
-            color_key = "none"
-            emoji = LEATHER_COLOR_EMOJI["none"]
-            fa = LEATHER_COLOR_NAMES_FA["none"]
-            keys = list(LEATHER_COLORS.keys())
             await cb.message.edit_text(
                 f"🎨 <b>مرحله ۲ — رنگ آرمور چرمی</b>\n\n"
                 f"روی دکمه کلیک کنید تا رنگ تغییر کند.\n"
@@ -588,14 +577,14 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
                 reply_markup=kb_leather_color("none"),
             )
         else:
-            # سایر آرمورها → مستقیم به تریم
+            # سایر آرمورها → مستقیم به تریم + دکمه اسکین
             await cb.message.edit_text(
                 f"🎨 <b>مرحله ۲ — تریم</b>\n\n"
                 f"آرمور: <b>{s['armor'].upper()}</b>\n\n"
                 f"روی دکمه کلیک کنید تا تریم تغییر کند.\n"
                 f"<code>none</code> = بدون تریم",
                 parse_mode="HTML",
-                reply_markup=kb_trim(s["trim"]),
+                reply_markup=kb_trim(s["trim"]),   # فعلاً بدون دکمه اسکین
             )
 
     # ─── مرحله ۲ (فقط چرم): چرخش رنگ ────────────────────────────
@@ -782,9 +771,6 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
         return
 
     # ==================== تولید دستور /give ====================
-    # برای لایه humanoid → chestplate
-    # برای لایه leggings → leggings
-    
     trim_nbt = ""
     if trim_name != "none":
         trim_nbt = f'trim={{pattern:"minecraft:{trim_name}",material:"minecraft:{material}"}}'
@@ -795,12 +781,12 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
         color_int = (r << 16) | (g << 8) | b
         leather_nbt = f',color:{color_int}'
 
-    # ساخت دستور نهایی
     nbt_parts = [p for p in [trim_nbt, leather_nbt] if p]
     nbt_str = f'[{",".join(nbt_parts)}]' if nbt_parts else ""
-
-    give_cmd_chest = f"/give @p minecraft:{armor}_chestplate{nbt_str} 1"
     
+    give_chest = f"/give @p minecraft:{armor}_chestplate{nbt_str} 1"
+    give_legs  = f"/give @p minecraft:{armor}_leggings{nbt_str} 1"
+
     # ==================== ساخت و ارسال فایل‌ها ====================
     lines = [f"🛡 <b>{armor.upper()}</b>"]
     if armor == "leather":
@@ -815,18 +801,20 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
 
     sent = 0
     for layer, label, emoji in [
-        ("humanoid",          "Layer 1 — Main Body", "🔵"),
-        ("humanoid_leggings", "Layer 2 — Leggings",  "🟢"),
+        ("humanoid",          "Layer 1 — Main Body (Chestplate)", "🔵"),
+        ("humanoid_leggings", "Layer 2 — Leggings", "🟢"),
     ]:
         data = build_layer(armor, leather_color, trim_name, mat_color, layer, enchanted)
         if data:
+            current_give = give_chest if "humanoid" in layer else give_legs
+            full_caption = caption + f"\n\n{emoji} <b>{label}</b>\n\n📋 <b>/give:</b>\n<code>{current_give}</code>"
+            
             await cb.message.answer_document(
                 types.BufferedInputFile(data, filename=f"{armor}_{layer}.png"),
-                caption=caption + f"\n\n{emoji} <b>{label}</b>",
+                caption=full_caption,
                 parse_mode="HTML",
             )
             sent += 1
-
     # ارسال دستور give
     await cb.message.answer(
         f"📋 <b>دستور /give (Chestplate):</b>\n"
