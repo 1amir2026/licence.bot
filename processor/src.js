@@ -58,6 +58,16 @@ export default async function main(
     upscaleRate,
     xpPercent
 ) {
+
+// بعد از خط await unzipFile(...)
+console.log("Unzip completed. Contents:", fs.readdirSync(folderPaths.packFolder));
+
+// بعد از initializePaths
+const iconsPath = getPaths("SYS").packIconsPath;
+if (!fs.existsSync(iconsPath)) {
+    throw new Error(`Missing sprite sheet: ${iconsPath}`);
+}
+    
     // Initialize config and paths
     await initialize(packName, packZipBuffer, upscaleRate, xpPercent);
 
