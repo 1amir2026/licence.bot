@@ -25,12 +25,12 @@ async function initialize(
 
         const folderPaths = getPaths("SYS");
 
-        // پاک کردن فولدر قبلی (جلوگیری از تداخل)
+        // پاک کردن فولدر قبلی
         if (fs.existsSync(folderPaths.packFolder)) {
             fs.rmSync(folderPaths.packFolder, { recursive: true, force: true });
         }
 
-        // Unzip pack into temp folder
+        // Unzip pack
         await unzipFile(packZipBuffer, folderPaths.packFolder);
 
         const bedrock = checkBedrock(folderPaths.packFolder);
@@ -58,16 +58,6 @@ export default async function main(
     upscaleRate,
     xpPercent
 ) {
-
-// بعد از خط await unzipFile(...)
-console.log("Unzip completed. Contents:", fs.readdirSync(folderPaths.packFolder));
-
-// بعد از initializePaths
-const iconsPath = getPaths("SYS").packIconsPath;
-if (!fs.existsSync(iconsPath)) {
-    throw new Error(`Missing sprite sheet: ${iconsPath}`);
-}
-    
     // Initialize config and paths
     await initialize(packName, packZipBuffer, upscaleRate, xpPercent);
 
