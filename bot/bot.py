@@ -95,6 +95,45 @@ def is_user_banned(user_id: int) -> bool:
         session.close()
 
 
+def get_access_block_message(user_id: int):
+    """
+    بررسی می‌کند آیا کاربر اجازه استفاده از امکانات بات (دکمه‌ها) را دارد یا نه.
+    اگر دسترسی نداشته باشد (لایسنس نزده، بن شده یا لایسنسش تموم شده)
+    پیام مناسب را برمی‌گرداند، در غیر این صورت None یعنی دسترسی آزاد است.
+    """
+    if is_admin(user_id):
+        return None
+
+    session = Session()
+    try:
+        licenses = session.query(License).filter(License.user_id == user_id).all()
+
+        if not licenses:
+            return (
+                "❌ شما لایسنس فعالی ندارید.\n\n"
+                "برای دریافت لایسنس به ادمین مراجعه کنید:\n@Amirmah198"
+            )
+
+        if any(l.banned for l in licenses):
+            return "❌ شما از استفاده از ربات بن شده‌اید."
+
+        now = datetime.utcnow()
+        has_active = any(
+            l.used and (l.expires_at is None or l.expires_at > now)
+            for l in licenses
+        )
+
+        if has_active:
+            return None
+
+        return (
+            "❌ لایسنس شما تموم شده.\n\n"
+            "میتونید برای خرید مجدد به @AmirMah198 برید."
+        )
+    finally:
+        session.close()
+
+
 # ====================== HELPERS ======================
 async def run_node_processor(input_path: str, output_path: str, xp_percent: float = 0.7, upscale_rate: int = 1):
     proc = await asyncio.create_subprocess_exec(
@@ -878,8 +917,9 @@ async def admin_search_user(message: types.Message, state: FSMContext):
 # ====================== MODES ======================
 @dp.message(F.text == "📦 دریافت ریسورس پک ریلیز تکسچر")
 async def ask_for_pack(message: types.Message):
-    if is_user_banned(message.from_user.id):
-        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
+    block_msg = get_access_block_message(message.from_user.id)
+    if block_msg:
+        await message.answer(block_msg)
         return
 
     user_modes[message.from_user.id] = "resource_pack"
@@ -888,8 +928,9 @@ async def ask_for_pack(message: types.Message):
 
 @dp.message(F.text == "🧊 ساخت آیتم سه‌بعدی ماینکرافت")
 async def minecraft_3d(message: types.Message):
-    if is_user_banned(message.from_user.id):
-        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
+    block_msg = get_access_block_message(message.from_user.id)
+    if block_msg:
+        await message.answer(block_msg)
         return
 
     user_modes[message.from_user.id] = "minecraft_3d"
@@ -898,8 +939,9 @@ async def minecraft_3d(message: types.Message):
 
 @dp.message(F.text == "🔄 تبدیل JSON به OBJ")
 async def json_to_obj_mode(message: types.Message):
-    if is_user_banned(message.from_user.id):
-        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
+    block_msg = get_access_block_message(message.from_user.id)
+    if block_msg:
+        await message.answer(block_msg)
         return
 
     user_modes[message.from_user.id] = "json_to_obj"
@@ -909,8 +951,9 @@ async def json_to_obj_mode(message: types.Message):
 # ====================== MINECRAFT ASSETS DOWNLOADER ======================
 @dp.message(F.text == "📥 گرفتن فایل‌های ماینکرافت")
 async def minecraft_assets_mode(message: types.Message):
-    if is_user_banned(message.from_user.id):
-        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
+    block_msg = get_access_block_message(message.from_user.id)
+    if block_msg:
+        await message.answer(block_msg)
         return
 
     user_modes[message.from_user.id] = "minecraft_assets"
@@ -935,122 +978,102 @@ async def minecraft_assets_mode(message: types.Message):
         parse_mode="HTML"
     )
     
-# ====================== FILE HANDLER (اصلاح شده) ======================
-@dp.message(F.document | F.photo)
-async def handle_file(message: types.Message):
+# ====================== FILE HANDLER ======================
+@dp.message(F.document)
+async def handle_document(message: types.Message):
     user_id = message.from_user.id
 
-    if is_user_banned(user_id):
-        await message.answer("❌ شما بن شده‌اید.")
+    block_msg = get_access_block_message(user_id)
+    if block_msg:
+        await message.answer(block_msg)
         return
 
     mode = user_modes.get(user_id)
-    if not mode:
-        return  # حالت تنظیم نشده
+    doc = message.document
 
-    # گرفتن فایل (چه Document چه Photo)
-    if message.document:
-        doc = message.document
-        file_name = doc.file_name or "file"
-        file_id = doc.file_id
-    elif message.photo:
-        doc = message.photo[-1]  # بزرگ‌ترین سایز
-        file_name = f"image_{user_id}_{random.randint(1000,9999)}.png"
-        file_id = doc.file_id
-    else:
+    if not doc or not mode:
         return
 
-    await message.answer("🔄 در حال پردازش...")
-
-    # ==================== RESOURCE PACK ====================
+    # RESOURCE PACK
     if mode == "resource_pack":
-        if not file_name.lower().endswith(('.zip', '.mcpack')):
-            await message.answer("❌ فقط فایل ZIP یا MCPACK قبول است.")
-            user_modes.pop(user_id, None)
+        if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcpack")):
+            await message.answer("❌ فقط ZIP یا MCPACK")
             return
 
-        input_path = os.path.join(INPUT_DIR, file_name)
-        output_name = os.path.splitext(file_name)[0] + "_ui.png"
+        await message.answer("🔄 در حال پردازش...")
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
+        output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
         output_path = os.path.join(OUTPUT_DIR, output_name)
 
-        file = await bot.get_file(file_id)
+        file = await bot.get_file(doc.file_id)
         await bot.download_file(file.file_path, destination=input_path)
 
         try:
             await run_node_processor(input_path, output_path)
-            await message.answer_document(
-                FSInputFile(output_path), 
-                caption="✅ ریسورس پک پردازش و UI ساخته شد!"
-            )
+            user_modes.pop(user_id, None)
+            await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
         except Exception as e:
-            await message.answer(f"❌ خطا در پردازش:\n{str(e)[:500]}")
-        finally:
-            user_modes.pop(user_id, None)
+            await message.answer(f"❌ خطا:\n{e}")
 
-    # ==================== MINECRAFT 3D ITEM ====================
+    # MINECRAFT 3D ITEM
     elif mode == "minecraft_3d":
-        if not file_name.lower().endswith('.png'):
-            await message.answer("❌ فقط فایل PNG قبول است.")
-            user_modes.pop(user_id, None)
+        if not doc.file_name.lower().endswith(".png"):
+            await message.answer("❌ فقط فایل PNG مجاز است")
             return
 
-        input_path = os.path.join(INPUT_DIR, file_name)
-        output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(file_name)[0] + ".obj")
+        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
+        input_path = os.path.join(INPUT_DIR, doc.file_name)
+        output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + ".obj")
 
-        file = await bot.get_file(file_id)
+        file = await bot.get_file(doc.file_id)
         await bot.download_file(file.file_path, destination=input_path)
 
         try:
             output_file = await run_item3d(input_path, output_obj)
-            await message.answer_document(
-                FSInputFile(output_file), 
-                caption="✅ مدل سه‌بعدی با موفقیت ساخته شد!"
-            )
-        except Exception as e:
-            await message.answer(f"❌ خطا در ساخت مدل:\n{str(e)[:500]}")
-        finally:
             user_modes.pop(user_id, None)
+            await message.answer_document(FSInputFile(output_file), caption="✅ مدل سه‌بعدی با موفقیت ساخته شد!")
             if os.path.exists(input_path):
                 os.remove(input_path)
+        except Exception as e:
+            await message.answer(f"❌ خطا در ساخت مدل:\n{str(e)}")
 
-    # ==================== JSON TO OBJ - STEP 1 ====================
+    # JSON TO OBJ - STEP 1
     elif mode == "json_to_obj":
-        if not file_name.lower().endswith('.json'):
-            await message.answer("❌ فقط فایل JSON قبول است.")
-            user_modes.pop(user_id, None)
+        if not doc.file_name.lower().endswith(".json"):
+            await message.answer("❌ فقط فایل JSON مجاز است.")
             return
 
-        json_path = os.path.join(INPUT_DIR, file_name)
-        file = await bot.get_file(file_id)
+        await message.answer("✅ JSON دریافت شد.\n\n📤 حالا **فایل تکسچر (PNG)** را ارسال کنید.")
+
+        json_path = os.path.join(INPUT_DIR, doc.file_name)
+        file = await bot.get_file(doc.file_id)
         await bot.download_file(file.file_path, destination=json_path)
 
         user_data[user_id] = {
             "json_path": json_path,
-            "base_name": os.path.splitext(file_name)[0]
+            "base_name": os.path.splitext(doc.file_name)[0]
         }
         user_modes[user_id] = "json_to_obj_waiting_texture"
-        await message.answer("✅ JSON دریافت شد.\n\n📤 حالا فایل تکسچر **PNG** را ارسال کنید.")
 
-    # ==================== JSON TO OBJ - STEP 2 ====================
+    # JSON TO OBJ - STEP 2
     elif mode == "json_to_obj_waiting_texture":
-        if not file_name.lower().endswith('.png'):
-            await message.answer("❌ فقط فایل PNG قبول است.")
+        if not doc.file_name.lower().endswith(".png"):
+            await message.answer("❌ فقط فایل PNG مجاز است.")
             return
 
-        await message.answer("🔄 در حال تبدیل به OBJ + ZIP...")
+        await message.answer("🔄 در حال ساخت OBJ + MTL + ZIP...")
 
         data = user_data.get(user_id)
         if not data:
-            await message.answer("❌ اطلاعات مدل پیدا نشد.")
-            user_modes.pop(user_id, None)
+            await message.answer("❌ خطا: اطلاعات مدل پیدا نشد.")
             return
 
         json_path = data["json_path"]
         base_name = data["base_name"]
-        texture_path = os.path.join(INPUT_DIR, file_name)
+        texture_path = os.path.join(INPUT_DIR, doc.file_name)
         output_obj = os.path.join(OUTPUT_DIR, base_name + ".obj")
 
-        file = await bot.get_file(file_id)
+        file = await bot.get_file(doc.file_id)
         await bot.download_file(file.file_path, destination=texture_path)
 
         try:
@@ -1059,12 +1082,17 @@ async def handle_file(message: types.Message):
 
             await message.answer_document(
                 FSInputFile(zip_path),
-                caption=f"✅ تبدیل با موفقیت انجام شد!\n\n📦 شامل:\n• {base_name}.obj\n• {base_name}.mtl\n• {os.path.basename(texture_path)}"
+                caption=f"✅ تبدیل با موفقیت انجام شد!\n\n"
+                        f"📦 فایل‌ها داخل ZIP:\n"
+                        f"• {base_name}.obj\n"
+                        f"• {base_name}.mtl\n"
+                        f"• {os.path.basename(texture_path)}"
             )
+
         except Exception as e:
-            await message.answer(f"❌ خطا:\n{str(e)[:500]}")
+            await message.answer(f"❌ خطا:\n{str(e)}")
+
         finally:
-            # پاکسازی فایل‌ها
             for p in [json_path, texture_path, output_obj, output_obj.replace('.obj', '.mtl')]:
                 if os.path.exists(p):
                     try:
@@ -1074,10 +1102,6 @@ async def handle_file(message: types.Message):
             user_modes.pop(user_id, None)
             user_data.pop(user_id, None)
 
-    else:
-        await message.answer("❌ حالت نامعتبر.")
-        user_modes.pop(user_id, None)
-        
 # ====================== MINECRAFT ASSETS DOWNLOADER ======================
 
 # آدرس پایه GitHub برای assets
@@ -1312,7 +1336,7 @@ def build_asset_keyboard(files: list, selected: list) -> InlineKeyboardMarkup:
 
 @dp.message(F.text, lambda m: user_modes.get(m.from_user.id) == "minecraft_assets")
 async def handle_minecraft_asset_name(message: types.Message):
-    if is_user_banned(message.from_user.id):
+    if get_access_block_message(message.from_user.id):
         return
 
     raw_input = message.text.strip()
@@ -1507,14 +1531,18 @@ async def license_expiry_checker():
                 for lic in expired:
                     lic.expired_notified = True
                     if lic.user_id:
-                        try:
-                            await bot.send_message(
-                                lic.user_id,
-                                "❌ لایسنس شما تموم شده.\n\n"
-                                "میتونید برای خرید مجدد به @AmirMah198 برید."
-                            )
-                        except Exception as e:
-                            print(f"Failed to notify expired license user {lic.user_id}: {e}")
+                        # فقط اگر کاربر هیچ لایسنس فعال دیگه‌ای نداره اطلاع بده و منو رو حذف کن
+                        if get_access_block_message(lic.user_id):
+                            try:
+                                await bot.send_message(
+                                    lic.user_id,
+                                    "❌ لایسنس شما تموم شده.\n\n"
+                                    "میتونید برای خرید مجدد به @AmirMah198 برید.",
+                                    reply_markup=types.ReplyKeyboardRemove()
+                                )
+                                user_modes.pop(lic.user_id, None)
+                            except Exception as e:
+                                print(f"Failed to notify expired license user {lic.user_id}: {e}")
 
                 if expired:
                     session.commit()
