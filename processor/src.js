@@ -11,6 +11,7 @@ import {
     findGuiSprite,
 } from "./utils/utils.js";
 import { crop, imageDimsFix, processImage } from "./helpers/imageProcessing.js";
+import { findGuiSprite, findWidgetsSprite } from "./utils/utils.js";
 
 async function initialize(
     packFileName,
@@ -41,17 +42,16 @@ async function initialize(
         initializePaths(getPaths("SYS"));
 
         // === بخش جدید: پیدا کردن icons.png هوشمند ===
-        const iconsPath = findGuiSprite(folderPaths.packFolder);
-        
-        if (!iconsPath) {
-            console.error("❌ Could not find any icons.png / gui.png in the pack!");
-            throw new Error("Missing sprite sheet: icons.png (tried multiple paths)");
-        }
+    const iconsPath = findGuiSprite(folderPaths.packFolder);
+    if (!iconsPath) {
+        throw new Error("MANUAL_SPRITE_NEEDED: sprite (icons.png/gui.png) not found in pack");
+    }
+    setValue("packIconsPath", iconsPath, "insert");
 
-        console.log("✅ Found sprite sheet at:", iconsPath);
+    const widgetsPath = findWidgetsSprite(folderPaths.packFolder) || iconsPath;
+    setValue("packWidgetsPath", widgetsPath, "insert");
 
-        const scalingFactor = await getScale(iconsPath);
-        setValue("scalingFactor", scalingFactor, "insert");
+    const scalingFactor = await getScale(iconsPath);
 
         setValue("upscaleRate", upscaleRate, "insert");
         setValue("xpPercent", xpPercent, "insert");
@@ -92,5 +92,20 @@ export default async function main(
     // Cleanup
     clean([systemPaths.tempPath, configPath]);
 
+    return uiImageBuffer;
+}
+
+export async function continueProcessing(upscaleRate, xpPercent) {
+    const systemPaths = getPaths("SYS");
+    const scalingFactor = await getScale(systemPaths.packIconsPath);
+    setValue("scalingFactor", scalingFactor, "insert");
+    setValue("upscaleRate", upscaleRate, "insert");
+    setValue("xpPercent", xpPercent, "insert");
+
+    await imageDimsFix(systemPaths.packIconsPath, systemPaths.packWidgetsPath);
+    await crop("ICON");
+    await crop("GUI");
+    const uiImageBuffer = await processImage();
+    clean([systemPaths.tempPath, configPath]);
     return uiImageBuffer;
 }
