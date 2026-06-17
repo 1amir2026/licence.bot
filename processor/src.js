@@ -1,5 +1,4 @@
 // processor/src.js
-
 import { configPath, createConfig, setValue } from "./utils/configUtils.js";
 import { getPaths, initializePaths } from "./helpers/paths.js";
 import {
@@ -10,11 +9,6 @@ import {
     unzipFile,
 } from "./utils/utils.js";
 import { crop, imageDimsFix, processImage } from "./helpers/imageProcessing.js";
-
-// packZipBuffer = Buffer of the zip/mcpack file
-// packName = filename.zip
-// upscaleRate = number
-// xpPercent = number
 
 async function initialize(
     packFileName,
@@ -29,6 +23,11 @@ async function initialize(
         setValue("packFileName", packFileName, "insert");
 
         const folderPaths = getPaths("SYS");
+
+        // پاک کردن فولدر قبلی (جلوگیری از تداخل)
+        if (fs.existsSync(folderPaths.packFolder)) {
+            fs.rmSync(folderPaths.packFolder, { recursive: true, force: true });
+        }
 
         // Unzip pack into temp folder
         await unzipFile(packZipBuffer, folderPaths.packFolder);
@@ -45,8 +44,10 @@ async function initialize(
 
         setValue("upscaleRate", upscaleRate, "insert");
         setValue("xpPercent", xpPercent, "insert");
+
     } catch (err) {
-        throw new Error("Error while initialising: " + err);
+        console.error("Initialization failed:", err.message || err);
+        throw new Error("Error while initialising: " + (err.message || err));
     }
 }
 
