@@ -90,34 +90,6 @@ export function convertBedrock(parentDir) {
  * @param {number} maxDepth - حداکثر عمق جستجو
  * @returns {string|null}
  */
-function findPngRecursive(dir, maxDepth = 6) {
-    if (maxDepth <= 0 || !fs.existsSync(dir)) return null;
-
-    let entries;
-    try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-        return null;
-    }
-
-    // اول فایل‌های این فولدر رو چک کن
-    const TARGET_NAMES = ["icons.png", "gui.png", "icon.png", "icons1.png"];
-    for (const entry of entries) {
-        if (entry.isFile() && TARGET_NAMES.includes(entry.name.toLowerCase())) {
-            return path.join(dir, entry.name);
-        }
-    }
-
-    // بعد بره توی فولدرها
-    for (const entry of entries) {
-        if (entry.isDirectory()) {
-            const found = findPngRecursive(path.join(dir, entry.name), maxDepth - 1);
-            if (found) return found;
-        }
-    }
-
-    return null;
-}
 
 // به جای امضای فعلی:
 function findPngRecursive(dir, targetNames, maxDepth = 6) {
@@ -137,6 +109,7 @@ function findPngRecursive(dir, targetNames, maxDepth = 6) {
     }
     return null;
 }
+
 export function findGuiSprite(packRoot) {
     // مسیرهای مستقیم - Java Edition
     const directPaths = [
