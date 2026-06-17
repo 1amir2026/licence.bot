@@ -111,58 +111,55 @@ function findPngRecursive(dir, targetNames, maxDepth = 6) {
 }
 
 export function findGuiSprite(packRoot) {
-    // مسیرهای مستقیم - Java Edition
-    const directPaths = [
-        `${packRoot}/assets/minecraft/textures/gui/icons.png`,
-        `${packRoot}/assets/minecraft/textures/gui/gui.png`,
-        // Bedrock Edition
-        `${packRoot}/textures/gui/icons.png`,
-        `${packRoot}/textures/gui/gui.png`,
-        `${packRoot}/textures/gui/icon.png`,
-        `${packRoot}/textures/gui/icons1.png`,
-        // Bedrock زیر فولدر container
-        `${packRoot}/assets/minecraft/textures/gui/container/icons.png`,
-        `${packRoot}/textures/gui/container/icons.png`,
-    ];
+    const candidates = [];
 
-    for (const p of directPaths) {
-        if (fs.existsSync(p)) {
-            console.log(`✅ Found sprite at direct path: ${p}`);
-            return p;
-        }
-    }
-
-    // جستجوی ساده در gui فولدرها
-    const guiFolders = [
+    const possibleDirs = [
         `${packRoot}/assets/minecraft/textures/gui`,
-        `${packRoot}/textures/gui`,
         `${packRoot}/assets/minecraft/textures/gui/container`,
+        `${packRoot}/assets/minecraft/textures/ui`,
+        `${packRoot}/assets/minecraft/textures/gui/sprites`,
+        `${packRoot}/textures/gui`,
         `${packRoot}/textures/gui/container`,
+        `${packRoot}/textures/ui`,
+        `${packRoot}/textures/gui/sprites`,
     ];
 
-    for (const guiDir of guiFolders) {
-        if (fs.existsSync(guiDir)) {
-            const files = fs.readdirSync(guiDir);
-            console.log(`🔍 GUI folder ${guiDir} contains:`, files);
+    const possibleNames = [
+        "icons.png",
+        "gui.png",
+        "icon.png",
+        "icons1.png",
+        "widgets.png",
+        "ui.png",
+        "hud.png",
+        "hotbar.png"
+    ];
 
-            for (const file of files) {
-                if (
-                    (file.toLowerCase().includes("icon") || file.toLowerCase() === "gui.png") &&
-                    file.endsWith(".png")
-                ) {
-                    const found = path.join(guiDir, file);
-                    console.log(`✅ Found sprite in GUI folder: ${found}`);
-                    return found;
-                }
+    for (const dir of possibleDirs) {
+        if (!fs.existsSync(dir)) continue;
+
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+            if (possibleNames.includes(file.toLowerCase())) {
+                candidates.push(path.join(dir, file));
             }
         }
     }
 
-    // جستجوی عمیق بازگشتی در کل پک
-    console.log(`🔎 Trying deep recursive search in: ${packRoot}`);
-    const deep = findPngRecursive(packRoot, ["icons.png", "gui.png", "icon.png", "icons1.png"], 6);
+    // اگر چند فایل پیدا شد، icons.png را اولویت بده
+    const best = candidates.find(p => p.toLowerCase().includes("icons.png"))
+        || candidates.find(p => p.toLowerCase().includes("gui.png"))
+        || candidates[0];
+
+    if (best) {
+        console.log("✅ GUI sprite found:", best);
+        return best;
+    }
+
+    // fallback: deep search
+    const deep = findPngRecursive(packRoot, possibleNames, 6);
     if (deep) {
-        console.log(`✅ Found sprite via recursive search: ${deep}`);
+        console.log("🔎 Found via deep search:", deep);
         return deep;
     }
 
