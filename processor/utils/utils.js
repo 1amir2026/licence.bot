@@ -84,3 +84,50 @@ export function convertBedrock(parentDir) {
 
     fs.rmdirSync(subfolder);
 }
+
+export function findGuiSprite(packRoot) {
+    const possiblePaths = [
+        // مسیر اصلی
+        `${packRoot}/assets/minecraft/textures/gui/icons.png`,
+        `${packRoot}/assets/minecraft/textures/gui/gui.png`,
+        `${packRoot}/textures/gui/icons.png`,
+        `${packRoot}/textures/gui/gui.png`,
+        `${packRoot}/textures/gui/icon.png`,
+        `${packRoot}/textures/gui/icons1.png`,
+        
+        // مسیرهای رایج Bedrock
+        `${packRoot}/assets/minecraft/textures/gui/container/icons.png`,
+        `${packRoot}/textures/gui/container/icons.png`,
+        
+        // جستجوی عمیق‌تر (اگر لازم شد)
+        // `${packRoot}/**/*icons*.png`  ← بعداً اگر لازم شد پیاده‌سازی کن
+    ];
+
+    for (const path of possiblePaths) {
+        if (fs.existsSync(path)) {
+            return path;
+        }
+    }
+
+    // جستجوی ساده در gui فولدر
+    const guiFolders = [
+        `${packRoot}/assets/minecraft/textures/gui`,
+        `${packRoot}/textures/gui`,
+        `${packRoot}/assets/minecraft/textures/gui/container`
+    ];
+
+    for (const guiDir of guiFolders) {
+        if (fs.existsSync(guiDir)) {
+            const files = fs.readdirSync(guiDir);
+            console.log(`GUI folder ${guiDir} contains:`, files);
+            
+            for (const file of files) {
+                if (file.toLowerCase().includes('icon') && file.endsWith('.png')) {
+                    return `${guiDir}/${file}`;
+                }
+            }
+        }
+    }
+
+    return null;
+}
