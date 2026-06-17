@@ -815,21 +815,6 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
                 parse_mode="HTML",
             )
             sent += 1
-    # ارسال دستور give
-    await cb.message.answer(
-        f"📋 <b>دستور /give (Chestplate):</b>\n"
-        f"<code>{give_cmd_chest}</code>\n\n"
-        f"این دستور را در چت بازی (Java Edition 1.21+) پیست کنید.",
-        parse_mode="HTML"
-    )
-
-    # دستور leggings هم
-    give_cmd_legs = give_cmd_chest.replace("chestplate", "leggings")
-    await cb.message.answer(
-        f"📋 <b>دستور /give (Leggings):</b>\n"
-        f"<code>{give_cmd_legs}</code>",
-        parse_mode="HTML"
-    )
 
     if sent:
         await cb.message.answer("✅ آرمور با موفقیت ساخته شد!")
