@@ -427,7 +427,126 @@ def build_layer(armor_key: str, leather_color_key: str,
         import traceback; traceback.print_exc()
         return None
 
+# ====================== PREVIEW FUNCTIONS ======================
 
+def generate_preview(s: dict, show_player: bool = True) -> bytes | None:
+    """تولید پیش‌نمایش کامل برای نمایش در چت"""
+    if not PIL_AVAILABLE:
+        return None
+
+    armor = s["armor"]
+    leather_color = s.get("leather_color", "none")
+    trim_name = ARMOR_TRIMS[s["trim"]]
+    material = s.get("material", "iron")
+    mat_color = TRIM_MATERIALS.get(material, (216, 216, 216))
+    enchanted = s.get("enchanted", False)
+
+    # برای پیش‌نمایش از لایه humanoid استفاده می‌کنیم (بدنه اصلی)
+    layer = "humanoid"
+
+    try:
+        # استفاده از همان تابع build_layer که قبلاً داری
+        data = build_layer(armor, leather_color, trim_name, mat_color, layer, enchanted)
+        return data
+    except Exception as e:
+        print(f"[armor preview] خطا: {e}")
+        return None
+
+
+# ====================== به‌روزرسانی HANDLERS ======================
+
+async def _update_preview(cb: types.CallbackQuery, s: dict, title: str):
+    """ارسال یا ویرایش پیام با پیش‌نمایش"""
+    preview_data = generate_preview(s)
+    
+    if preview_data:
+        try:
+            await cb.message.answer_photo(
+                types.BufferedInputFile(preview_data, filename="preview.png"),
+                caption=f"🛡️ **پیش‌نمایش**:\n{title}",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass  # اگر خطا داد مهم نیست
+
+
+# ─── مرحله بعد از انتخاب آرمور ──────────────────────────────────────
+@dp.callback_query(F.data == "a_after_armor")
+async def after_armor(cb: types.CallbackQuery):
+    uid = cb.from_user.id
+    s = armor_build_state.get(uid)
+    if not s: return
+
+    title = f"آرمور: <b>{s['armor'].upper()}</b>"
+
+    # پیش‌نمایش اولیه آرمور
+    await _update_preview(cb, s, title)
+
+    if s["armor"] == "leather":
+        # ... (کد قبلی رنگ چرم)
+        await cb.message.edit_text( ... )
+    else:
+        await cb.message.edit_text(
+            f"🎨 <b>مرحله ۲ — تریم</b>\n\n{title}\n\n"
+            f"تریم را انتخاب کنید:",
+            reply_markup=kb_trim(s["trim"])
+        )
+
+
+# ─── چرخش تریم ──────────────────────────────────────
+@dp.callback_query(F.data == "a_trim_cycle")
+async def trim_cycle(cb: types.CallbackQuery):
+    uid = cb.from_user.id
+    s = armor_build_state.get(uid)
+    if not s: return
+
+    s["trim"] = (s["trim"] + 1) % len(ARMOR_TRIMS)
+    
+    trim_name = ARMOR_TRIMS[s["trim"]]
+    title = f"آرمور: <b>{s['armor'].upper()}</b> | تریم: <b>{trim_name}</b>"
+
+    await _update_preview(cb, s, title)   # ← پیش‌نمایش با تریم سفید/خاکستری
+
+    await cb.message.edit_reply_markup(reply_markup=kb_trim(s["trim"]))
+    await cb.answer(trim_name)
+
+
+# ─── مرحله ماده تریم ──────────────────────────────────────
+@dp.callback_query(F.data == "a_mat_cycle")
+async def mat_cycle(cb: types.CallbackQuery):
+    uid = cb.from_user.id
+    s = armor_build_state.get(uid)
+    if not s: return
+
+    mat_list = list(TRIM_MATERIALS.keys())
+    idx = mat_list.index(s["material"]) if s["material"] in mat_list else 0
+    s["material"] = mat_list[(idx + 1) % len(mat_list)]
+
+    trim_name = ARMOR_TRIMS[s["trim"]]
+    title = f"آرمور: <b>{s['armor'].upper()}</b> | تریم: <b>{trim_name}</b> | ماده: <b>{s['material']}</b>"
+
+    await _update_preview(cb, s, title)   # ← پیش‌نمایش با رنگ واقعی
+
+    await cb.message.edit_reply_markup(reply_markup=kb_material(s["material"]))
+    await cb.answer(s["material"])
+
+
+# ─── اینچنت ──────────────────────────────────────
+@dp.callback_query(F.data == "a_enchant_toggle")
+async def enchant_toggle(cb: types.CallbackQuery):
+    uid = cb.from_user.id
+    s = armor_build_state.get(uid)
+    if not s: return
+
+    s["enchanted"] = not s.get("enchanted", False)
+
+    trim_name = ARMOR_TRIMS[s["trim"]]
+    title = f"آرمور: <b>{s['armor'].upper()}</b> | تریم: <b>{trim_name}</b> | اینچنت: {'✨ بله' if s['enchanted'] else 'خیر'}"
+
+    await _update_preview(cb, s, title)
+
+    await cb.message.edit_reply_markup(reply_markup=kb_enchant(s["enchanted"]))
+    await cb.answer("اینچنت تغییر کرد")
 # ====================== HANDLERS ======================
 
 def register_armor_handlers(dp: Dispatcher, bot: Bot):
