@@ -1,20 +1,18 @@
 // processor/processor.mjs
 import fs from "fs";
 import path from "path";
-import make from "./src.js"; // همون main از src.txt
+import make, { continueProcessing } from "./src.js";
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
-async function main() {
-    const args = process.argv.slice(2);
+// Read CLI arguments globally
+const args = process.argv.slice(2);
 
+async function main() {
     if (args.length < 4) {
         console.error("Usage: node processor.mjs <inputPack> <outputPng> <xpPercent> <upscaleRate>");
         process.exit(1);
     }
-
-        // Read CLI arguments
-    const args = process.argv.slice(2);
 
     const [inputPath, outputPath, xpPercentRaw, upscaleRateRaw] = args;
 
@@ -46,16 +44,21 @@ async function main() {
     }
 }
 
+// Handle --paths
 if (args[0] === "--paths") {
     const { getPaths } = await import("./helpers/paths.js");
     console.log(JSON.stringify(getPaths("SYS")));
     process.exit(0);
 }
 
+// Handle --resume
 if (args[0] === "--resume") {
     const [, outputPath, xpPercentRaw, upscaleRateRaw] = args;
     try {
-        const imgBuffer = await continueProcessing(Number(upscaleRateRaw), Number(xpPercentRaw));
+        const imgBuffer = await continueProcessing(
+            Number(upscaleRateRaw),
+            Number(xpPercentRaw)
+        );
         fs.writeFileSync(outputPath, imgBuffer);
         console.log("OK");
         process.exit(0);
@@ -64,6 +67,5 @@ if (args[0] === "--resume") {
         process.exit(1);
     }
 }
-
 
 main();
