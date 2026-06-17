@@ -119,6 +119,24 @@ function findPngRecursive(dir, maxDepth = 6) {
     return null;
 }
 
+// به جای امضای فعلی:
+function findPngRecursive(dir, targetNames, maxDepth = 6) {
+    if (maxDepth <= 0 || !fs.existsSync(dir)) return null;
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return null; }
+    for (const entry of entries) {
+        if (entry.isFile() && targetNames.includes(entry.name.toLowerCase())) {
+            return path.join(dir, entry.name);
+        }
+    }
+    for (const entry of entries) {
+        if (entry.isDirectory()) {
+            const found = findPngRecursive(path.join(dir, entry.name), targetNames, maxDepth - 1);
+            if (found) return found;
+        }
+    }
+    return null;
+}
 export function findGuiSprite(packRoot) {
     // مسیرهای مستقیم - Java Edition
     const directPaths = [
@@ -169,7 +187,7 @@ export function findGuiSprite(packRoot) {
 
     // جستجوی عمیق بازگشتی در کل پک
     console.log(`🔎 Trying deep recursive search in: ${packRoot}`);
-    const deep = findPngRecursive(packRoot, 6);
+    const deep = findPngRecursive(packRoot, ["icons.png", "gui.png", "icon.png", "icons1.png"], 6);
     if (deep) {
         console.log(`✅ Found sprite via recursive search: ${deep}`);
         return deep;
@@ -203,4 +221,28 @@ export function getPackStructureInfo(packRoot) {
     }
     walk(packRoot);
     return lines.slice(0, 40).join("\n"); // حداکثر ۴۰ خط
+}
+
+export function findWidgetsSprite(packRoot) {
+    const directPaths = [
+        `${packRoot}/assets/minecraft/textures/gui/widgets.png`,
+        `${packRoot}/textures/gui/gui.png`,
+        `${packRoot}/textures/gui/widgets.png`,
+    ];
+    for (const p of directPaths) if (fs.existsSync(p)) return p;
+
+    const guiFolders = [
+        `${packRoot}/assets/minecraft/textures/gui`,
+        `${packRoot}/textures/gui`,
+    ];
+    for (const guiDir of guiFolders) {
+        if (fs.existsSync(guiDir)) {
+            for (const file of fs.readdirSync(guiDir)) {
+                if (file.toLowerCase().includes("widget") && file.endsWith(".png")) {
+                    return path.join(guiDir, file);
+                }
+            }
+        }
+    }
+    return findPngRecursive(packRoot, ["widgets.png", "gui.png", "icon.png"], 6);
 }
