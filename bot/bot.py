@@ -854,11 +854,14 @@ async def management_router(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.edit_text(f"✅ لایسنس با تایم «{time_text}» ساخته شد.")
 
         await callback.message.answer(
-            f"<b>🔑 لایسنس جدید ساخته شد</b>\n\n"
+            f"<b>✅ لایسنس جدید شما آماده است</b>\n\n"
             f"<code>{key}</code>\n\n"
             f"⏱ مدت اعتبار: {time_text}\n\n"
-            "⚠️ لایسنس یک‌بار مصرف است.",
-            parse_mode="HTML"
+            "⚠️ این لایسنس <b>یک‌بار مصرف</b> میباشد.\n"
+            "لطفاً آن را فقط در اکانتی وارد نمایید که از <b>امنیت آن اطمینان کامل</b> دارید.\n\n"
+            "⚠️ لایسنس‌ها مجدد ساخته نمی‌شوند. هیچ پاسخی از طرف بنده در قبال دریافت مجدد لایسنس پذیرا نخواهم شد.\n\n"
+            "<b>مبارکتون باشه 🌹</b>",
+            parse_mode='HTML'
         )
 
         license_selection.pop(chat_id, None)
