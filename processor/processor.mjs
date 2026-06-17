@@ -13,6 +13,9 @@ async function main() {
         process.exit(1);
     }
 
+        // Read CLI arguments
+    const args = process.argv.slice(2);
+
     const [inputPath, outputPath, xpPercentRaw, upscaleRateRaw] = args;
 
     const xpPercent = Number(xpPercentRaw);
