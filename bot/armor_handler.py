@@ -568,10 +568,10 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         await _send_preview(cb, s)
 
         def kb_with_skin_option() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📤 آپلود اسکین (اختیاری)", callback_data="a_upload_skin")],
-        [InlineKeyboardButton(text="➡️ ادامه بدون اسکین", callback_data="a_skip_skin")],
-    ])
+            return InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📤 آپلود اسکین (اختیاری)", callback_data="a_upload_skin")],
+                [InlineKeyboardButton(text="➡️ ادامه بدون اسکین", callback_data="a_skip_skin")],
+            ])
 
         # اگر چرم → مرحله رنگ چرم
         if s["armor"] == "leather":
@@ -782,7 +782,8 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
         return
 
     # ==================== تولید دستور /give ====================
-    item_type = "chestplate" if "humanoid" in "humanoid" else "leggings"  # فعلاً فقط chestplate و leggings
+    # برای لایه humanoid → chestplate
+    # برای لایه leggings → leggings
     
     trim_nbt = ""
     if trim_name != "none":
@@ -795,13 +796,11 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
         leather_nbt = f',color:{color_int}'
 
     # ساخت دستور نهایی
-    nbt_parts = [trim_nbt, leather_nbt]
-    nbt_str = ",".join([p for p in nbt_parts if p])
-    if nbt_str:
-        nbt_str = f'[{nbt_str}]'
+    nbt_parts = [p for p in [trim_nbt, leather_nbt] if p]
+    nbt_str = f'[{",".join(nbt_parts)}]' if nbt_parts else ""
 
-    give_cmd = f"/give @p minecraft:{armor}_{item_type}{nbt_str} 1"
-
+    give_cmd_chest = f"/give @p minecraft:{armor}_chestplate{nbt_str} 1"
+    
     # ==================== ساخت و ارسال فایل‌ها ====================
     lines = [f"🛡 <b>{armor.upper()}</b>"]
     if armor == "leather":
@@ -830,9 +829,17 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
 
     # ارسال دستور give
     await cb.message.answer(
-        f"📋 <b>دستور /give آماده:</b>\n"
-        f"<code>{give_cmd}</code>\n\n"
-        f"این دستور را در چت بازی (Java Edition) پیست کنید.",
+        f"📋 <b>دستور /give (Chestplate):</b>\n"
+        f"<code>{give_cmd_chest}</code>\n\n"
+        f"این دستور را در چت بازی (Java Edition 1.21+) پیست کنید.",
+        parse_mode="HTML"
+    )
+
+    # دستور leggings هم
+    give_cmd_legs = give_cmd_chest.replace("chestplate", "leggings")
+    await cb.message.answer(
+        f"📋 <b>دستور /give (Leggings):</b>\n"
+        f"<code>{give_cmd_legs}</code>",
         parse_mode="HTML"
     )
 
