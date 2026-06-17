@@ -17,24 +17,20 @@ async function initialize(
     upscaleRate,
     xpPercent
 ) {
-    createConfig(); // Create config.json
+    createConfig();
 
     try {
-        // Save pack name
         setValue("packFileName", packFileName, "insert");
 
         const folderPaths = getPaths("SYS");
 
-        // پاک کردن فولدر قبلی
         if (fs.existsSync(folderPaths.packFolder)) {
             fs.rmSync(folderPaths.packFolder, { recursive: true, force: true });
         }
 
-        // Unzip pack
         await unzipFile(packZipBuffer, folderPaths.packFolder);
 
-        // لاگ برای دیباگ (بعد از unzip)
-        console.log("Unzip completed. Root contents:", fs.readdirSync(folderPaths.packFolder));
+        console.log("📦 Unzip completed. Root:", fs.readdirSync(folderPaths.packFolder));
 
         const bedrock = checkBedrock(folderPaths.packFolder);
         if (bedrock) convertBedrock(folderPaths.packFolder);
@@ -43,15 +39,15 @@ async function initialize(
 
         initializePaths(getPaths("SYS"));
 
-        // چک icons.png
-        const iconsPath = getPaths("SYS").packIconsPath;
-        if (!fs.existsSync(iconsPath)) {
-            console.error("Missing icons.png at:", iconsPath);
-            console.log("GUI folder contents:", fs.existsSync(getPaths("SYS").packGuiFolder) 
-                ? fs.readdirSync(getPaths("SYS").packGuiFolder) 
-                : "GUI folder not found");
-            throw new Error(`Missing sprite sheet: ${iconsPath}`);
+        // === بخش جدید: پیدا کردن icons.png هوشمند ===
+        const iconsPath = findGuiSprite(folderPaths.packFolder);
+        
+        if (!iconsPath) {
+            console.error("❌ Could not find any icons.png / gui.png in the pack!");
+            throw new Error("Missing sprite sheet: icons.png (tried multiple paths)");
         }
+
+        console.log("✅ Found sprite sheet at:", iconsPath);
 
         const scalingFactor = await getScale(iconsPath);
         setValue("scalingFactor", scalingFactor, "insert");
