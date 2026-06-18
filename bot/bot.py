@@ -858,7 +858,7 @@ async def management_router(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.edit_text(f"✅ لایسنس با تایم «{time_text}» ساخته شد.")
 
         await callback.message.answer(
-            f"<b>✅ لایسنس جدید شما آماده است</b>\n\n"
+            f"<b>✅ لایسنس شما آماده شد</b>\n\n"
             f"<code>{key}</code>\n\n"
             f"⏱ مدت اعتبار: {time_text}\n\n"
             "⚠️ این لایسنس <b>یک‌بار مصرف</b> میباشد.\n"
@@ -1578,7 +1578,7 @@ async def manual_pack_start(callback: types.CallbackQuery, state: FSMContext):
         "📁 <b>Java Pack (zip):</b>\n"
         "  مسیر: <code>assets/minecraft/textures/gui/icons.png</code>\n\n"
         "📁 <b>Bedrock (mcpack):</b>\n"
-        "  مسیر: <code>textures/ui/icons.png</code>\n\n"
+        "  مسیر: <code>textures/gui/icons.png ( هر اسم دیگری شبیه این )</code>\n\n"
         "➡️ <b>فایل PNG رو بفرست:</b>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
@@ -1624,7 +1624,7 @@ async def manual_receive_icon(message: types.Message, state: FSMContext):
         "📁 <b>Java Pack (zip):</b>\n"
         "  مسیر: <code>assets/minecraft/textures/gui/widgets.png</code>\n\n"
         "📁 <b>Bedrock (mcpack):</b>\n"
-        "  مسیر: <code>textures/ui/widgets.png</code>\n\n"
+        "  مسیر: <code>textures/gui/gui.png ( هر اسم دیگری شبیه این )</code>\n\n"
         "➡️ <b>فایل PNG رو بفرست:</b>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
