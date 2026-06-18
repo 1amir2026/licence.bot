@@ -474,11 +474,17 @@ def build_preview(armor_key: str, leather_color_key: str,
 
 def register_armor_handlers(dp: Dispatcher, bot: Bot):
 
+    PREVIEW_CAPTION = (
+        "پیش نمایش تکسچر Armor درخواستی شما👆\n\n"
+        "این فقط یک پیش نمایش است؛ فایل اصلی بعد از اتمام کار ارسال میشود✅"
+    )
+
     async def _send_preview(cb: types.CallbackQuery, s: dict):
         """
-        ارسال یا آپدیت عکس پیش‌نمایش بالای پیام.
-        اگر پیش‌نمایش قبلی وجود داشته باشد، عکسش edit می‌شود (سریع‌تر و تمیزتر).
-        در غیر این صورت یک عکس جدید فرستاده می‌شود.
+        ارسال یا آپدیت عکس پیش‌نمایش.
+        - اگر preview_msg_id وجود داشته باشد → edit_message_media
+        - اگر نه → send_photo جدید
+        پیش‌نمایش باید قبل از فراخوانی edit_text صدا زده شود تا بالاتر نمایش داده شود.
         """
         if not PIL_AVAILABLE:
             return
@@ -500,22 +506,30 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
 
         try:
             if preview_msg_id:
-                await bot.edit_message_media(
-                    chat_id=chat_id,
-                    message_id=preview_msg_id,
-                    media=types.InputMediaPhoto(media=photo_file),
-                )
-            else:
-                msg = await bot.send_photo(chat_id=chat_id, photo=photo_file)
-                s["preview_msg_id"] = msg.message_id
-        except Exception as e:
-            # اگر edit شکست خورد (مثلاً پیام پاک شده)، یک عکس جدید بفرست
-            print(f"[armor] خطا در آپدیت پیش‌نمایش: {e}")
-            try:
-                msg = await bot.send_photo(chat_id=chat_id, photo=photo_file)
-                s["preview_msg_id"] = msg.message_id
-            except Exception as e2:
-                print(f"[armor] خطا در ارسال پیش‌نمایش جدید: {e2}")
+                try:
+                    await bot.edit_message_media(
+                        chat_id=chat_id,
+                        message_id=preview_msg_id,
+                        media=types.InputMediaPhoto(
+                            media=photo_file,
+                            caption=PREVIEW_CAPTION,
+                        ),
+                    )
+                    return  # موفقیت‌آمیز بود
+                except Exception as e:
+                    print(f"[armor] edit_message_media شکست خورد، عکس جدید ارسال می‌شود: {e}")
+                    s["preview_msg_id"] = None  # ریست کن تا عکس جدید بفرستد
+
+            # ارسال عکس جدید
+            msg = await bot.send_photo(
+                chat_id=chat_id,
+                photo=photo_file,
+                caption=PREVIEW_CAPTION,
+            )
+            s["preview_msg_id"] = msg.message_id
+
+        except Exception as e2:
+            print(f"[armor] خطا در ارسال پیش‌نمایش: {e2}")
 
 
     @dp.message(F.text == "🛡 ساخت آرمور با تریم")
@@ -564,6 +578,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         if not s:
             await cb.answer("دوباره از منو شروع کنید.", show_alert=True); return
 
+        # پیش‌نمایش اول ارسال می‌شود تا بالاتر از پیام مرحله بعدی باشد
         await _send_preview(cb, s)
 
         # اگر چرم → مرحله رنگ چرم
@@ -577,14 +592,14 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
                 reply_markup=kb_leather_color("none"),
             )
         else:
-            # سایر آرمورها → مستقیم به تریم + دکمه اسکین
+            # سایر آرمورها → مستقیم به تریم
             await cb.message.edit_text(
                 f"🎨 <b>مرحله ۲ — تریم</b>\n\n"
                 f"آرمور: <b>{s['armor'].upper()}</b>\n\n"
                 f"روی دکمه کلیک کنید تا تریم تغییر کند.\n"
                 f"<code>none</code> = بدون تریم",
                 parse_mode="HTML",
-                reply_markup=kb_trim(s["trim"]),   # فعلاً بدون دکمه اسکین
+                reply_markup=kb_trim(s["trim"]),
             )
 
     # ─── مرحله ۲ (فقط چرم): چرخش رنگ ────────────────────────────
@@ -648,7 +663,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
 
         trim_name = ARMOR_TRIMS[s["trim"]]
         if trim_name == "none":
-            # بدون تریم → مستقیم به مرحله اینچنت
+            # بدون تریم → مستقیم به مرحله اینچنت (preview قبلاً در trim_cycle ارسال شده)
             await cb.message.edit_text(
                 f"✨ <b>مرحله آخر — اینچنت</b>\n\n"
                 f"آرمور: <b>{s['armor'].upper()}</b>  |  تریم: <b>none</b>\n\n"
@@ -657,7 +672,6 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
                 parse_mode="HTML",
                 reply_markup=kb_enchant(s.get("enchanted", False)),
             )
-            await _send_preview(cb, s)
             return
 
         await cb.message.edit_text(
@@ -689,6 +703,8 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         if not s:
             await cb.answer("دوباره از منو شروع کنید.", show_alert=True); return
         trim_name = ARMOR_TRIMS[s["trim"]]
+        # پیش‌نمایش قبل از پیام مرحله
+        await _send_preview(cb, s)
         await cb.message.edit_text(
             f"✨ <b>مرحله آخر — اینچنت</b>\n\n"
             f"آرمور: <b>{s['armor'].upper()}</b>  |  تریم: <b>{trim_name}</b>  |  ماده: <b>{s['material']}</b>\n\n"
@@ -697,7 +713,6 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             parse_mode="HTML",
             reply_markup=kb_enchant(s.get("enchanted", False)),
         )
-        await _send_preview(cb, s)
 
     # ─── مرحله آخر: toggle اینچنت ────────────────────────────────
     @dp.message(
@@ -773,29 +788,43 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
         armor_build_state.pop(uid, None)
         return
 
-    # ==================== تولید دستور /give ====================
+    # ==================== تولید دستور /give (Java 1.21+) ====================
     def generate_give_commands(armor: str, trim_name: str, material: str, leather_color: str):
-        nbt_parts = []
+        """
+        فرمت صحیح Java 1.21+ با component syntax:
+        /give @p minecraft:iron_chestplate[trim={pattern:"minecraft:silence",material:"minecraft:amethyst"}] 1
+        برای چرم رنگی:
+        /give @p minecraft:leather_chestplate[dyed_color={"rgb":DECIMAL}] 1
+        یا ترکیبی از هر دو.
+        """
+        components_parts = []
 
-        # Trim NBT
+        # Trim component
         if trim_name != "none":
-            nbt_parts.append(f'trim={{pattern:"minecraft:{trim_name}",material:"minecraft:{material}"}}')
+            components_parts.append(
+                f'trim={{pattern:"minecraft:{trim_name}",material:"minecraft:{material}"}}'
+            )
 
-        # Leather Color NBT (اصلاح شده)
+        # Leather color component
         if armor == "leather":
             r, g, b = LEATHER_COLORS.get(leather_color, LEATHER_COLORS["none"])
             color_int = (r << 16) | (g << 8) | b
-            nbt_parts.append(f'display={{color:{color_int}}}')
+            components_parts.append(f'dyed_color={{"rgb":{color_int}}}')
 
-        nbt_str = "{" + ",".join(nbt_parts) + "}" if nbt_parts else ""
+        # آرایش نهایی component string
+        if components_parts:
+            comp_str = "[" + ",".join(components_parts) + "]"
+        else:
+            comp_str = ""
 
         commands = {}
-        # بالاتنه کامل
+
+        # Main Body: helmet + chestplate + boots (لایه humanoid)
         for piece in ["helmet", "chestplate", "boots"]:
-            commands[piece] = f"/give @p minecraft:{armor}_{piece}{nbt_str} 1"
-        
-        # شلوار
-        commands["leggings"] = f"/give @p minecraft:{armor}_leggings{nbt_str} 1"
+            commands[piece] = f"/give @p minecraft:{armor}_{piece}{comp_str} 1"
+
+        # Leggings: لایه humanoid_leggings
+        commands["leggings"] = f"/give @p minecraft:{armor}_leggings{comp_str} 1"
 
         return commands
 
@@ -816,26 +845,47 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
 
     # ==================== ارسال فایل‌ها ====================
     sent = 0
-    for layer, label, emoji, piece in [
-        ("humanoid", "Layer 1 — Main Body (Helmet + Chestplate + Boots)", "🔵", "chestplate"),
-        ("humanoid_leggings", "Layer 2 — Leggings", "🟢", "leggings"),
-    ]:
-        data = build_layer(armor, leather_color, trim_name, mat_color, layer, enchanted)
-        if data:
-            current_give = give_commands.get(piece, "")
 
-            full_caption = (
-                caption +
-                f"\n\n{emoji} <b>{label}</b>\n\n"
-                f"📋 <b>/give:</b>\n<code>{current_give}</code>"
-            )
+    # ─── لایه ۱: Main Body (Helmet + Chestplate + Boots) ───
+    data_main = build_layer(armor, leather_color, trim_name, mat_color, "humanoid", enchanted)
+    if data_main:
+        helmet_cmd    = give_commands.get("helmet", "")
+        chest_cmd     = give_commands.get("chestplate", "")
+        boots_cmd     = give_commands.get("boots", "")
 
-            await cb.message.answer_document(
-                types.BufferedInputFile(data, filename=f"{armor}_{layer}.png"),
-                caption=full_caption,
-                parse_mode="HTML",
-            )
-            sent += 1
+        full_caption_main = (
+            caption +
+            f"\n\n🔵 <b>Layer 1 — Main Body (Helmet + Chestplate + Boots)</b>\n\n"
+            f"📋 <b>/give commands:</b>\n"
+            f"<code>{helmet_cmd}</code>\n"
+            f"<code>{chest_cmd}</code>\n"
+            f"<code>{boots_cmd}</code>"
+        )
+
+        await cb.message.answer_document(
+            types.BufferedInputFile(data_main, filename=f"{armor}_humanoid.png"),
+            caption=full_caption_main,
+            parse_mode="HTML",
+        )
+        sent += 1
+
+    # ─── لایه ۲: Leggings ───
+    data_legs = build_layer(armor, leather_color, trim_name, mat_color, "humanoid_leggings", enchanted)
+    if data_legs:
+        leggings_cmd = give_commands.get("leggings", "")
+
+        full_caption_legs = (
+            caption +
+            f"\n\n🟢 <b>Layer 2 — Leggings</b>\n\n"
+            f"📋 <b>/give:</b>\n<code>{leggings_cmd}</code>"
+        )
+
+        await cb.message.answer_document(
+            types.BufferedInputFile(data_legs, filename=f"{armor}_humanoid_leggings.png"),
+            caption=full_caption_legs,
+            parse_mode="HTML",
+        )
+        sent += 1
 
     if sent:
         await cb.message.answer("✅ آرمور با موفقیت ساخته شد!")
