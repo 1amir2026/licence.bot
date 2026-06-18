@@ -475,13 +475,17 @@ def build_preview(armor_key: str, leather_color_key: str,
 def register_armor_handlers(dp: Dispatcher, bot: Bot):
 
     PREVIEW_CAPTION = (
-        "پیش نمایش تکسچر Armor درخواستی شما👆\n\n"
+        "<b>پیش نمایش تکسچر Armor درخواستی شما👆</b>\n\n"
         "این فقط یک پیش نمایش است؛ فایل اصلی بعد از اتمام کار ارسال میشود✅"
     )
+
+    def _preview_key(s: dict) -> tuple:
+        return (s["armor"], s.get("leather_color", "none"), s["trim"], s["material"], s.get("enchanted", False))
 
     async def _send_preview(cb: types.CallbackQuery, s: dict):
         """
         ارسال یا آپدیت عکس پیش‌نمایش.
+        - اگر state تغییر نکرده باشد → هیچ کاری نمیکند (جلوگیری از دو پیش‌نمایش)
         - اگر preview_msg_id وجود داشته باشد → edit_message_media
         - اگر نه → send_photo جدید
         پیش‌نمایش باید قبل از فراخوانی edit_text صدا زده شود تا بالاتر نمایش داده شود.
@@ -495,6 +499,11 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
         material      = s["material"]
         mat_color     = TRIM_MATERIALS.get(material, (255, 255, 255))
         enchanted     = s.get("enchanted", False)
+
+        # اگر پیش‌نمایش قبلاً با همین وضعیت فرستاده شده، دوباره نفرست
+        current_key = _preview_key(s)
+        if s.get("last_preview_key") == current_key and s.get("preview_msg_id"):
+            return
 
         preview_bytes = build_preview(armor, leather_color, trim_name, mat_color, enchanted)
         if not preview_bytes:
@@ -513,8 +522,10 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
                         media=types.InputMediaPhoto(
                             media=photo_file,
                             caption=PREVIEW_CAPTION,
+                            parse_mode="HTML",
                         ),
                     )
+                    s["last_preview_key"] = current_key
                     return  # موفقیت‌آمیز بود
                 except Exception as e:
                     print(f"[armor] edit_message_media شکست خورد، عکس جدید ارسال می‌شود: {e}")
@@ -525,8 +536,10 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
                 chat_id=chat_id,
                 photo=photo_file,
                 caption=PREVIEW_CAPTION,
+                parse_mode="HTML",
             )
             s["preview_msg_id"] = msg.message_id
+            s["last_preview_key"] = current_key
 
         except Exception as e2:
             print(f"[armor] خطا در ارسال پیش‌نمایش: {e2}")
@@ -536,9 +549,10 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
     async def start(message: types.Message):
         uid = message.from_user.id
         try:
-            from bot import is_user_banned
-            if is_user_banned(uid):
-                await message.answer("❌ شما بن شده‌اید.")
+            from bot import get_access_block_message
+            block_msg = get_access_block_message(uid)
+            if block_msg:
+                await message.answer(block_msg)
                 return
         except ImportError:
             pass
@@ -550,6 +564,7 @@ def register_armor_handlers(dp: Dispatcher, bot: Bot):
             "material":      list(TRIM_MATERIALS.keys())[0],
             "enchanted":     False,
             "preview_msg_id": None,
+            "last_preview_key": None,
             "skin_enabled":  False,
         }
         await message.answer(
