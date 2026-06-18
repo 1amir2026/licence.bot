@@ -49,4 +49,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV NODE_ENV=production
 
-CMD ["python3", "ot/.py"]
+CMD ["python3", "bot/bot.py"]
