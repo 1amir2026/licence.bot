@@ -515,7 +515,7 @@ async def check_license(message: types.Message):
 
             keyboard = ReplyKeyboardMarkup(
                 keyboard=[
-                    [KeyboardButton(text="📦 دریافت ریسورس پک ریلیز تکسچر")],
+                    [KeyboardButton(text="📦 ساخت HUD Overlay از ریسورس پک")],
                     [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
                     [KeyboardButton(text="🔄 تبدیل JSON به OBJ")],
                     [KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")],
@@ -919,7 +919,7 @@ async def admin_search_user(message: types.Message, state: FSMContext):
 
 
 # ====================== MODES ======================
-@dp.message(F.text == "📦 دریافت ریسورس پک ریلیز تکسچر")
+@dp.message(F.text == "📦 ساخت HUD Overlay از ریسورس پک")
 async def ask_for_pack(message: types.Message):
     block_msg = get_access_block_message(message.from_user.id)
     if block_msg:
