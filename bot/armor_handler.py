@@ -871,10 +871,12 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
         full_caption_main = (
             caption +
             f"\n\n🔵 <b>Layer 1 — Main Body (Helmet + Chestplate + Boots)</b>\n\n"
+            f"<blockquote>"
             f"📋 <b>/give commands:</b>\n"
             f"<code>{helmet_cmd}</code>\n"
             f"<code>{chest_cmd}</code>\n"
             f"<code>{boots_cmd}</code>"
+            f"</blockquote>"
         )
 
         await cb.message.answer_document(
@@ -892,7 +894,10 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
         full_caption_legs = (
             caption +
             f"\n\n🟢 <b>Layer 2 — Leggings</b>\n\n"
-            f"📋 <b>/give:</b>\n<code>{leggings_cmd}</code>"
+            f"<blockquote>"
+            f"📋 <b>/give:</b>\n"
+            f"<code>{leggings_cmd}</code>"
+            f"</blockquote>"
         )
 
         await cb.message.answer_document(
