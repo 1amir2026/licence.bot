@@ -9,7 +9,7 @@ import json
 from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.state import State, StatesGroup
@@ -983,8 +983,10 @@ async def minecraft_assets_mode(message: types.Message):
     )
     
 # ====================== FILE HANDLER ======================
-@dp.message(F.document)
-async def handle_document(message: types.Message):
+# StateFilter(None) = فقط وقتی کاربر توی هیچ FSM state ای نیست اجرا میشه
+# هندلرهای ResourcePackManualState چون state دارن اولویت بالاتری دارن
+@dp.message(F.document, StateFilter(None))
+async def handle_document(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
 
     block_msg = get_access_block_message(user_id)
@@ -1570,13 +1572,14 @@ async def manual_pack_start(callback: types.CallbackQuery, state: FSMContext):
 
     await state.set_state(ResourcePackManualState.waiting_icon)
     await callback.message.edit_text(
-        "📋 <b>مرحله ۱ از ۲ — ارسال icon.png</b>\n\n"
-        "🔍 این فایل آیکون پک توئه. بسته به نوع پک:\n\n"
+        "📋 <b>مرحله ۱ از ۲ — ارسال icons.png</b>\n\n"
+        "این فایل هر اسمی داشته باشه مهم نیست،\n"
+        "بات خودش اسمشو به <code>icons.png</code> تغییر میده.\n\n"
         "📁 <b>Java Pack (zip):</b>\n"
-        "  ← فایل <code>pack.png</code> یا <code>icon.png</code> رو از <b>ریشه zip</b> بکش بیرون و بفرست\n\n"
+        "  مسیر: <code>assets/minecraft/textures/gui/icons.png</code>\n\n"
         "📁 <b>Bedrock (mcpack):</b>\n"
-        "  ← فایل <code>pack_icon.png</code> رو از <b>ریشه mcpack</b> بکش بیرون و بفرست\n\n"
-        "➡️ <b>الان فایل PNG آیکون رو بفرست:</b>",
+        "  مسیر: <code>textures/ui/icons.png</code>\n\n"
+        "➡️ <b>فایل PNG رو بفرست:</b>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="❌ لغو", callback_data="manual_pack_cancel")
@@ -1599,30 +1602,30 @@ async def manual_receive_icon(message: types.Message, state: FSMContext):
 
     if not doc.file_name.lower().endswith(".png"):
         await message.answer(
-            "❌ فقط فایل <b>PNG</b> قبول میشه.\n\n"
-            "📁 فایل آیکون رو پیدا کن:\n"
-            "• Java zip: <code>pack.png</code> یا <code>icon.png</code> در ریشه\n"
-            "• Bedrock mcpack: <code>pack_icon.png</code> در ریشه",
+            "❌ فقط فایل <b>PNG</b> قبول میشه.\n"
+            "هر اسمی داشته باشه مشکلی نیست، فقط باید PNG باشه.",
             parse_mode="HTML"
         )
         return
 
-    icon_path = os.path.join(INPUT_DIR, f"manual_{user_id}_icon.png")
+    # هر اسمی داشت، به icons.png تغییر میده
+    icons_path = os.path.join(INPUT_DIR, f"manual_{user_id}_icons.png")
     file = await bot.get_file(doc.file_id)
-    await bot.download_file(file.file_path, destination=icon_path)
+    await bot.download_file(file.file_path, destination=icons_path)
 
-    await state.update_data(icon_path=icon_path)
+    await state.update_data(icons_path=icons_path)
     await state.set_state(ResourcePackManualState.waiting_inventory)
 
     await message.answer(
-        "✅ <b>icon.png دریافت شد!</b>\n\n"
-        "📋 <b>مرحله ۲ از ۲ — ارسال inventory.png</b>\n\n"
-        "🔍 این فایل تکسچر صفحه اینونتوری ماینکرافته:\n\n"
+        "✅ <b>icons.png دریافت شد!</b>\n\n"
+        "📋 <b>مرحله ۲ از ۲ — ارسال widgets.png</b>\n\n"
+        "این فایل هم هر اسمی داشته باشه مهم نیست،\n"
+        "بات اسمشو به <code>widgets.png</code> تغییر میده.\n\n"
         "📁 <b>Java Pack (zip):</b>\n"
-        "  ← مسیر: <code>assets/minecraft/textures/gui/container/inventory.png</code>\n\n"
+        "  مسیر: <code>assets/minecraft/textures/gui/widgets.png</code>\n\n"
         "📁 <b>Bedrock (mcpack):</b>\n"
-        "  ← مسیر: <code>textures/ui/inventory.png</code>\n\n"
-        "➡️ <b>الان فایل PNG اینونتوری رو بفرست:</b>",
+        "  مسیر: <code>textures/ui/widgets.png</code>\n\n"
+        "➡️ <b>فایل PNG رو بفرست:</b>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="❌ لغو", callback_data="manual_pack_cancel")
@@ -1637,36 +1640,40 @@ async def manual_receive_inventory(message: types.Message, state: FSMContext):
 
     if not doc.file_name.lower().endswith(".png"):
         await message.answer(
-            "❌ فقط فایل <b>PNG</b> قبول میشه.\n\n"
-            "📁 فایل inventory رو پیدا کن:\n"
-            "• Java: <code>assets/minecraft/textures/gui/container/inventory.png</code>\n"
-            "• Bedrock: <code>textures/ui/inventory.png</code>",
+            "❌ فقط فایل <b>PNG</b> قبول میشه.\n"
+            "هر اسمی داشته باشه مشکلی نیست، فقط باید PNG باشه.",
             parse_mode="HTML"
         )
         return
 
     state_data = await state.get_data()
-    icon_path = state_data.get("icon_path")
+    icons_path = state_data.get("icons_path")
 
-    if not icon_path or not os.path.exists(icon_path):
-        await message.answer("❌ icon.png پیدا نشد. لطفاً دوباره از اول شروع کن.")
+    if not icons_path or not os.path.exists(icons_path):
+        await message.answer(
+            "❌ فایل icons.png پیدا نشد. لطفاً دوباره از اول شروع کن.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="🔄 شروع مجدد", callback_data="manual_pack_start")
+            ]])
+        )
         await state.clear()
         return
 
-    await message.answer("🔄 در حال ساخت پک مصنوعی و پردازش...")
+    await message.answer("🔄 در حال ساخت پک و پردازش...")
 
-    inventory_path = os.path.join(INPUT_DIR, f"manual_{user_id}_inventory.png")
+    # هر اسمی داشت، به widgets.png تغییر میده
+    widgets_path = os.path.join(INPUT_DIR, f"manual_{user_id}_widgets.png")
     fake_zip_path = os.path.join(INPUT_DIR, f"manual_{user_id}_pack.zip")
     output_path = os.path.join(OUTPUT_DIR, f"manual_{user_id}_ui.png")
 
     try:
         file = await bot.get_file(doc.file_id)
-        await bot.download_file(file.file_path, destination=inventory_path)
+        await bot.download_file(file.file_path, destination=widgets_path)
 
-        # ساخت zip مصنوعی با ساختار Java که processor.mjs انتظار داره
+        # ساخت zip با مسیرهای دقیقی که processor.mjs انتظار داره
         with zipfile.ZipFile(fake_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            zf.write(icon_path, "pack.png")
-            zf.write(inventory_path, "assets/minecraft/textures/gui/container/inventory.png")
+            zf.write(icons_path,   "assets/minecraft/textures/gui/icons.png")
+            zf.write(widgets_path, "assets/minecraft/textures/gui/widgets.png")
 
         await run_node_processor(fake_zip_path, output_path)
 
@@ -1680,14 +1687,13 @@ async def manual_receive_inventory(message: types.Message, state: FSMContext):
 
     except Exception as e:
         await message.answer(
-            f"❌ خطا در پردازش نهایی:\n<code>{str(e)[:400]}</code>\n\n"
-            "⚠️ شاید inventory.png اشتباهه یا processor مسیر دیگه‌ای انتظار داره.",
+            f"❌ خطا در پردازش:\n<code>{str(e)[:400]}</code>",
             parse_mode="HTML"
         )
         await state.clear()
 
     finally:
-        for p in [icon_path, inventory_path, fake_zip_path]:
+        for p in [icons_path, widgets_path, fake_zip_path]:
             if p and os.path.exists(p):
                 try:
                     os.remove(p)
@@ -1718,8 +1724,8 @@ async def license_expiry_checker():
                             try:
                                 await bot.send_message(
                                     lic.user_id,
-                                    "❌ متاسفانه؛ لایسنس شما به اتمام رسید.\n\n"
-                                    "میتونید برای خرید مجدد به @AmirMah198 مراجعه کنید.",
+                                    "❌ لایسنس شما تموم شده.\n\n"
+                                    "میتونید برای خرید مجدد به @AmirMah198 برید.",
                                     reply_markup=types.ReplyKeyboardRemove()
                                 )
                                 user_modes.pop(lic.user_id, None)
