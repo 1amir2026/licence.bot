@@ -36,6 +36,10 @@ class AdminState(StatesGroup):
 class LicenseCreateState(StatesGroup):
     waiting_custom_minutes = State()
 
+class ResourcePackManualState(StatesGroup):
+    waiting_icon = State()
+    waiting_inventory = State()
+
 # گزینه‌های زمانی لایسنس به ترتیب چرخش: (متن نمایشی, مقدار به دقیقه / None برای همیشگی / "custom" برای دلخواه)
 LICENSE_TIME_OPTIONS = [
     ("♾️ همیشگی", None),
@@ -1000,20 +1004,47 @@ async def handle_document(message: types.Message):
             await message.answer("❌ فقط ZIP یا MCPACK")
             return
 
+        # بررسی حجم فایل قبل از دانلود (20MB)
+        FILE_SIZE_LIMIT = 20 * 1024 * 1024
+        if doc.file_size and doc.file_size > FILE_SIZE_LIMIT:
+            await _send_manual_upload_prompt(message, user_id, reason="حجم فایل بیشتر از ۲۰ مگابایته و تلگرام اجازه دانلود نمیده")
+            return
+
         await message.answer("🔄 در حال پردازش...")
         input_path = os.path.join(INPUT_DIR, doc.file_name)
         output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
         output_path = os.path.join(OUTPUT_DIR, output_name)
 
-        file = await bot.get_file(doc.file_id)
-        await bot.download_file(file.file_path, destination=input_path)
+        try:
+            file = await bot.get_file(doc.file_id)
+            await bot.download_file(file.file_path, destination=input_path)
+        except Exception as e:
+            err = str(e).lower()
+            if "too big" in err or "large" in err or "file is too big" in err:
+                await _send_manual_upload_prompt(message, user_id, reason="فایل برای دانلود در تلگرام خیلی بزرگه")
+            else:
+                await message.answer(f"❌ خطا در دریافت فایل:\n{e}")
+            return
 
         try:
             await run_node_processor(input_path, output_path)
             user_modes.pop(user_id, None)
             await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
         except Exception as e:
-            await message.answer(f"❌ خطا:\n{e}")
+            err_text = str(e)
+            is_mcpack = doc.file_name.endswith(".mcpack")
+            path_error = any(x in err_text.lower() for x in ["icon", "pack_icon", "not found", "no such", "inventory"])
+            if is_mcpack and path_error:
+                await _send_manual_upload_prompt(message, user_id, reason="مسیر فایل‌ها در mcpack با Java فرق داره")
+            else:
+                await message.answer(
+                    f"❌ خطا در پردازش:\n<code>{err_text[:300]}</code>\n\n"
+                    "میتونی فایل‌ها رو دستی بفرستی 👇",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                        InlineKeyboardButton(text="📤 ارسال دستی فایل‌ها", callback_data="manual_pack_start")
+                    ]])
+                )
 
     # MINECRAFT 3D ITEM
     elif mode == "minecraft_3d":
@@ -1513,6 +1544,157 @@ async def _send_asset_files(callback: types.CallbackQuery, files: list, user_id:
     user_data.pop(user_id, None)
     user_modes.pop(user_id, None)
     
+# ====================== RESOURCE PACK MANUAL UPLOAD ======================
+
+async def _send_manual_upload_prompt(message: types.Message, user_id: int, reason: str):
+    """وقتی پک آپلود‌شده قابل پردازش خودکار نیست، راهنمای ارسال دستی رو نشون میده"""
+    user_modes.pop(user_id, None)
+    await message.answer(
+        f"⚠️ <b>پردازش خودکار ممکن نشد</b>\n"
+        f"📌 دلیل: {reason}\n\n"
+        "میتونی فایل‌های پک رو <b>دستی</b> بفرستی تا بات پردازش کنه 👇",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="📤 ارسال دستی فایل‌ها", callback_data="manual_pack_start")
+        ]])
+    )
+
+
+@dp.callback_query(F.data == "manual_pack_start")
+async def manual_pack_start(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    block_msg = get_access_block_message(user_id)
+    if block_msg:
+        await callback.answer(block_msg, show_alert=True)
+        return
+
+    await state.set_state(ResourcePackManualState.waiting_icon)
+    await callback.message.edit_text(
+        "📋 <b>مرحله ۱ از ۲ — ارسال icon.png</b>\n\n"
+        "🔍 این فایل آیکون پک توئه. بسته به نوع پک:\n\n"
+        "📁 <b>Java Pack (zip):</b>\n"
+        "  ← فایل <code>pack.png</code> یا <code>icon.png</code> رو از <b>ریشه zip</b> بکش بیرون و بفرست\n\n"
+        "📁 <b>Bedrock (mcpack):</b>\n"
+        "  ← فایل <code>pack_icon.png</code> رو از <b>ریشه mcpack</b> بکش بیرون و بفرست\n\n"
+        "➡️ <b>الان فایل PNG آیکون رو بفرست:</b>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="❌ لغو", callback_data="manual_pack_cancel")
+        ]])
+    )
+
+
+@dp.callback_query(F.data == "manual_pack_cancel")
+async def manual_pack_cancel(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    user_modes.pop(callback.from_user.id, None)
+    user_data.pop(callback.from_user.id, None)
+    await callback.message.edit_text("❌ عملیات دستی لغو شد.\n\nمیتونی دوباره از منو شروع کنی.")
+
+
+@dp.message(ResourcePackManualState.waiting_icon, F.document)
+async def manual_receive_icon(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    doc = message.document
+
+    if not doc.file_name.lower().endswith(".png"):
+        await message.answer(
+            "❌ فقط فایل <b>PNG</b> قبول میشه.\n\n"
+            "📁 فایل آیکون رو پیدا کن:\n"
+            "• Java zip: <code>pack.png</code> یا <code>icon.png</code> در ریشه\n"
+            "• Bedrock mcpack: <code>pack_icon.png</code> در ریشه",
+            parse_mode="HTML"
+        )
+        return
+
+    icon_path = os.path.join(INPUT_DIR, f"manual_{user_id}_icon.png")
+    file = await bot.get_file(doc.file_id)
+    await bot.download_file(file.file_path, destination=icon_path)
+
+    await state.update_data(icon_path=icon_path)
+    await state.set_state(ResourcePackManualState.waiting_inventory)
+
+    await message.answer(
+        "✅ <b>icon.png دریافت شد!</b>\n\n"
+        "📋 <b>مرحله ۲ از ۲ — ارسال inventory.png</b>\n\n"
+        "🔍 این فایل تکسچر صفحه اینونتوری ماینکرافته:\n\n"
+        "📁 <b>Java Pack (zip):</b>\n"
+        "  ← مسیر: <code>assets/minecraft/textures/gui/container/inventory.png</code>\n\n"
+        "📁 <b>Bedrock (mcpack):</b>\n"
+        "  ← مسیر: <code>textures/ui/inventory.png</code>\n\n"
+        "➡️ <b>الان فایل PNG اینونتوری رو بفرست:</b>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="❌ لغو", callback_data="manual_pack_cancel")
+        ]])
+    )
+
+
+@dp.message(ResourcePackManualState.waiting_inventory, F.document)
+async def manual_receive_inventory(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    doc = message.document
+
+    if not doc.file_name.lower().endswith(".png"):
+        await message.answer(
+            "❌ فقط فایل <b>PNG</b> قبول میشه.\n\n"
+            "📁 فایل inventory رو پیدا کن:\n"
+            "• Java: <code>assets/minecraft/textures/gui/container/inventory.png</code>\n"
+            "• Bedrock: <code>textures/ui/inventory.png</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    state_data = await state.get_data()
+    icon_path = state_data.get("icon_path")
+
+    if not icon_path or not os.path.exists(icon_path):
+        await message.answer("❌ icon.png پیدا نشد. لطفاً دوباره از اول شروع کن.")
+        await state.clear()
+        return
+
+    await message.answer("🔄 در حال ساخت پک مصنوعی و پردازش...")
+
+    inventory_path = os.path.join(INPUT_DIR, f"manual_{user_id}_inventory.png")
+    fake_zip_path = os.path.join(INPUT_DIR, f"manual_{user_id}_pack.zip")
+    output_path = os.path.join(OUTPUT_DIR, f"manual_{user_id}_ui.png")
+
+    try:
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(file.file_path, destination=inventory_path)
+
+        # ساخت zip مصنوعی با ساختار Java که processor.mjs انتظار داره
+        with zipfile.ZipFile(fake_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.write(icon_path, "pack.png")
+            zf.write(inventory_path, "assets/minecraft/textures/gui/container/inventory.png")
+
+        await run_node_processor(fake_zip_path, output_path)
+
+        await message.answer_document(
+            FSInputFile(output_path),
+            caption="✅ پردازش موفق!\n🎨 UI پک از فایل‌های دستی ساخته شد."
+        )
+        await state.clear()
+        user_modes.pop(user_id, None)
+        user_data.pop(user_id, None)
+
+    except Exception as e:
+        await message.answer(
+            f"❌ خطا در پردازش نهایی:\n<code>{str(e)[:400]}</code>\n\n"
+            "⚠️ شاید inventory.png اشتباهه یا processor مسیر دیگه‌ای انتظار داره.",
+            parse_mode="HTML"
+        )
+        await state.clear()
+
+    finally:
+        for p in [icon_path, inventory_path, fake_zip_path]:
+            if p and os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
+
+
 # ====================== LICENSE EXPIRY CHECKER ======================
 async def license_expiry_checker():
     """هر دقیقه لایسنس‌های منقضی‌شده رو پیدا می‌کند و یک‌بار به کاربر اطلاع می‌دهد."""
@@ -1536,8 +1718,8 @@ async def license_expiry_checker():
                             try:
                                 await bot.send_message(
                                     lic.user_id,
-                                    "❌ لایسنس شما تموم شده.\n\n"
-                                    "میتونید برای خرید مجدد به @AmirMah198 برید.",
+                                    "❌ متاسفانه؛ لایسنس شما به اتمام رسید.\n\n"
+                                    "میتونید برای خرید مجدد به @AmirMah198 مراجعه کنید.",
                                     reply_markup=types.ReplyKeyboardRemove()
                                 )
                                 user_modes.pop(lic.user_id, None)
