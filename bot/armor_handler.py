@@ -773,59 +773,63 @@ async def _build_and_send(cb: types.CallbackQuery, s: dict):
         armor_build_state.pop(uid, None)
         return
 
-# ==================== تولید دستور /give ====================
-def generate_give_commands(armor: str, trim_name: str, material: str, leather_color: str):
-    nbt_parts = []
+    # ==================== تولید دستور /give ====================
+    def generate_give_commands(armor: str, trim_name: str, material: str, leather_color: str):
+        nbt_parts = []
 
-    # Trim
-    if trim_name != "none":
-        nbt_parts.append(f'trim={{pattern:"minecraft:{trim_name}",material:"minecraft:{material}"}}')
+        # Trim NBT
+        if trim_name != "none":
+            nbt_parts.append(f'trim={{pattern:"minecraft:{trim_name}",material:"minecraft:{material}"}}')
 
-    # Leather Color (درست)
-    if armor == "leather":
-        r, g, b = LEATHER_COLORS.get(leather_color, LEATHER_COLORS["none"])
-        color_int = (r << 16) | (g << 8) | b
-        nbt_parts.append(f'display={{color:{color_int}}}')
+        # Leather Color NBT (اصلاح شده)
+        if armor == "leather":
+            r, g, b = LEATHER_COLORS.get(leather_color, LEATHER_COLORS["none"])
+            color_int = (r << 16) | (g << 8) | b
+            nbt_parts.append(f'display={{color:{color_int}}}')
 
-    nbt_str = ""
-    if nbt_parts:
-        nbt_str = "{" + ",".join(nbt_parts) + "}"
+        nbt_str = "{" + ",".join(nbt_parts) + "}" if nbt_parts else ""
 
-    # دستورات /give
-    commands = {}
+        commands = {}
+        # بالاتنه کامل
+        for piece in ["helmet", "chestplate", "boots"]:
+            commands[piece] = f"/give @p minecraft:{armor}_{piece}{nbt_str} 1"
+        
+        # شلوار
+        commands["leggings"] = f"/give @p minecraft:{armor}_leggings{nbt_str} 1"
 
-    # بالاتنه کامل (Helmet + Chestplate + Boots)
-    for piece in ["helmet", "chestplate", "boots"]:
-        item = f"minecraft:{armor}_{piece}"
-        commands[piece] = f"/give @p {item}{nbt_str} 1"
+        return commands
 
-    # شلوار
-    commands["leggings"] = f"/give @p minecraft:{armor}_leggings{nbt_str} 1"
-
-    return commands
-
-    # ==================== ساخت و ارسال فایل‌ها ====================
+    # ==================== ساخت کپشن ====================
     lines = [f"🛡 <b>{armor.upper()}</b>"]
     if armor == "leather":
         fa = LEATHER_COLOR_NAMES_FA.get(leather_color, leather_color)
         emoji = LEATHER_COLOR_EMOJI.get(leather_color, "")
         lines.append(f"رنگ چرم: {emoji} {fa}")
+    
     lines.append(f"تریم: <b>{trim_name}</b>")
     if trim_name != "none":
         lines.append(f"ماده: <b>{material}</b>")
     lines.append(f"اینچنت: {'✨ بله' if enchanted else '⬛ خیر'}")
+    
     caption = "\n".join(lines)
+    give_commands = generate_give_commands(armor, trim_name, material, leather_color)
 
+    # ==================== ارسال فایل‌ها ====================
     sent = 0
-    for layer, label, emoji in [
-        ("humanoid",          "Layer 1 — Main Body (Chestplate)", "🔵"),
-        ("humanoid_leggings", "Layer 2 — Leggings", "🟢"),
+    for layer, label, emoji, piece in [
+        ("humanoid", "Layer 1 — Main Body (Helmet + Chestplate + Boots)", "🔵", "chestplate"),
+        ("humanoid_leggings", "Layer 2 — Leggings", "🟢", "leggings"),
     ]:
         data = build_layer(armor, leather_color, trim_name, mat_color, layer, enchanted)
         if data:
-            current_give = give_chest if "humanoid" in layer else give_legs
-            full_caption = caption + f"\n\n{emoji} <b>{label}</b>\n\n📋 <b>/give:</b>\n<code>{current_give}</code>"
-            
+            current_give = give_commands.get(piece, "")
+
+            full_caption = (
+                caption +
+                f"\n\n{emoji} <b>{label}</b>\n\n"
+                f"📋 <b>/give:</b>\n<code>{current_give}</code>"
+            )
+
             await cb.message.answer_document(
                 types.BufferedInputFile(data, filename=f"{armor}_{layer}.png"),
                 caption=full_caption,
