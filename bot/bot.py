@@ -15,6 +15,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from armor_handler import register_armor_handlers
+from youtube_thumbnail_handler import register_youtube_thumbnail_handlers
 import aiohttp
 
 from config import TOKEN, ADMIN_ID
@@ -136,6 +137,10 @@ def get_access_block_message(user_id: int):
         )
     finally:
         session.close()
+
+
+# ثبت هندلرهای دانلود تامنیل یوتیوب (بعد از تعریف get_access_block_message)
+register_youtube_thumbnail_handlers(dp, bot, get_access_block_message)
 
 
 # ====================== HELPERS ======================
@@ -520,6 +525,7 @@ async def check_license(message: types.Message):
                     [KeyboardButton(text="🔄 تبدیل JSON به OBJ")],
                     [KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")],
                     [KeyboardButton(text="🛡 ساخت آرمور با تریم")],
+                    [KeyboardButton(text="🖼 دانلود تامنیل یوتیوب")],
                 ],
                 resize_keyboard=True
             )
