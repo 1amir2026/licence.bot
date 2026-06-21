@@ -196,17 +196,14 @@ async def _gather_thumbnails(video_id: str):
     return unique
 
 
-def _quality_label(c: dict) -> str:
+def _quality_label(c: dict, is_best: bool = False) -> str:
     w, h = c.get("width"), c.get("height")
     if w and h:
-        if h >= 2160:
-            tag = " (4K)"
-        elif h >= 1440:
-            tag = " (2K)"
-        elif h >= 1080:
-            tag = " (Full HD)"
-        elif h >= 720:
-            tag = " (HD)"
+        if h >= 720:
+            # نکته مهم: سرور تامنیل یوتیوب (maxresdefault) برای همه‌ی ویدیوها
+            # حداکثر روی 1280x720 سقف دارد. کیفیت‌های FHD/2K/4K برای تامنیل
+            # وجود خارجی ندارند، حتی برای کانال‌های بزرگ - این محدودیت خود یوتیوبه.
+            tag = " (بهترین کیفیت موجود از یوتیوب)" if is_best else ""
         else:
             tag = ""
         return f"🖼 {w}x{h}{tag}"
@@ -249,8 +246,9 @@ def register_youtube_thumbnail_handlers(dp, bot, get_access_block_message=None):
             "<code>https://www.youtube.com/watch?v=xxxxxxxxxxx</code>\n"
             "<code>https://youtu.be/xxxxxxxxxxx</code>\n"
             "<code>https://youtube.com/shorts/xxxxxxxxxxx</code>\n\n"
-            "بعد از پیدا شدن ویدیو، می‌تونی از بین کیفیت‌های واقعاً موجود "
-            "(تا بالاترین چیزی که یوتیوب برای اون ویدیو داره) انتخاب کنی.",
+            "ℹ️ نکته: یوتیوب برای تامنیل هر ویدیو حداکثر 1280x720 ارائه می‌دهد "
+            "(حتی برای ویدیوهای 4K) — کیفیت تامنیل وابسته به کیفیت خود ویدیو نیست. "
+            "این بات بالاترین چیزی که واقعاً برای آن ویدیو موجود است را پیدا می‌کند.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="❌ لغو", callback_data=CANCEL_CALLBACK)
@@ -310,18 +308,25 @@ def register_youtube_thumbnail_handlers(dp, bot, get_access_block_message=None):
             }
 
             rows = []
-            for c in candidates:
+            for i, c in enumerate(candidates):
                 rows.append([InlineKeyboardButton(
-                    text=_quality_label(c),
+                    text=_quality_label(c, is_best=(i == 0)),
                     callback_data=f"{CALLBACK_PREFIX}{video_id}:{c['quality']}"
                 )])
             rows.append([InlineKeyboardButton(text="❌ لغو", callback_data=CANCEL_CALLBACK)])
 
-            best_label = _quality_label(candidates[0])
+            best = candidates[0]
+            best_label = _quality_label(best, is_best=True)
+            note = ""
+            if best.get("height") and best["height"] <= 720:
+                note = (
+                    "\n\nℹ️ توجه: یوتیوب برای تامنیل هیچ ویدیویی (حتی کانال‌های بزرگ) "
+                    "بیشتر از 1280x720 نمی‌دهد. کیفیت واقعی ویدیو با کیفیت تامنیل آن فرق دارد."
+                )
 
             await wait_msg.edit_text(
                 "✅ ویدیو پیدا شد!\n"
-                f"📌 بهترین کیفیت موجود: {best_label}\n\n"
+                f"📌 بهترین کیفیت موجود: {best_label}{note}\n\n"
                 "کیفیت مورد نظر برای دانلود رو انتخاب کن 👇",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=rows)
             )
