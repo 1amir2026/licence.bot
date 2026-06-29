@@ -1142,130 +1142,856 @@ async def handle_document(message: types.Message, state: FSMContext):
             user_data.pop(user_id, None)
 
 # ====================== MINECRAFT ASSETS DOWNLOADER ======================
+"""
+Minecraft Asset Aliases - EXPANDED v2.0
+Covers all vanilla blocks, items, Forge/NeoForge tags, custom spear/copper tools,
+deepslate ores, all tool tiers, all armor types, and every category requested.
+"""
 
-# آدرس پایه GitHub برای assets
 MC_ASSETS_BASE = "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/26.1.2/assets/minecraft"
 
-# 
+# ─────────────────────────────────────────────────────────────────────────────
+# HELPERS – build big lists so the dict stays readable
+# ─────────────────────────────────────────────────────────────────────────────
+
+_TIERS        = ["wooden", "stone", "copper", "iron", "golden", "diamond", "netherite"]
+_WOOD_TYPES   = ["oak", "spruce", "birch", "jungle", "acacia", "dark_oak",
+                 "mangrove", "cherry", "bamboo", "crimson", "warped"]
+_STONE_TYPES  = ["stone", "cobblestone", "smooth_stone", "stone_bricks",
+                 "mossy_cobblestone", "mossy_stone_bricks", "cracked_stone_bricks",
+                 "chiseled_stone_bricks", "deepslate", "cobbled_deepslate",
+                 "polished_deepslate", "deepslate_bricks", "deepslate_tiles",
+                 "cracked_deepslate_bricks", "cracked_deepslate_tiles",
+                 "chiseled_deepslate", "reinforced_deepslate"]
+_ORE_MATS     = ["coal", "iron", "copper", "gold", "redstone", "lapis",
+                 "diamond", "emerald", "nether_quartz", "nether_gold", "ancient_debris"]
+_WOOL_COLORS  = ["white", "orange", "magenta", "light_blue", "yellow", "lime",
+                 "pink", "gray", "light_gray", "cyan", "purple", "blue",
+                 "brown", "green", "red", "black"]
+_CORAL_TYPES  = ["tube", "brain", "bubble", "fire", "horn"]
+_FISH_TYPES   = ["cod", "salmon", "tropical_fish", "pufferfish"]
+_MUSIC_DISCS  = ["13", "cat", "blocks", "chirp", "far", "mall", "mellohi",
+                 "stal", "strad", "ward", "11", "wait", "otherside", "5",
+                 "pigstep", "relic", "creator", "creator_music_box", "precipice"]
+_TRIM_MATS    = ["quartz", "iron", "netherite", "redstone", "copper", "gold",
+                 "emerald", "diamond", "lapis", "amethyst", "resin"]
+_TRIM_TMPL    = ["coast", "dune", "eye", "host", "raiser", "rib", "sentry",
+                 "shaper", "silence", "snout", "spire", "tide", "vex",
+                 "ward", "wayfinder", "wild", "flow", "bolt"]
+_DYE_COLORS   = _WOOL_COLORS  # same 16 colours
+_BANNER_COLORS = _WOOL_COLORS
+_BED_COLORS   = _WOOL_COLORS
+_CANDLE_COLORS = _WOOL_COLORS
+_TERRACOTTA_C  = _WOOL_COLORS
+_CONCRETE_C    = _WOOL_COLORS
+_GLASS_C       = _WOOL_COLORS
+
+def _tools(tier: str):
+    return [f"{tier}_pickaxe", f"{tier}_axe", f"{tier}_shovel",
+            f"{tier}_hoe", f"{tier}_sword"]
+
+def _armor(tier: str):
+    prefix = "golden" if tier == "gold" else tier
+    return [f"{prefix}_helmet", f"{prefix}_chestplate",
+            f"{prefix}_leggings", f"{prefix}_boots"]
+
+def _colored(base: str, colors=_WOOL_COLORS):
+    return [f"{c}_{base}" for c in colors]
+
+def _ores(deepslate=False):
+    prefix = "deepslate_" if deepslate else ""
+    return [f"{prefix}{m}_ore" for m in _ORE_MATS
+            if not (deepslate and m in ("nether_quartz", "nether_gold", "ancient_debris"))]
+
+def _logs():      return [f"{w}_log" for w in _WOOD_TYPES]
+def _planks():    return [f"{w}_planks" for w in _WOOD_TYPES]
+def _leaves():    return [f"{w}_leaves" for w in _WOOD_TYPES]
+def _saplings():  return [f"{w}_sapling" for w in _WOOD_TYPES]
+def _stairs(mat): return [f"{m}_stairs" for m in mat]
+def _slabs(mat):  return [f"{m}_slab" for m in mat]
+def _walls(mat):  return [f"{m}_wall" for m in mat]
+def _fences():
+    return [f"{w}_fence" for w in _WOOD_TYPES] + ["nether_brick_fence"]
+def _fence_gates():
+    return [f"{w}_fence_gate" for w in _WOOD_TYPES]
+def _doors():
+    return [f"{w}_door" for w in _WOOD_TYPES] + \
+           ["iron_door", "copper_door", "exposed_copper_door",
+            "weathered_copper_door", "oxidized_copper_door", "waxed_copper_door"]
+def _trapdoors():
+    return [f"{w}_trapdoor" for w in _WOOD_TYPES] + \
+           ["iron_trapdoor", "copper_trapdoor", "exposed_copper_trapdoor",
+            "weathered_copper_trapdoor", "oxidized_copper_trapdoor", "waxed_copper_trapdoor"]
+def _buttons():
+    return [f"{w}_button" for w in _WOOD_TYPES] + \
+           ["stone_button", "polished_blackstone_button"]
+def _pressure_plates():
+    return [f"{w}_pressure_plate" for w in _WOOD_TYPES] + \
+           ["stone_pressure_plate", "light_weighted_pressure_plate",
+            "heavy_weighted_pressure_plate", "polished_blackstone_pressure_plate"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN ALIAS DICT
+# ─────────────────────────────────────────────────────────────────────────────
+
 ITEM_ALIASES: dict[str, list[str]] = {
-    # ...     
 
-    # Spears (جدید)
-    "spear": ["wooden_spear", "stone_spear", "copper_spear", "iron_spear", "golden_spear", "diamond_spear", "netherite_spear"],
-    "diamond spear": ["diamond_spear"],
-    "diamond_spear": ["diamond_spear"],
-    "diamond spear in hand": ["diamond_spear_in_hand"],
-    "diamond_spear_in_hand": ["diamond_spear_in_hand"],
-    "wooden spear": ["wooden_spear"],
-    "wooden_spear": ["wooden_spear"],
-    "copper spear": ["copper_spear"],
-    "copper_spear": ["copper_spear"],
-    "spear_in_hand": ["copper_spear_in_hand", "wooden_spear_in_hand", "stone_spear_in_hand", "diamond_spear_in_hand", "netherite_spear_in_hand", "iron_spear_in_hand", "golden_spear_in_hand"],
-    "spear in hand": ["copper_spear_in_hand", "wooden_spear_in_hand", "stone_spear_in_hand", "diamond_spear_in_hand", "netherite_spear_in_hand", "iron_spear_in_hand", "golden_spear_in_hand"],
-    
-    # Copper tools
-    "copper pickaxe": ["copper_pickaxe"],
-    "copper_pickaxe": ["copper_pickaxe"],
-    "copper tool": ["copper_pickaxe", "copper_axe", "copper_shovel", "copper_hoe", "copper_sword"],
-    "copper tools": ["copper_pickaxe", "copper_axe", "copper_shovel", "copper_hoe", "copper_sword"],
-    "copper armor": ["copper_helmet", "copper_chestplate", "copper_leggings", "copper_boots"],
-    
-    # Variantهای in_hand (held)
-    "in hand": ["_in_hand"],  # 
-    "_in_hand": [],
+    # ══════════════════════════════════════════════════════════════════════════
+    # ORES  (normal + deepslate)
+    # ══════════════════════════════════════════════════════════════════════════
+    "ore":             _ores(),
+    "ores":            _ores(),
+    "_ore":            _ores(),
+    " ore":            _ores(),
+    "deepslate_ore":   _ores(deepslate=True),
+    "deepslate_ores":  _ores(deepslate=True),
+    "deepslate ores":  _ores(deepslate=True),
 
-    # Swordهای معمولی
-    "wooden sword": ["wooden_sword"],
-    "wooden_sword": ["wooden_sword"],
-    "wooden tool": ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_hoe", "wooden_sword"],
-    "wooden_tool": ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_hoe", "wooden_sword"],
-    "wooden tools": ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_hoe", "wooden_sword"],
-    
-    "diamond sword": ["diamond_sword"],
-    "iron sword": ["iron_sword"],
-    "pickaxe": ["wooden_pickaxe", "stone_pickaxe", "copper_pickaxe", "iron_pickaxe", "golden_pickaxe", "diamond_pickaxe", "netherite_pickaxe"],
-    
-    # 
-    "wood": ["oak_log", "oak_planks", "birch_log", "spruce_log", "jungle_log", "acacia_log", "dark_oak_log"],
-    "log": ["oak_log", "birch_log", "spruce_log", "jungle_log", "acacia_log", "dark_oak_log"],
-    "planks": ["oak_planks", "birch_planks", "spruce_planks", "jungle_planks", "acacia_planks"],
-    #  
-    "iron armor": ["iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots"],
-    "iron_armor": ["iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots"],
-    "diamond armor": ["diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots"],
-    "diamond_armor": ["diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots"],
-    "gold armor": ["golden_helmet", "golden_chestplate", "golden_leggings", "golden_boots"],
-    "golden armor": ["golden_helmet", "golden_chestplate", "golden_leggings", "golden_boots"],
-    #  
-    "iron tools": ["iron_sword", "iron_pickaxe", "iron_axe", "iron_shovel", "iron_hoe"],
-    "golden tools": ["golden_sword", "golden_pickaxe", "golden_axe", "golden_shovel", "golden_hoe"],
-    "gold tools": ["golden_sword", "golden_pickaxe", "golden_axe", "golden_shovel", "golden_hoe"],    
-    #  
-    "diamond tools": ["diamond_sword", "diamond_pickaxe", "diamond_axe", "diamond_shovel", "diamond_hoe"],
-    # 
-    "stone": ["stone", "cobblestone", "smooth_stone", "stone_bricks"],
-    "stone tools": ["stone_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_hoe"],
-    "netherite tools": ["netherite_sword", "netherite_pickaxe", "netherite_axe", "netherite_shovel", "netherite_hoe"],
-    #  
-    "ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore", "copper_ore"],
-    "_ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore", "copper_ore"],
-    " ore": ["iron_ore", "gold_ore", "diamond_ore", "coal_ore", "emerald_ore", "lapis_ore", "copper_ore"],
-    #
-    "grass": ["grass_block", "grass"],
-    # ا
-    "water": ["water_bucket", "water"],
-    "lava": ["lava_bucket", "lava"],
+    # individual ores – both variants
+    **{f"{m}_ore":           [f"{m}_ore", f"deepslate_{m}_ore"] for m in _ORE_MATS
+       if m not in ("nether_quartz", "nether_gold", "ancient_debris")},
+    **{f"{m} ore":           [f"{m}_ore", f"deepslate_{m}_ore"] for m in _ORE_MATS
+       if m not in ("nether_quartz", "nether_gold", "ancient_debris")},
+    **{f"deepslate_{m}_ore": [f"deepslate_{m}_ore"] for m in _ORE_MATS
+       if m not in ("nether_quartz", "nether_gold", "ancient_debris")},
+    **{f"deepslate {m} ore": [f"deepslate_{m}_ore"] for m in _ORE_MATS
+       if m not in ("nether_quartz", "nether_gold", "ancient_debris")},
+
+    # nether-only ores
+    "nether_quartz_ore":  ["nether_quartz_ore"],
+    "nether quartz ore":  ["nether_quartz_ore"],
+    "nether_gold_ore":    ["nether_gold_ore"],
+    "nether gold ore":    ["nether_gold_ore"],
+    "ancient_debris":     ["ancient_debris"],
+    "ancient debris":     ["ancient_debris"],
+    "nether ores":        ["nether_quartz_ore", "nether_gold_ore", "ancient_debris"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # LOGS / WOOD
+    # ══════════════════════════════════════════════════════════════════════════
+    "log":    _logs(),
+    "logs":   _logs(),
+    "wood":   _logs() + _planks(),
+
+    **{f"{w}_log":   [f"{w}_log"]   for w in _WOOD_TYPES},
+    **{f"{w} log":   [f"{w}_log"]   for w in _WOOD_TYPES},
+    **{f"{w}_wood":  [f"{w}_log"]   for w in _WOOD_TYPES},
+    **{f"{w} wood":  [f"{w}_log"]   for w in _WOOD_TYPES},
+
+    # stripped logs
+    **{f"stripped_{w}_log":  [f"stripped_{w}_log"]  for w in _WOOD_TYPES},
+    **{f"stripped {w} log":  [f"stripped_{w}_log"]  for w in _WOOD_TYPES},
+    "stripped_logs": [f"stripped_{w}_log" for w in _WOOD_TYPES],
+    "stripped logs": [f"stripped_{w}_log" for w in _WOOD_TYPES],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # PLANKS
+    # ══════════════════════════════════════════════════════════════════════════
+    "planks":  _planks(),
+    **{f"{w}_planks": [f"{w}_planks"] for w in _WOOD_TYPES},
+    **{f"{w} planks": [f"{w}_planks"] for w in _WOOD_TYPES},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # LEAVES
+    # ══════════════════════════════════════════════════════════════════════════
+    "leaves":  _leaves() + ["azalea_leaves", "flowering_azalea_leaves"],
+    **{f"{w}_leaves": [f"{w}_leaves"] for w in _WOOD_TYPES},
+    **{f"{w} leaves": [f"{w}_leaves"] for w in _WOOD_TYPES},
+    "azalea leaves": ["azalea_leaves", "flowering_azalea_leaves"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # SAPLINGS
+    # ══════════════════════════════════════════════════════════════════════════
+    "sapling":  _saplings(),
+    "saplings": _saplings(),
+    **{f"{w}_sapling": [f"{w}_sapling"] for w in _WOOD_TYPES},
+    **{f"{w} sapling": [f"{w}_sapling"] for w in _WOOD_TYPES},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # WOOL / CARPET / COLORED BLOCKS
+    # ══════════════════════════════════════════════════════════════════════════
+    "wool":     _colored("wool"),
+    **{f"{c}_wool":  [f"{c}_wool"]  for c in _WOOL_COLORS},
+    **{f"{c} wool":  [f"{c}_wool"]  for c in _WOOL_COLORS},
+
+    "carpet":   _colored("carpet"),
+    **{f"{c}_carpet": [f"{c}_carpet"] for c in _WOOL_COLORS},
+    **{f"{c} carpet": [f"{c}_carpet"] for c in _WOOL_COLORS},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # TERRACOTTA
+    # ══════════════════════════════════════════════════════════════════════════
+    "terracotta":          ["terracotta"] + _colored("terracotta"),
+    "glazed_terracotta":   _colored("glazed_terracotta"),
+    "glazed terracotta":   _colored("glazed_terracotta"),
+    **{f"{c}_terracotta":         [f"{c}_terracotta"]         for c in _TERRACOTTA_C},
+    **{f"{c} terracotta":         [f"{c}_terracotta"]         for c in _TERRACOTTA_C},
+    **{f"{c}_glazed_terracotta":  [f"{c}_glazed_terracotta"]  for c in _TERRACOTTA_C},
+    **{f"{c} glazed terracotta":  [f"{c}_glazed_terracotta"]  for c in _TERRACOTTA_C},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # CONCRETE + CONCRETE POWDER
+    # ══════════════════════════════════════════════════════════════════════════
+    "concrete":        _colored("concrete"),
+    "concrete_powder": _colored("concrete_powder"),
+    "concrete powder": _colored("concrete_powder"),
+    **{f"{c}_concrete":        [f"{c}_concrete"]        for c in _CONCRETE_C},
+    **{f"{c} concrete":        [f"{c}_concrete"]        for c in _CONCRETE_C},
+    **{f"{c}_concrete_powder": [f"{c}_concrete_powder"] for c in _CONCRETE_C},
+    **{f"{c} concrete powder": [f"{c}_concrete_powder"] for c in _CONCRETE_C},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # GLASS + GLASS PANES
+    # ══════════════════════════════════════════════════════════════════════════
+    "glass":       ["glass"] + _colored("stained_glass"),
+    "stained_glass": _colored("stained_glass"),
+    "stained glass": _colored("stained_glass"),
+    "glass_pane":  ["glass_pane"] + _colored("stained_glass_pane"),
+    "glass pane":  ["glass_pane"] + _colored("stained_glass_pane"),
+    "glass_panes": ["glass_pane"] + _colored("stained_glass_pane"),
+    "glass panes": ["glass_pane"] + _colored("stained_glass_pane"),
+    **{f"{c}_stained_glass":      [f"{c}_stained_glass"]      for c in _GLASS_C},
+    **{f"{c} stained glass":      [f"{c}_stained_glass"]      for c in _GLASS_C},
+    **{f"{c}_stained_glass_pane": [f"{c}_stained_glass_pane"] for c in _GLASS_C},
+    **{f"{c} stained glass pane": [f"{c}_stained_glass_pane"] for c in _GLASS_C},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # SAND + GRAVEL
+    # ══════════════════════════════════════════════════════════════════════════
+    "sand":       ["sand", "red_sand"],
+    "red_sand":   ["red_sand"],
+    "red sand":   ["red_sand"],
+    "gravel":     ["gravel"],
+    "soul_sand":  ["soul_sand"],
+    "soul sand":  ["soul_sand"],
+    "soul_soil":  ["soul_soil"],
+    "soul soil":  ["soul_soil"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # STONE VARIANTS
+    # ══════════════════════════════════════════════════════════════════════════
+    "stone":          _STONE_TYPES,
+    "stones":         _STONE_TYPES,
+    "cobblestone":    ["cobblestone", "mossy_cobblestone"],
+    "deepslate":      [s for s in _STONE_TYPES if "deepslate" in s],
+    "blackstone":     ["blackstone", "polished_blackstone", "chiseled_polished_blackstone",
+                       "polished_blackstone_bricks", "cracked_polished_blackstone_bricks",
+                       "gilded_blackstone"],
+    "basalt":         ["basalt", "smooth_basalt", "polished_basalt"],
+    "diorite":        ["diorite", "polished_diorite"],
+    "granite":        ["granite", "polished_granite"],
+    "andesite":       ["andesite", "polished_andesite"],
+    "calcite":        ["calcite"],
+    "tuff":           ["tuff", "polished_tuff", "tuff_bricks", "chiseled_tuff"],
+    "dripstone":      ["dripstone_block", "pointed_dripstone"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # STAIRS / SLABS / WALLS
+    # ══════════════════════════════════════════════════════════════════════════
+    "stairs":     _stairs(_STONE_TYPES + _WOOD_TYPES),
+    "slabs":      _slabs(_STONE_TYPES + _WOOD_TYPES),
+    "walls":      _walls(["cobblestone", "mossy_cobblestone", "stone_brick",
+                           "mossy_stone_brick", "andesite", "diorite", "granite",
+                           "sandstone", "red_sandstone", "nether_brick",
+                           "red_nether_brick", "blackstone", "polished_blackstone",
+                           "polished_blackstone_brick", "cobbled_deepslate",
+                           "polished_deepslate", "deepslate_brick", "deepslate_tile",
+                           "mud_brick", "tuff", "tuff_brick"]),
+    **{f"{w}_stairs": [f"{w}_stairs"] for w in _WOOD_TYPES + _STONE_TYPES},
+    **{f"{w}_slab":   [f"{w}_slab"]   for w in _WOOD_TYPES + _STONE_TYPES},
+    **{f"{w} stairs": [f"{w}_stairs"] for w in _WOOD_TYPES + _STONE_TYPES},
+    **{f"{w} slab":   [f"{w}_slab"]   for w in _WOOD_TYPES + _STONE_TYPES},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # FENCES / GATES / DOORS / TRAPDOORS
+    # ══════════════════════════════════════════════════════════════════════════
+    "fence":        _fences(),
+    "fences":       _fences(),
+    "fence_gate":   _fence_gates(),
+    "fence_gates":  _fence_gates(),
+    "fence gate":   _fence_gates(),
+    "fence gates":  _fence_gates(),
+    "door":         _doors(),
+    "doors":        _doors(),
+    "trapdoor":     _trapdoors(),
+    "trapdoors":    _trapdoors(),
+    **{f"{w}_fence":      [f"{w}_fence"]      for w in _WOOD_TYPES},
+    **{f"{w}_fence_gate": [f"{w}_fence_gate"] for w in _WOOD_TYPES},
+    **{f"{w}_door":       [f"{w}_door"]       for w in _WOOD_TYPES},
+    **{f"{w}_trapdoor":   [f"{w}_trapdoor"]   for w in _WOOD_TYPES},
+    **{f"{w} fence":      [f"{w}_fence"]      for w in _WOOD_TYPES},
+    **{f"{w} fence gate": [f"{w}_fence_gate"] for w in _WOOD_TYPES},
+    **{f"{w} door":       [f"{w}_door"]       for w in _WOOD_TYPES},
+    **{f"{w} trapdoor":   [f"{w}_trapdoor"]   for w in _WOOD_TYPES},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # BUTTONS / PRESSURE PLATES
+    # ══════════════════════════════════════════════════════════════════════════
+    "button":           _buttons(),
+    "buttons":          _buttons(),
+    "pressure_plate":   _pressure_plates(),
+    "pressure_plates":  _pressure_plates(),
+    "pressure plate":   _pressure_plates(),
+    "pressure plates":  _pressure_plates(),
+    **{f"{w}_button":         [f"{w}_button"]         for w in _WOOD_TYPES},
+    **{f"{w}_pressure_plate": [f"{w}_pressure_plate"] for w in _WOOD_TYPES},
+    **{f"{w} button":         [f"{w}_button"]         for w in _WOOD_TYPES},
+    **{f"{w} pressure plate": [f"{w}_pressure_plate"] for w in _WOOD_TYPES},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # RAILS
+    # ══════════════════════════════════════════════════════════════════════════
+    "rail":      ["rail", "powered_rail", "detector_rail", "activator_rail"],
+    "rails":     ["rail", "powered_rail", "detector_rail", "activator_rail"],
+    "powered_rail":   ["powered_rail"],
+    "detector_rail":  ["detector_rail"],
+    "activator_rail": ["activator_rail"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ICE
+    # ══════════════════════════════════════════════════════════════════════════
+    "ice":         ["ice", "packed_ice", "blue_ice"],
+    "packed_ice":  ["packed_ice"],
+    "blue_ice":    ["blue_ice"],
+    "packed ice":  ["packed_ice"],
+    "blue ice":    ["blue_ice"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # CORALS
+    # ══════════════════════════════════════════════════════════════════════════
+    "coral":       [f"{c}_coral"       for c in _CORAL_TYPES] +
+                   [f"{c}_coral_block" for c in _CORAL_TYPES] +
+                   [f"{c}_coral_fan"   for c in _CORAL_TYPES],
+    "corals":      [f"{c}_coral"       for c in _CORAL_TYPES] +
+                   [f"{c}_coral_block" for c in _CORAL_TYPES] +
+                   [f"{c}_coral_fan"   for c in _CORAL_TYPES],
+    "dead_coral":  [f"dead_{c}_coral"       for c in _CORAL_TYPES] +
+                   [f"dead_{c}_coral_block" for c in _CORAL_TYPES] +
+                   [f"dead_{c}_coral_fan"   for c in _CORAL_TYPES],
+    **{f"{c}_coral":       [f"{c}_coral"]       for c in _CORAL_TYPES},
+    **{f"{c}_coral_block": [f"{c}_coral_block"] for c in _CORAL_TYPES},
+    **{f"{c}_coral_fan":   [f"{c}_coral_fan"]   for c in _CORAL_TYPES},
+    **{f"{c} coral":       [f"{c}_coral"]       for c in _CORAL_TYPES},
+    **{f"{c} coral block": [f"{c}_coral_block"] for c in _CORAL_TYPES},
+    **{f"{c} coral fan":   [f"{c}_coral_fan"]   for c in _CORAL_TYPES},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # NYLIUM / MUSHROOM BLOCKS / FIRE
+    # ══════════════════════════════════════════════════════════════════════════
+    "nylium":        ["crimson_nylium", "warped_nylium"],
+    "crimson_nylium": ["crimson_nylium"],
+    "warped_nylium":  ["warped_nylium"],
+    "mushroom_block": ["red_mushroom_block", "brown_mushroom_block", "mushroom_stem"],
+    "mushroom blocks":["red_mushroom_block", "brown_mushroom_block", "mushroom_stem"],
+    "mushroom_grow_block": ["red_mushroom_block", "brown_mushroom_block", "mushroom_stem"],
+    "fire":          ["fire", "soul_fire"],
+    "soul_fire":     ["soul_fire"],
+    "soul fire":     ["soul_fire"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # BANNERS
+    # ══════════════════════════════════════════════════════════════════════════
+    "banner":    [f"{c}_banner"      for c in _BANNER_COLORS] +
+                 [f"{c}_wall_banner" for c in _BANNER_COLORS],
+    "banners":   [f"{c}_banner"      for c in _BANNER_COLORS] +
+                 [f"{c}_wall_banner" for c in _BANNER_COLORS],
+    **{f"{c}_banner":      [f"{c}_banner"]      for c in _BANNER_COLORS},
+    **{f"{c} banner":      [f"{c}_banner"]      for c in _BANNER_COLORS},
+    **{f"{c}_wall_banner": [f"{c}_wall_banner"] for c in _BANNER_COLORS},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # BEDS
+    # ══════════════════════════════════════════════════════════════════════════
+    "bed":   [f"{c}_bed" for c in _BED_COLORS],
+    "beds":  [f"{c}_bed" for c in _BED_COLORS],
+    **{f"{c}_bed": [f"{c}_bed"] for c in _BED_COLORS},
+    **{f"{c} bed": [f"{c}_bed"] for c in _BED_COLORS},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # CANDLES
+    # ══════════════════════════════════════════════════════════════════════════
+    "candle":   ["candle"] + [f"{c}_candle" for c in _CANDLE_COLORS],
+    "candles":  ["candle"] + [f"{c}_candle" for c in _CANDLE_COLORS],
+    **{f"{c}_candle": [f"{c}_candle"] for c in _CANDLE_COLORS},
+    **{f"{c} candle": [f"{c}_candle"] for c in _CANDLE_COLORS},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # CAULDRONS
+    # ══════════════════════════════════════════════════════════════════════════
+    "cauldron":  ["cauldron", "water_cauldron", "lava_cauldron", "powder_snow_cauldron"],
+    "cauldrons": ["cauldron", "water_cauldron", "lava_cauldron", "powder_snow_cauldron"],
+    "lava_cauldron":         ["lava_cauldron"],
+    "water_cauldron":        ["water_cauldron"],
+    "powder_snow_cauldron":  ["powder_snow_cauldron"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # CROPS / PLANTS
+    # ══════════════════════════════════════════════════════════════════════════
+    "crop":   ["wheat", "carrots", "potatoes", "beetroots",
+               "melon_stem", "pumpkin_stem", "nether_wart",
+               "sweet_berry_bush", "cocoa", "torchflower_crop", "pitcher_crop"],
+    "crops":  ["wheat", "carrots", "potatoes", "beetroots",
+               "melon_stem", "pumpkin_stem", "nether_wart",
+               "sweet_berry_bush", "cocoa", "torchflower_crop", "pitcher_crop"],
+    "wheat":         ["wheat"],
+    "carrots":       ["carrots"],
+    "potatoes":      ["potatoes"],
+    "beetroots":     ["beetroots"],
+    "nether_wart":   ["nether_wart"],
+    "sweet_berry_bush": ["sweet_berry_bush"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # FLOWERS
+    # ══════════════════════════════════════════════════════════════════════════
+    "flower":  ["dandelion", "poppy", "blue_orchid", "allium", "azure_bluet",
+                "red_tulip", "orange_tulip", "white_tulip", "pink_tulip",
+                "oxeye_daisy", "cornflower", "lily_of_the_valley",
+                "wither_rose", "sunflower", "lilac", "peony", "rose_bush",
+                "torchflower", "pitcher_plant"],
+    "flowers": ["dandelion", "poppy", "blue_orchid", "allium", "azure_bluet",
+                "red_tulip", "orange_tulip", "white_tulip", "pink_tulip",
+                "oxeye_daisy", "cornflower", "lily_of_the_valley",
+                "wither_rose", "sunflower", "lilac", "peony", "rose_bush",
+                "torchflower", "pitcher_plant"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # DYES
+    # ══════════════════════════════════════════════════════════════════════════
+    "dye":    [f"{c}_dye" for c in _DYE_COLORS],
+    "dyes":   [f"{c}_dye" for c in _DYE_COLORS],
+    **{f"{c}_dye": [f"{c}_dye"] for c in _DYE_COLORS},
+    **{f"{c} dye": [f"{c}_dye"] for c in _DYE_COLORS},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # TOOLS – all tiers
+    # ══════════════════════════════════════════════════════════════════════════
+    "tool":              sum([_tools(t) for t in _TIERS], []),
+    "tools":             sum([_tools(t) for t in _TIERS], []),
+    "pickaxe":           [f"{t}_pickaxe" for t in _TIERS],
+    "pickaxes":          [f"{t}_pickaxe" for t in _TIERS],
+    "axe":               [f"{t}_axe"     for t in _TIERS],
+    "axes":              [f"{t}_axe"     for t in _TIERS],
+    "shovel":            [f"{t}_shovel"  for t in _TIERS],
+    "shovels":           [f"{t}_shovel"  for t in _TIERS],
+    "hoe":               [f"{t}_hoe"     for t in _TIERS],
+    "hoes":              [f"{t}_hoe"     for t in _TIERS],
+    "sword":             [f"{t}_sword"   for t in _TIERS],
+    "swords":            [f"{t}_sword"   for t in _TIERS],
+
+    **{f"{t}_tools":    _tools(t)          for t in _TIERS},
+    **{f"{t} tools":    _tools(t)          for t in _TIERS},
+    **{f"{t}_pickaxe":  [f"{t}_pickaxe"]   for t in _TIERS},
+    **{f"{t} pickaxe":  [f"{t}_pickaxe"]   for t in _TIERS},
+    **{f"{t}_axe":      [f"{t}_axe"]       for t in _TIERS},
+    **{f"{t} axe":      [f"{t}_axe"]       for t in _TIERS},
+    **{f"{t}_shovel":   [f"{t}_shovel"]    for t in _TIERS},
+    **{f"{t} shovel":   [f"{t}_shovel"]    for t in _TIERS},
+    **{f"{t}_hoe":      [f"{t}_hoe"]       for t in _TIERS},
+    **{f"{t} hoe":      [f"{t}_hoe"]       for t in _TIERS},
+    **{f"{t}_sword":    [f"{t}_sword"]     for t in _TIERS},
+    **{f"{t} sword":    [f"{t}_sword"]     for t in _TIERS},
+
+    # gold alias
+    "gold tools":  _tools("golden"),
+    "gold_tools":  _tools("golden"),
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ARMOR – all tiers
+    # ══════════════════════════════════════════════════════════════════════════
+    "armor":             sum([_armor(t) for t in _TIERS + ["chainmail", "leather", "turtle"]], []),
+    **{f"{t}_armor":    _armor(t) for t in _TIERS},
+    **{f"{t} armor":    _armor(t) for t in _TIERS},
+    "gold armor":        _armor("golden"),
+    "gold_armor":        _armor("golden"),
+    "chainmail_armor":   _armor("chainmail"),
+    "chainmail armor":   _armor("chainmail"),
+    "leather_armor":     _armor("leather"),
+    "leather armor":     _armor("leather"),
+    "turtle_helmet":     ["turtle_helmet"],
+    "turtle helmet":     ["turtle_helmet"],
+    "netherite_armor":   _armor("netherite"),
+
+    # armor pieces
+    "helmet":     [f"{t}_helmet" for t in _TIERS + ["chainmail", "leather", "turtle"]],
+    "chestplate": [f"{t}_chestplate" for t in _TIERS + ["chainmail", "leather"]],
+    "leggings":   [f"{t}_leggings" for t in _TIERS + ["chainmail", "leather"]],
+    "boots":      [f"{t}_boots" for t in _TIERS + ["chainmail", "leather"]],
+    **{f"{t}_helmet":     [f"{t}_helmet"]     for t in _TIERS + ["chainmail", "leather"]},
+    **{f"{t}_chestplate": [f"{t}_chestplate"] for t in _TIERS + ["chainmail", "leather"]},
+    **{f"{t}_leggings":   [f"{t}_leggings"]   for t in _TIERS + ["chainmail", "leather"]},
+    **{f"{t}_boots":      [f"{t}_boots"]       for t in _TIERS + ["chainmail", "leather"]},
+
+    # armor layers (for texture pack renders)
     "armor layers": [
         "humanoid/diamond", "humanoid/iron", "humanoid/gold", "humanoid/netherite",
         "humanoid/chainmail", "humanoid/leather", "humanoid/copper", "humanoid/turtle_scute",
         "humanoid_leggings/diamond", "humanoid_leggings/iron", "humanoid_leggings/gold",
-        "humanoid_leggings/netherite", "humanoid_leggings/chainmail", "humanoid_leggings/leather",
-        "humanoid_leggings/copper",
-    
-        # 
-        "diamond.png", "iron.png", "gold.png", "netherite.png", "chainmail.png",
-        "leather.png", "copper.png", "turtle_scute.png",
+        "humanoid_leggings/netherite", "humanoid_leggings/chainmail",
+        "humanoid_leggings/leather", "humanoid_leggings/copper",
     ],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # SPEARS (custom / modded)
+    # ══════════════════════════════════════════════════════════════════════════
+    "spear":         [f"{t}_spear" for t in _TIERS],
+    "spear_in_hand": [f"{t}_spear_in_hand" for t in _TIERS],
+    "spear in hand": [f"{t}_spear_in_hand" for t in _TIERS],
+    **{f"{t}_spear":        [f"{t}_spear"]        for t in _TIERS},
+    **{f"{t} spear":        [f"{t}_spear"]        for t in _TIERS},
+    **{f"{t}_spear_in_hand":[f"{t}_spear_in_hand"] for t in _TIERS},
+    **{f"{t} spear in hand":[f"{t}_spear_in_hand"] for t in _TIERS},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # RANGED / PROJECTILES
+    # ══════════════════════════════════════════════════════════════════════════
+    "bow":        ["bow"],
+    "crossbow":   ["crossbow"],
+    "bows":       ["bow", "crossbow"],
+    "crossbows":  ["crossbow"],
+    "arrow":      ["arrow", "tipped_arrow", "spectral_arrow"],
+    "arrows":     ["arrow", "tipped_arrow", "spectral_arrow"],
+    "tipped_arrow":   ["tipped_arrow"],
+    "spectral_arrow": ["spectral_arrow"],
+    "trident":    ["trident"],
+    "mace":       ["mace"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # FISH / FOOD
+    # ══════════════════════════════════════════════════════════════════════════
+    "fish":   [f"{f}" for f in _FISH_TYPES] + [f"cooked_{f}" for f in _FISH_TYPES[:2]],
+    "fishes": [f"{f}" for f in _FISH_TYPES] + [f"cooked_{f}" for f in _FISH_TYPES[:2]],
+    "cooked_fish": [f"cooked_{f}" for f in _FISH_TYPES[:2]],
+    **{f: [f] for f in _FISH_TYPES},
+
+    "food":  ["bread", "apple", "golden_apple", "enchanted_golden_apple",
+              "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
+              "cooked_rabbit", "cooked_cod", "cooked_salmon",
+              "baked_potato", "beetroot_soup", "mushroom_stew", "rabbit_stew",
+              "suspicious_stew", "pumpkin_pie", "cake", "cookie", "honey_bottle",
+              "sweet_berries", "glow_berries", "dried_kelp", "melon_slice",
+              "carrot", "potato", "poisonous_potato", "beetroot",
+              "chorus_fruit", "torchflower_seeds", "pitcher_pod"],
+    "foods": ["bread", "apple", "golden_apple", "enchanted_golden_apple",
+              "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
+              "cooked_rabbit", "cooked_cod", "cooked_salmon",
+              "baked_potato", "beetroot_soup", "mushroom_stew", "rabbit_stew",
+              "suspicious_stew", "pumpkin_pie", "cake", "cookie", "honey_bottle"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # BOATS / CHEST BOATS
+    # ══════════════════════════════════════════════════════════════════════════
+    "boat":        [f"{w}_boat" for w in _WOOD_TYPES],
+    "boats":       [f"{w}_boat" for w in _WOOD_TYPES],
+    "chest_boat":  [f"{w}_chest_boat" for w in _WOOD_TYPES],
+    "chest_boats": [f"{w}_chest_boat" for w in _WOOD_TYPES],
+    "chest boat":  [f"{w}_chest_boat" for w in _WOOD_TYPES],
+    **{f"{w}_boat":       [f"{w}_boat"]       for w in _WOOD_TYPES},
+    **{f"{w} boat":       [f"{w}_boat"]       for w in _WOOD_TYPES},
+    **{f"{w}_chest_boat": [f"{w}_chest_boat"] for w in _WOOD_TYPES},
+    **{f"{w} chest boat": [f"{w}_chest_boat"] for w in _WOOD_TYPES},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # MUSIC DISCS
+    # ══════════════════════════════════════════════════════════════════════════
+    "music_disc":  [f"music_disc_{d}" for d in _MUSIC_DISCS],
+    "music_discs": [f"music_disc_{d}" for d in _MUSIC_DISCS],
+    "music disc":  [f"music_disc_{d}" for d in _MUSIC_DISCS],
+    "music discs": [f"music_disc_{d}" for d in _MUSIC_DISCS],
+    "disc":        [f"music_disc_{d}" for d in _MUSIC_DISCS],
+    **{f"music_disc_{d}": [f"music_disc_{d}"] for d in _MUSIC_DISCS},
+    **{f"music disc {d}": [f"music_disc_{d}"] for d in _MUSIC_DISCS},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # TRIM MATERIALS + TEMPLATES
+    # ══════════════════════════════════════════════════════════════════════════
+    "trim_material":   [f"{m}_ingot" if m not in ("quartz","amethyst","redstone","lapis","resin","diamond","emerald") else m
+                        for m in _TRIM_MATS],
+    "trim_materials":  [f"{m}_ingot" if m not in ("quartz","amethyst","redstone","lapis","resin","diamond","emerald") else m
+                        for m in _TRIM_MATS],
+    "trim material":   [f"{m}_ingot" if m not in ("quartz","amethyst","redstone","lapis","resin","diamond","emerald") else m
+                        for m in _TRIM_MATS],
+    "trim_template":   [f"{t}_armor_trim_smithing_template" for t in _TRIM_TMPL],
+    "trim_templates":  [f"{t}_armor_trim_smithing_template" for t in _TRIM_TMPL],
+    "trim template":   [f"{t}_armor_trim_smithing_template" for t in _TRIM_TMPL],
+    "smithing_template": [f"{t}_armor_trim_smithing_template" for t in _TRIM_TMPL] +
+                         ["netherite_upgrade_smithing_template"],
+    **{f"{t}_trim":         [f"{t}_armor_trim_smithing_template"] for t in _TRIM_TMPL},
+    **{f"{t} trim":         [f"{t}_armor_trim_smithing_template"] for t in _TRIM_TMPL},
+    **{f"{t}_armor_trim_smithing_template": [f"{t}_armor_trim_smithing_template"] for t in _TRIM_TMPL},
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # INGOTS / GEMS / NUGGETS / RAW MATERIALS
+    # ══════════════════════════════════════════════════════════════════════════
+    "ingot":   ["iron_ingot", "gold_ingot", "copper_ingot", "netherite_ingot",
+                "brick", "nether_brick"],
+    "ingots":  ["iron_ingot", "gold_ingot", "copper_ingot", "netherite_ingot"],
+    "iron_ingot":      ["iron_ingot"],
+    "gold_ingot":      ["gold_ingot"],
+    "copper_ingot":    ["copper_ingot"],
+    "netherite_ingot": ["netherite_ingot"],
+    "iron ingot":      ["iron_ingot"],
+    "gold ingot":      ["gold_ingot"],
+    "copper ingot":    ["copper_ingot"],
+    "netherite ingot": ["netherite_ingot"],
+
+    "nugget":  ["iron_nugget", "gold_nugget"],
+    "nuggets": ["iron_nugget", "gold_nugget"],
+    "iron_nugget":  ["iron_nugget"],
+    "gold_nugget":  ["gold_nugget"],
+    "iron nugget":  ["iron_nugget"],
+    "gold nugget":  ["gold_nugget"],
+
+    "gem":    ["diamond", "emerald", "amethyst_shard", "quartz", "lapis_lazuli",
+               "prismarine_crystals", "nether_quartz"],
+    "gems":   ["diamond", "emerald", "amethyst_shard", "quartz", "lapis_lazuli",
+               "prismarine_crystals"],
+    "diamond":          ["diamond"],
+    "emerald":          ["emerald"],
+    "amethyst_shard":   ["amethyst_shard"],
+    "quartz":           ["quartz"],
+    "lapis_lazuli":     ["lapis_lazuli"],
+
+    "raw_material":  ["raw_iron", "raw_gold", "raw_copper"],
+    "raw_materials": ["raw_iron", "raw_gold", "raw_copper"],
+    "raw material":  ["raw_iron", "raw_gold", "raw_copper"],
+    "raw materials": ["raw_iron", "raw_gold", "raw_copper"],
+    "raw_iron":     ["raw_iron"],
+    "raw_gold":     ["raw_gold"],
+    "raw_copper":   ["raw_copper"],
+    "raw iron":     ["raw_iron"],
+    "raw gold":     ["raw_gold"],
+    "raw copper":   ["raw_copper"],
+
+    # dust/powder
+    "dust":      ["redstone", "glowstone_dust", "gunpowder", "sugar"],
+    "dusts":     ["redstone", "glowstone_dust", "gunpowder", "sugar"],
+    "redstone":  ["redstone"],
+    "glowstone_dust": ["glowstone_dust"],
+    "gunpowder": ["gunpowder"],
+
+    # storage blocks
+    "storage_block":   ["iron_block", "gold_block", "copper_block", "diamond_block",
+                        "emerald_block", "netherite_block", "lapis_block", "redstone_block",
+                        "coal_block", "amethyst_block", "raw_iron_block", "raw_gold_block",
+                        "raw_copper_block"],
+    "storage_blocks":  ["iron_block", "gold_block", "copper_block", "diamond_block",
+                        "emerald_block", "netherite_block", "lapis_block", "redstone_block",
+                        "coal_block", "amethyst_block"],
+    "storage block":   ["iron_block", "gold_block", "copper_block", "diamond_block",
+                        "emerald_block", "netherite_block", "lapis_block", "redstone_block",
+                        "coal_block", "amethyst_block"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # COALS
+    # ══════════════════════════════════════════════════════════════════════════
+    "coal":   ["coal", "charcoal"],
+    "coals":  ["coal", "charcoal"],
+    "charcoal": ["charcoal"],
+
+    # cluster harvestables
+    "cluster_max_harvestables": ["amethyst_cluster", "large_amethyst_bud",
+                                  "medium_amethyst_bud", "small_amethyst_bud"],
+    "amethyst_cluster":  ["amethyst_cluster"],
+    "amethyst cluster":  ["amethyst_cluster"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # SEEDS
+    # ══════════════════════════════════════════════════════════════════════════
+    "seed":   ["wheat_seeds", "melon_seeds", "pumpkin_seeds", "beetroot_seeds",
+               "torchflower_seeds", "pitcher_pod"],
+    "seeds":  ["wheat_seeds", "melon_seeds", "pumpkin_seeds", "beetroot_seeds",
+               "torchflower_seeds", "pitcher_pod"],
+    "wheat_seeds":    ["wheat_seeds"],
+    "melon_seeds":    ["melon_seeds"],
+    "pumpkin_seeds":  ["pumpkin_seeds"],
+    "beetroot_seeds": ["beetroot_seeds"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # BOOKS / BOOKSHELVES
+    # ══════════════════════════════════════════════════════════════════════════
+    "book":          ["book", "written_book", "enchanted_book", "knowledge_book"],
+    "books":         ["book", "written_book", "enchanted_book", "knowledge_book"],
+    "bookshelf_books": ["book", "written_book", "enchanted_book", "knowledge_book"],
+    "bookshelf book":  ["book", "written_book", "enchanted_book", "knowledge_book"],
+    "enchanted_book":  ["enchanted_book"],
+    "written_book":    ["written_book"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # BEACON PAYMENT
+    # ══════════════════════════════════════════════════════════════════════════
+    "beacon_payment_items": ["iron_ingot", "gold_ingot", "diamond", "emerald", "netherite_ingot"],
+    "beacon payment":       ["iron_ingot", "gold_ingot", "diamond", "emerald", "netherite_ingot"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # POTIONS / MISC ITEMS
+    # ══════════════════════════════════════════════════════════════════════════
+    "potion":  ["potion", "splash_potion", "lingering_potion"],
+    "potions": ["potion", "splash_potion", "lingering_potion"],
+    "splash_potion":   ["splash_potion"],
+    "lingering_potion":["lingering_potion"],
+    "ender_pearl":   ["ender_pearl"],
+    "ender pearl":   ["ender_pearl"],
+    "ender_eye":     ["ender_eye"],
+    "eye of ender":  ["ender_eye"],
+    "blaze_rod":     ["blaze_rod"],
+    "blaze rod":     ["blaze_rod"],
+    "blaze_powder":  ["blaze_powder"],
+    "nether_star":   ["nether_star"],
+    "totem_of_undying": ["totem_of_undying"],
+    "totem":         ["totem_of_undying"],
+    "elytra":        ["elytra"],
+    "shield":        ["shield"],
+    "map":           ["map", "filled_map"],
+    "compass":       ["compass", "recovery_compass"],
+    "clock":         ["clock"],
+    "spyglass":      ["spyglass"],
+    "lead":          ["lead"],
+    "name_tag":      ["name_tag"],
+    "name tag":      ["name_tag"],
+    "saddle":        ["saddle"],
+    "bundle":        ["bundle"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # WATER / LAVA / BUCKETS
+    # ══════════════════════════════════════════════════════════════════════════
+    "water":   ["water_bucket", "water"],
+    "lava":    ["lava_bucket", "lava"],
+    "bucket":  ["bucket", "water_bucket", "lava_bucket", "milk_bucket",
+                "powder_snow_bucket", "axolotl_bucket", "cod_bucket",
+                "salmon_bucket", "tropical_fish_bucket", "pufferfish_bucket"],
+    "buckets": ["bucket", "water_bucket", "lava_bucket", "milk_bucket",
+                "powder_snow_bucket"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # GRASS / DIRT
+    # ══════════════════════════════════════════════════════════════════════════
+    "grass":    ["grass_block", "grass"],
+    "dirt":     ["dirt", "coarse_dirt", "rooted_dirt", "podzol", "mycelium",
+                 "mud", "muddy_mangrove_roots"],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # FORGE / NEOFORGE TAGS  (map tag → vanilla equivalents)
+    # ══════════════════════════════════════════════════════════════════════════
+    "forge:ores":          _ores() + _ores(deepslate=True),
+    "forge:ingots":        ["iron_ingot", "gold_ingot", "copper_ingot", "netherite_ingot"],
+    "forge:nuggets":       ["iron_nugget", "gold_nugget"],
+    "forge:gems":          ["diamond", "emerald", "amethyst_shard", "quartz", "lapis_lazuli"],
+    "forge:dusts":         ["redstone", "glowstone_dust", "gunpowder"],
+    "forge:plates":        [],   # mod-added; no vanilla items
+    "forge:rods":          ["blaze_rod", "stick"],
+    "forge:gears":         [],   # mod-added
+    "forge:storage_blocks":["iron_block", "gold_block", "copper_block", "diamond_block",
+                             "emerald_block", "netherite_block", "lapis_block",
+                             "redstone_block", "coal_block"],
+    "forge:raw_materials": ["raw_iron", "raw_gold", "raw_copper"],
+    "forge:seeds":         ["wheat_seeds", "melon_seeds", "pumpkin_seeds", "beetroot_seeds"],
+    "forge:foods":         ["bread", "apple", "golden_apple", "cooked_beef",
+                            "cooked_porkchop", "cooked_chicken", "baked_potato"],
+    "forge:tools":         sum([_tools(t) for t in _TIERS], []),
+    "forge:armor":         sum([_armor(t) for t in _TIERS + ["chainmail", "leather"]], []),
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # IN-HAND VARIANTS (generic)
+    # ══════════════════════════════════════════════════════════════════════════
+    "in hand":    ["_in_hand"],
+    "_in_hand":   [],
+    "in_hand":    ["_in_hand"],
 }
 
-# 
-SEARCH_FOLDERS = [
-    ("textures/item", ".png"),
-    ("textures/block", ".png"),
-    ("textures/entity", ".png"),
-    
-    # 
-    ("armors/humanoid", ".png"),
-    ("armors/humanoid_leggings", ".png"),
-    ("armors", ".png"),                    #  
-]
-# 
-user_selections: dict[int, list] = {}
+# ─────────────────────────────────────────────────────────────────────────────
+# SEARCH FOLDERS  (order matters – item first, then block, then entity, then armors)
+# ─────────────────────────────────────────────────────────────────────────────
 
+SEARCH_FOLDERS = [
+    ("textures/item",   ".png"),
+    ("textures/block",  ".png"),
+    ("textures/entity", ".png"),
+    ("armors/humanoid",          ".png"),
+    ("armors/humanoid_leggings", ".png"),
+    ("armors",                   ".png"),
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# resolve_names  – smarter multi-strategy lookup
+# ─────────────────────────────────────────────────────────────────────────────
 
 def resolve_names(raw: str) -> list[str]:
     """
-    اسم ورودی رو به لیستی از نام‌های احتمالی تبدیل می‌کنه.
-    مثلاً 'wood' -> ['oak_log', 'oak_planks', ...]
-    یا 'iron sword' -> ['iron_sword']
+    Convert a user query into a list of asset filenames to search for.
+
+    Strategy (in order):
+    1. Direct alias lookup (raw and underscored form)
+    2. Forge tag lookup  (forge:xxx)
+    3. Suffix-wildcard  (ends with known suffix like '_ore', '_sword', …)
+    4. Partial key match in alias dict
+    5. Fallback: treat as literal filename
     """
     key = raw.strip().lower()
-    # اگه alias مستقیم داشت
-    if key in ITEM_ALIASES:
-        return ITEM_ALIASES[key]
-    # تبدیل فاصله به آندرلاین
-    underscored = key.replace(" ", "_")
-    if underscored in ITEM_ALIASES:
-        return ITEM_ALIASES[underscored]
-    # جستجوی جزئی در alias ها
-    partial_matches = []
+    underscore_key = key.replace(" ", "_")
+    space_key = key.replace("_", " ")
+
+    # 1 – direct
+    for k in (key, underscore_key, space_key):
+        if k in ITEM_ALIASES:
+            return list(dict.fromkeys(ITEM_ALIASES[k]))
+
+    # 2 – forge tag (user may omit "forge:" prefix)
+    forge_key = f"forge:{key}"
+    if forge_key in ITEM_ALIASES:
+        return list(dict.fromkeys(ITEM_ALIASES[forge_key]))
+
+    # 3 – known suffix expansion
+    _KNOWN_SUFFIXES = {
+        "_ore":           lambda m: [f"{m}_ore", f"deepslate_{m}_ore"],
+        "_sword":         lambda m: [f"{m}_sword"],
+        "_pickaxe":       lambda m: [f"{m}_pickaxe"],
+        "_axe":           lambda m: [f"{m}_axe"],
+        "_shovel":        lambda m: [f"{m}_shovel"],
+        "_hoe":           lambda m: [f"{m}_hoe"],
+        "_helmet":        lambda m: [f"{m}_helmet"],
+        "_chestplate":    lambda m: [f"{m}_chestplate"],
+        "_leggings":      lambda m: [f"{m}_leggings"],
+        "_boots":         lambda m: [f"{m}_boots"],
+        "_log":           lambda m: [f"{m}_log", f"stripped_{m}_log"],
+        "_planks":        lambda m: [f"{m}_planks"],
+        "_leaves":        lambda m: [f"{m}_leaves"],
+        "_sapling":       lambda m: [f"{m}_sapling"],
+        "_wool":          lambda m: [f"{m}_wool"],
+        "_concrete":      lambda m: [f"{m}_concrete"],
+        "_concrete_powder": lambda m: [f"{m}_concrete_powder"],
+        "_terracotta":    lambda m: [f"{m}_terracotta", f"{m}_glazed_terracotta"],
+        "_stained_glass": lambda m: [f"{m}_stained_glass", f"{m}_stained_glass_pane"],
+        "_bed":           lambda m: [f"{m}_bed"],
+        "_banner":        lambda m: [f"{m}_banner"],
+        "_candle":        lambda m: [f"{m}_candle"],
+        "_dye":           lambda m: [f"{m}_dye"],
+        "_boat":          lambda m: [f"{m}_boat", f"{m}_chest_boat"],
+        "_spear":         lambda m: [f"{m}_spear", f"{m}_spear_in_hand"],
+        "_stairs":        lambda m: [f"{m}_stairs"],
+        "_slab":          lambda m: [f"{m}_slab"],
+        "_wall":          lambda m: [f"{m}_wall"],
+        "_fence":         lambda m: [f"{m}_fence", f"{m}_fence_gate"],
+        "_door":          lambda m: [f"{m}_door"],
+        "_trapdoor":      lambda m: [f"{m}_trapdoor"],
+        "_button":        lambda m: [f"{m}_button"],
+        "_pressure_plate":lambda m: [f"{m}_pressure_plate"],
+    }
+    for suffix, builder in _KNOWN_SUFFIXES.items():
+        if underscore_key.endswith(suffix):
+            material = underscore_key[: -len(suffix)]
+            return list(dict.fromkeys(builder(material)))
+
+    # 4 – partial key match
+    partial: list[str] = []
     for alias_key, alias_vals in ITEM_ALIASES.items():
-        if key in alias_key or alias_key in key:
-            partial_matches.extend(alias_vals)
-    if partial_matches:
-        return list(dict.fromkeys(partial_matches))  # حذف تکراری
-    # اگه alias نداشت، همون اسم رو با و بدون آندرلاین برمی‌گردونه
-    return list(dict.fromkeys([underscored, key.replace("_", " ").replace(" ", "_")]))
+        if key in alias_key or alias_key in key \
+                or underscore_key in alias_key or alias_key in underscore_key:
+            partial.extend(alias_vals)
+    if partial:
+        return list(dict.fromkeys(partial))
+
+    # 5 – literal fallback (try both forms)
+    return list(dict.fromkeys([underscore_key, space_key.replace(" ", "_")]))
 
 async def search_mc_assets(names: list[str]) -> list[dict]:
     found = []
