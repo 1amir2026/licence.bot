@@ -264,6 +264,21 @@ def admin_main_keyboard():
             [KeyboardButton(text="🔑 ساخت لایسنس جدید")],
             [KeyboardButton(text="📢 اطلاع‌رسانی")],
             [KeyboardButton(text="🛠 سیستم مدیریت")],
+            [KeyboardButton(text="🧪 تست پنل کاربر")],
+        ],
+        resize_keyboard=True
+    )
+
+
+def user_main_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📦 ساخت HUD Overlay از ریسورس پک")],
+            [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
+            [KeyboardButton(text="🔄 تبدیل JSON به OBJ")],
+            [KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")],
+            [KeyboardButton(text="🛡 ساخت آرمور با تریم")],
+            [KeyboardButton(text="🖼 دانلود تامنیل یوتیوب")],
         ],
         resize_keyboard=True
     )
@@ -519,17 +534,7 @@ async def check_license(message: types.Message):
                 license_glb.expires_at = None
             session.commit()
 
-            keyboard = ReplyKeyboardMarkup(
-                keyboard=[
-                    [KeyboardButton(text="📦 ساخت HUD Overlay از ریسورس پک")],
-                    [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
-                    [KeyboardButton(text="🔄 تبدیل JSON به OBJ")],
-                    [KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")],
-                    [KeyboardButton(text="🛡 ساخت آرمور با تریم")],
-                    [KeyboardButton(text="🖼 دانلود تامنیل یوتیوب")],
-                ],
-                resize_keyboard=True
-            )
+            keyboard = user_main_keyboard()
 
             await message.answer("✅ لایسنس فعال شد!\n\nبه پنل خوش آمدید 🎉", reply_markup=keyboard)
         else:
@@ -747,6 +752,32 @@ async def open_management_panel(message: types.Message):
 
     kb = build_management_panel_kb()
     await message.answer("🛠 پنل مدیریت کاربران:", reply_markup=kb)
+
+
+# ====================== ADMIN TEST USER PANEL ======================
+@dp.message(F.text == "🧪 تست پنل کاربر")
+async def test_user_panel(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    await message.answer(
+        "🧪 <b>حالت تست پنل کاربر</b>\n\n"
+        "الان دکمه‌های کاربر رو می‌بینی. هر دکمه‌ای بزنی عیناً مثل یه کاربر عادی کار می‌کنه.\n\n"
+        "برای برگشت به پنل ادمین دستور /admin رو بزن.",
+        parse_mode="HTML",
+        reply_markup=user_main_keyboard()
+    )
+
+
+@dp.message(Command("admin"))
+async def cmd_back_to_admin(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    await message.answer(
+        "👑 برگشتی به پنل ادمین.",
+        reply_markup=admin_main_keyboard()
+    )
 
 
 @dp.callback_query(F.data.startswith("{"))
