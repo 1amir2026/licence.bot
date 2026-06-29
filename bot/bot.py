@@ -281,7 +281,6 @@ def user_main_keyboard():
             [KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")],
             [KeyboardButton(text="🛡 ساخت آرمور با تریم")],
             [KeyboardButton(text="🖼 دانلود تامنیل یوتیوب")],
-            [KeyboardButton(text="🏆 Achievement Maker")], 
         ],
         resize_keyboard=True
     )
