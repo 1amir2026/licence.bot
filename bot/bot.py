@@ -16,6 +16,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from armor_handler import register_armor_handlers
 from youtube_thumbnail_handler import register_youtube_thumbnail_handlers
+from achievement_handler import register_achievement_handlers
 import aiohttp
 
 from config import TOKEN, ADMIN_ID
@@ -142,6 +143,7 @@ def get_access_block_message(user_id: int):
 
 # ثبت هندلرهای دانلود تامنیل یوتیوب (بعد از تعریف get_access_block_message)
 register_youtube_thumbnail_handlers(dp, bot, get_access_block_message)
+register_achievement_handlers(dp, bot, get_access_block_message)
 
 
 # ====================== HELPERS ======================
@@ -279,6 +281,7 @@ def user_main_keyboard():
             [KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")],
             [KeyboardButton(text="🛡 ساخت آرمور با تریم")],
             [KeyboardButton(text="🖼 دانلود تامنیل یوتیوب")],
+            [KeyboardButton(text="🏆 Achievement Maker")], 
         ],
         resize_keyboard=True
     )
