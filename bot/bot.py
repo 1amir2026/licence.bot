@@ -59,6 +59,7 @@ dp = Dispatcher()
 register_armor_handlers(dp, bot)
 user_modes = {}
 user_data = {}  # برای ذخیره اطلاعات بین دو مرحله JSON و Texture
+user_selections = {}  # برای ذخیره انتخاب‌های کاربر در جستجوی asset
 
 # ====================== PATHS ======================
 BASE_DIR = Path(__file__).resolve().parent.parent    # ← تغییر به parent.parent
