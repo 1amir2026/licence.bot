@@ -264,7 +264,7 @@ def _quality_keyboard(video_id: str, candidates: list, prefix: str, extra_button
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-
+def _safe_filename(title: str, video_id: str, width, height) -> str:
     base = re.sub(r"[^\w\-]+", "_", title or video_id).strip("_")[:50] or video_id
     if width and height:
         return f"{base}_{width}x{height}.jpg"
