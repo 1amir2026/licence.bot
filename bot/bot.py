@@ -70,6 +70,7 @@ PROCESSOR_DIR = str(BASE_DIR / "processor")
 NODE_SCRIPT = os.path.join(PROCESSOR_DIR, "processor.mjs")
 ITEM3D_SCRIPT = os.path.join(PROCESSOR_DIR, "item3d.mjs")
 JSON_TO_OBJ_SCRIPT = os.path.join(PROCESSOR_DIR, "json_to_obj.mjs")
+OBJ_PREVIEW_SCRIPT = os.path.join(PROCESSOR_DIR, "obj_preview.mjs")
 
 INPUT_DIR = os.path.join(PROCESSOR_DIR, "input")
 OUTPUT_DIR = os.path.join(PROCESSOR_DIR, "output")
@@ -199,6 +200,27 @@ async def run_json_to_obj(json_path: str, output_obj: str):
         raise RuntimeError(f"Output file not created: {output_obj}")
     
     return output_obj
+
+
+async def run_obj_preview(obj_path: str, texture_path: str, preview_path: str):
+    """ساخت یک تصویر پیش‌نمایش (جلو + پشت کنار هم) از فایل OBJ با تکسچر آن."""
+    os.makedirs(os.path.dirname(preview_path), exist_ok=True)
+
+    proc = await asyncio.create_subprocess_exec(
+        "node", OBJ_PREVIEW_SCRIPT, obj_path, texture_path, preview_path, "512",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=PROCESSOR_DIR
+    )
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"OBJ preview render failed:\n{stderr.decode()}")
+
+    if not os.path.exists(preview_path):
+        raise RuntimeError(f"Preview file not created: {preview_path}")
+
+    return preview_path
 
 
 def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
@@ -1151,6 +1173,20 @@ async def handle_document(message: types.Message, state: FSMContext):
 
         try:
             await run_json_to_obj(json_path, output_obj)
+
+            # ساخت پیش‌نمایش سه‌بعدی ساده (جلو + پشت کنار هم)
+            preview_path = os.path.join(OUTPUT_DIR, base_name + "_preview.png")
+            try:
+                await run_obj_preview(output_obj, texture_path, preview_path)
+                await message.answer_photo(
+                    FSInputFile(preview_path),
+                    caption="👀 پیش‌نمایش مدل (راست: پشت | چپ: جلو)"
+                )
+            except Exception as preview_err:
+                # اگه پیش‌نمایش ساخته نشد، روند اصلی (ارسال ZIP) رو متوقف نکن
+                await message.answer(f"⚠️ ساخت پیش‌نمایش با خطا مواجه شد:\n{str(preview_err)[:300]}")
+                preview_path = None
+
             zip_path = create_zip_with_texture(base_name, output_obj, texture_path)
 
             await message.answer_document(
@@ -1166,7 +1202,10 @@ async def handle_document(message: types.Message, state: FSMContext):
             await message.answer(f"❌ خطا:\n{str(e)}")
 
         finally:
-            for p in [json_path, texture_path, output_obj, output_obj.replace('.obj', '.mtl')]:
+            cleanup_paths = [json_path, texture_path, output_obj, output_obj.replace('.obj', '.mtl')]
+            preview_cleanup = os.path.join(OUTPUT_DIR, base_name + "_preview.png")
+            cleanup_paths.append(preview_cleanup)
+            for p in cleanup_paths:
                 if os.path.exists(p):
                     try:
                         os.remove(p)
