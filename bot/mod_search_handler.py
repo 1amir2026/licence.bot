@@ -58,6 +58,10 @@ selection_sessions = {}  # user_id -> {"result":..., "mc_version":..., "loader":
 # ====================== STATE ======================
 class ModSearchState(StatesGroup):
     waiting_query = State()
+    waiting_manual_mcver = State()
+
+
+MCVER_PAGE_SIZE = 9  # تعداد نسخه‌ی ماینکرافت در هر صفحه (۳ ستون x ۳ ردیف)
 
 
 # ====================== FUZZY SEARCH ======================
@@ -419,6 +423,28 @@ def register_mod_search_handlers(dp, bot, get_access_block_message):
         await check_then(callback, advance)
 
     # ---------- مسیر Modrinth: انتخاب نسخه‌ی ماینکرافت ----------
+    def build_mcver_keyboard(game_versions, page: int):
+        start = page * MCVER_PAGE_SIZE
+        chunk = game_versions[start:start + MCVER_PAGE_SIZE]
+        rows = []
+        for i in range(0, len(chunk), 3):
+            rows.append([
+                InlineKeyboardButton(text=gv, callback_data=f"msr_mcver:{gv}")
+                for gv in chunk[i:i + 3]
+            ])
+
+        nav = []
+        if page > 0:
+            nav.append(InlineKeyboardButton(text="◀️ قبلی", callback_data=f"msr_mcver_page:{page - 1}"))
+        if start + MCVER_PAGE_SIZE < len(game_versions):
+            nav.append(InlineKeyboardButton(text="بعدی ▶️", callback_data=f"msr_mcver_page:{page + 1}"))
+        if nav:
+            rows.append(nav)
+
+        rows.append([InlineKeyboardButton(text="✏️ نوشتن دستی نسخه", callback_data="msr_mcver_manual")])
+        rows.append([InlineKeyboardButton(text="❌ لغو", callback_data="msr_cancel")])
+        return InlineKeyboardMarkup(inline_keyboard=rows)
+
     async def ask_mc_version_modrinth(callback: types.CallbackQuery, item):
         try:
             async with aiohttp.ClientSession() as session:
@@ -437,24 +463,102 @@ def register_mod_search_handlers(dp, bot, get_access_block_message):
                 if gv not in game_versions:
                     game_versions.append(gv)
 
-        selection_sessions[callback.from_user.id]["versions_data"] = versions_data
+        sess = selection_sessions[callback.from_user.id]
+        sess["versions_data"] = versions_data
+        sess["game_versions"] = game_versions
+        sess["mcver_page"] = 0
 
         if not game_versions:
             await callback.message.edit_text("❌ نسخه‌ای برای این آیتم پیدا نشد؛ شاید پروژه دیگه فایلی نداره.")
             return
 
-        rows = []
-        limited = game_versions[:18]
-        for i in range(0, len(limited), 3):
-            rows.append([
-                InlineKeyboardButton(text=gv, callback_data=f"msr_mcver:{gv}")
-                for gv in limited[i:i + 3]
-            ])
-        rows.append([InlineKeyboardButton(text="❌ لغو", callback_data="msr_cancel")])
-
         await callback.message.edit_text(
             f"📦 <b>{item['title']}</b>\n🟩 Modrinth\n\nنسخه‌ی ماینکرافت رو انتخاب کن:",
             parse_mode="HTML",
+            reply_markup=build_mcver_keyboard(game_versions, 0),
+        )
+
+    @dp.callback_query(F.data.startswith("msr_mcver_page:"))
+    async def mcver_page_nav(callback: types.CallbackQuery, state: FSMContext):
+        sess = selection_sessions.get(callback.from_user.id)
+        if not sess or "game_versions" not in sess:
+            await callback.answer("⏳ نشست منقضی شده.", show_alert=True)
+            return
+        page = int(callback.data.split(":")[1])
+        sess["mcver_page"] = page
+        await callback.message.edit_reply_markup(reply_markup=build_mcver_keyboard(sess["game_versions"], page))
+        await callback.answer()
+
+    @dp.callback_query(F.data == "msr_mcver_manual")
+    async def mcver_manual_start(callback: types.CallbackQuery, state: FSMContext):
+        sess = selection_sessions.get(callback.from_user.id)
+        if not sess:
+            await callback.answer("⏳ نشست منقضی شده.", show_alert=True)
+            return
+
+        async def advance():
+            await state.set_state(ModSearchState.waiting_manual_mcver)
+            await callback.message.edit_text(
+                "✏️ نسخه‌ی ماینکرافت رو دقیق بنویس، مثلاً:\n<code>1.20.1</code>",
+                parse_mode="HTML",
+            )
+
+        await check_then(callback, advance)
+
+    @dp.message(ModSearchState.waiting_manual_mcver, F.text)
+    async def mcver_manual_receive(message: types.Message, state: FSMContext):
+        user_id = message.from_user.id
+        sess = selection_sessions.get(user_id)
+        if not sess or "game_versions" not in sess:
+            await state.clear()
+            await message.answer("❌ نشست منقضی شده، دوباره جستجو کن.")
+            return
+
+        typed = message.text.strip()
+        game_versions = sess["game_versions"]
+
+        mc_version = None
+        for gv in game_versions:
+            if gv.lower() == typed.lower():
+                mc_version = gv
+                break
+
+        if not mc_version:
+            close = difflib.get_close_matches(typed, game_versions, n=1, cutoff=0.6)
+            if close:
+                mc_version = close[0]
+
+        if not mc_version:
+            await message.answer(
+                f"❌ نسخه‌ی <code>{typed}</code> برای این آیتم پیدا نشد.\n"
+                "دوباره امتحان کن یا از لیست دکمه‌ها انتخاب کن.",
+                parse_mode="HTML",
+            )
+            return
+
+        await state.clear()
+        sess["mc_version"] = mc_version
+        confirm_msg = await message.answer(f"✅ نسخه‌ی <code>{mc_version}</code> انتخاب شد.", parse_mode="HTML")
+        await asyncio.sleep(CHECKMARK_DELAY)
+        await ask_loader_message(confirm_msg, user_id)
+
+    async def ask_loader_message(message: types.Message, user_id: int):
+        """مثل ask_loader ولی روی یک Message عادی کار می‌کنه (برای وقتی ورودی از تایپ دستی میاد، نه callback)."""
+        sess = selection_sessions[user_id]
+        mc_version = sess["mc_version"]
+        loaders = set()
+        for v in sess["versions_data"]:
+            if mc_version in v.get("game_versions", []):
+                loaders.update(v.get("loaders", []))
+
+        if not loaders:
+            await message.edit_text("❌ برای این نسخه لودری پیدا نشد.")
+            return
+
+        rows = [[InlineKeyboardButton(text=l.capitalize(), callback_data=f"msr_loader:{l}")] for l in sorted(loaders)]
+        rows.append([InlineKeyboardButton(text="❌ لغو", callback_data="msr_cancel")])
+        await message.edit_text(
+            f"⚙️ لودر رو انتخاب کن (نسخه‌ی {mc_version}):",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
@@ -471,6 +575,7 @@ def register_mod_search_handlers(dp, bot, get_access_block_message):
             await ask_loader(callback)
 
         await check_then(callback, advance)
+
 
     async def ask_loader(callback: types.CallbackQuery):
         sess = selection_sessions[callback.from_user.id]
