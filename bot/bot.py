@@ -340,12 +340,9 @@ def user_main_keyboard(user_id: int = None):
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=status_text)],
-            [KeyboardButton(text="📦 ساخت HUD Overlay از ریسورس پک")],
-            [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
-            [KeyboardButton(text="🔄 تبدیل JSON به OBJ")],
-            [KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")],
-            [KeyboardButton(text="🛡 ساخت آرمور با تریم")],
-            [KeyboardButton(text="🖼 دانلود تامنیل یوتیوب")],
+            [KeyboardButton(text="📦 ساخت HUD Overlay از ریسورس پک"), KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
+            [KeyboardButton(text="🔄 تبدیل JSON به OBJ"), KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")],
+            [KeyboardButton(text="🛡 ساخت آرمور با تریم"), KeyboardButton(text="🖼 دانلود تامنیل یوتیوب")],
             [KeyboardButton(text="🔗 دانلود مستقیم با لینک")],
         ],
         resize_keyboard=True
