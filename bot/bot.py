@@ -296,9 +296,50 @@ def admin_main_keyboard():
     )
 
 
-def user_main_keyboard():
+def get_license_status_text(user_id: int) -> str:
+    """متن دکمه‌ی بالای منو: چند روز/ساعت از لایسنس کاربر باقی مانده است."""
+    if not user_id:
+        return "⏳ وضعیت لایسنس"
+
+    if is_admin(user_id):
+        return "⏳ وضعیت لایسنس: ادمین ♾️"
+
+    session = Session()
+    try:
+        licenses = session.query(License).filter(
+            License.user_id == user_id,
+            License.used == True,
+            License.banned == False
+        ).all()
+
+        if not licenses:
+            return "⏳ وضعیت لایسنس: ندارید"
+
+        if any(l.expires_at is None for l in licenses):
+            return "⏳ وضعیت لایسنس: همیشگی ♾️"
+
+        now = datetime.utcnow()
+        active = [l for l in licenses if l.expires_at and l.expires_at > now]
+        if not active:
+            return "⏳ وضعیت لایسنس: منقضی شده"
+
+        closest = min(active, key=lambda l: l.expires_at)
+        remaining = closest.expires_at - now
+        days = remaining.days
+        hours = remaining.seconds // 3600
+
+        if days > 0:
+            return f"⏳ وضعیت لایسنس: {days} روز باقی مانده"
+        return f"⏳ وضعیت لایسنس: {hours} ساعت باقی مانده"
+    finally:
+        session.close()
+
+
+def user_main_keyboard(user_id: int = None):
+    status_text = get_license_status_text(user_id)
     return ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text=status_text)],
             [KeyboardButton(text="📦 ساخت HUD Overlay از ریسورس پک")],
             [KeyboardButton(text="🧊 ساخت آیتم سه‌بعدی ماینکرافت")],
             [KeyboardButton(text="🔄 تبدیل JSON به OBJ")],
@@ -561,7 +602,7 @@ async def check_license(message: types.Message):
                 license_glb.expires_at = None
             session.commit()
 
-            keyboard = user_main_keyboard()
+            keyboard = user_main_keyboard(message.from_user.id)
 
             await message.answer("✅ لایسنس فعال شد!\n\nبه پنل خوش آمدید 🎉", reply_markup=keyboard)
         else:
@@ -792,7 +833,7 @@ async def test_user_panel(message: types.Message):
         "الان دکمه‌های کاربر رو می‌بینی. هر دکمه‌ای بزنی عیناً مثل یه کاربر عادی کار می‌کنه.\n\n"
         "برای برگشت به پنل ادمین دستور /admin رو بزن.",
         parse_mode="HTML",
-        reply_markup=user_main_keyboard()
+        reply_markup=user_main_keyboard(message.from_user.id)
     )
 
 
@@ -2353,7 +2394,7 @@ async def _send_asset_files(callback: types.CallbackQuery, files: list, user_id:
     user_selections.pop(user_id, None)
     user_data.pop(user_id, None)
     user_modes.pop(user_id, None)
-    
+
 # ====================== RESOURCE PACK MANUAL UPLOAD ======================
 
 async def _send_manual_upload_prompt(message: types.Message, user_id: int, reason: str):
