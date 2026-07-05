@@ -4,3 +4,4 @@ aiosqlite
 python-dotenv
 aiohttp
 pillow
+beautifulsoup4
