@@ -19,6 +19,7 @@ from youtube_thumbnail_handler import register_youtube_thumbnail_handlers
 from achievement_handler import register_achievement_handlers
 from link_download_handler import register_link_download_handlers
 import aiohttp
+from mod_search_handler import register_mod_search_handlers
 
 from config import TOKEN, ADMIN_ID
 from database import Session, License
@@ -147,7 +148,7 @@ def get_access_block_message(user_id: int):
 register_youtube_thumbnail_handlers(dp, bot, get_access_block_message)
 register_achievement_handlers(dp, bot, get_access_block_message)
 register_link_download_handlers(dp, bot, get_access_block_message)
-
+register_mod_search_handlers(dp, bot, get_access_block_message)
 
 # ====================== HELPERS ======================
 async def run_node_processor(input_path: str, output_path: str, xp_percent: float = 0.7, upscale_rate: int = 1):
@@ -344,6 +345,7 @@ def user_main_keyboard(user_id: int = None):
             [KeyboardButton(text="🔄 تبدیل JSON به OBJ"), KeyboardButton(text="📥 گرفتن فایل‌های ماینکرافت")],
             [KeyboardButton(text="🛡 ساخت آرمور با تریم"), KeyboardButton(text="🖼 دانلود تامنیل یوتیوب")],
             [KeyboardButton(text="🔗 دانلود مستقیم با لینک")],
+            [KeyboardButton(text="🔎 جستجوی مود/ریسورس‌پک")],
         ],
         resize_keyboard=True
     )
