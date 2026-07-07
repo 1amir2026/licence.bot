@@ -418,17 +418,34 @@ def build_main_inline_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+# چت‌هایی که کیبورد قدیمی‌شان قبلاً پاک شده؛ برای جلوگیری از اجرای مکرر و
+# بی‌مورد clear_old_reply_keyboard در هر /start (که خودش باعث گیر کردن آیکون
+# کیبورد در کلاینت تلگرام می‌شود).
+_keyboard_cleared_chats: set[int] = set()
+
+
 async def clear_old_reply_keyboard(chat_id: int):
     """
     منوی اصلی الان به‌صورت Inline کار می‌کند، ولی اگر کاربر قبلاً یک
     ReplyKeyboard (کیبورد چسبیده به پایین صفحه) داشته، آن کیبورد قدیمی خودش به
     خودی خود از بین نمی‌رود مگر با یک پیام جدید و reply_markup متفاوت جایگزین شود.
-    این تابع با یک پیام کوتاه که بلافاصله حذف می‌شود، آن کیبورد قدیمی را پاک می‌کند
-    تا فقط منوی Inline تازه دیده شود.
+    این تابع با یک پیام کوتاه، آن کیبورد قدیمی را پاک می‌کند تا فقط منوی
+    Inline تازه دیده شود.
+
+    نکته مهم: اگر پیامِ حاوی ReplyKeyboardRemove بلافاصله (بدون هیچ فاصله‌ای)
+    حذف شود، کلاینت تلگرام (خصوصاً دسکتاپ/وب) فرصت نمی‌کند وضعیتِ کیبورد چت را
+    کامل به‌روزرسانی کند؛ نتیجه‌اش این می‌شود که آیکون کیبورد کنار باکس تایپ در
+    حالت «گیر کرده» باقی می‌ماند: نمایش داده می‌شود ولی با تپ‌کردن چیزی باز
+    نمی‌شود. برای همین یک تأخیر کوتاه قبل از حذف گذاشته شده و ضمناً این کار
+    فقط یک‌بار برای هر چت انجام می‌شود، نه در هر /start.
     """
+    if chat_id in _keyboard_cleared_chats:
+        return
     try:
         sent = await bot.send_message(chat_id, "🔄", reply_markup=types.ReplyKeyboardRemove())
+        await asyncio.sleep(0.8)
         await bot.delete_message(chat_id, sent.message_id)
+        _keyboard_cleared_chats.add(chat_id)
     except Exception:
         pass
 
