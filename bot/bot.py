@@ -6,6 +6,7 @@ import random
 import string
 import zipfile
 import json
+import uuid
 from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, types, F
@@ -839,7 +840,11 @@ async def auto_activate_license(callback: types.CallbackQuery):
 # تا لایسنس همون‌جا ساخته و ارسال بشه، بدون نیاز به رفتن به پنل ادمین.
 # نکته: برای اینکه انتخاب کاربر (chosen_inline_result) هم قابل ردیابی باشه بهتره
 # در بات‌فادر با دستور /setinlinefeedback درصد گزارش‌دهی رو (مثلاً 100) فعال کنید.
-inline_license_cache = {}  # (admin_id, query_text) -> [{"label":.., "duration_minutes":.., "key":..}, ...]
+# ====================== ساخت و ارسال لایسنس با تگ کردن بات (Inline Mode) ======================
+# ادمین در هر پیوی/چتی کافیه بنویسه: @نام‌کاربری‌بات و یکی از گزینه‌ها رو انتخاب کنه
+# تا لایسنس همون‌جا ساخته و ارسال بشه، بدون نیاز به رفتن به پنل ادمین.
+# هر بار که این کوئری اجرا میشه، لایسنس‌های کاملاً تازه ساخته می‌شوند (بدون کش) تا
+# هیچ‌وقت یک لایسنسِ قبلاً مصرف‌شده دوباره نمایش داده نشود.
 
 
 @dp.inline_query()
@@ -849,37 +854,31 @@ async def handle_inline_license_creation(inline_query: types.InlineQuery):
         return
 
     query_text = inline_query.query.strip()
-    cache_key = (inline_query.from_user.id, query_text)
 
-    options = inline_license_cache.get(cache_key)
-    if options is None:
-        options = []
+    options = []
+    if query_text.isdigit() and int(query_text) > 0:
+        days = int(query_text)
+        options.append({"label": f"📅 {days} روز", "duration_minutes": days * 24 * 60})
+    else:
+        options.append({"label": "♾️ همیشگی", "duration_minutes": None})
+        for d in (5, 10, 15, 30):
+            options.append({"label": f"📅 {d} روز", "duration_minutes": d * 24 * 60})
 
-        if query_text.isdigit() and int(query_text) > 0:
-            days = int(query_text)
-            options.append({"label": f"📅 {days} روز", "duration_minutes": days * 24 * 60})
-        else:
-            options.append({"label": "♾️ همیشگی", "duration_minutes": None})
-            for d in (5, 10, 15, 30):
-                options.append({"label": f"📅 {d} روز", "duration_minutes": d * 24 * 60})
-
-        session = Session()
-        try:
-            for opt in options:
-                key = generate_license()
-                session.add(License(key=key, duration_minutes=opt["duration_minutes"]))
-                opt["key"] = key
-            session.commit()
-        finally:
-            session.close()
-
-        inline_license_cache[cache_key] = options
+    session = Session()
+    try:
+        for opt in options:
+            key = generate_license()
+            session.add(License(key=key, duration_minutes=opt["duration_minutes"]))
+            opt["key"] = key
+        session.commit()
+    finally:
+        session.close()
 
     results = []
-    for i, opt in enumerate(options):
+    for opt in options:
         results.append(
             types.InlineQueryResultArticle(
-                id=f"{cache_key[1] or 'default'}_{i}",
+                id=uuid.uuid4().hex,  # همیشه یکتا، تا تلگرام هیچ‌وقت نتیجه‌ی قدیمی رو کش نکنه
                 title=f"ساخت لایسنس {opt['label']}",
                 description=f"کد: {opt['key']}",
                 input_message_content=types.InputTextMessageContent(
@@ -890,7 +889,7 @@ async def handle_inline_license_creation(inline_query: types.InlineQuery):
             )
         )
 
-    await inline_query.answer(results, cache_time=1, is_personal=True)
+    await inline_query.answer(results, cache_time=0, is_personal=True)
 
 
 # ====================== BROADCAST ======================
