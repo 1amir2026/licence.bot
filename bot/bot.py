@@ -464,7 +464,7 @@ def build_welcome_back_text(first_name: str) -> str:
 def build_welcome_activated_text(first_name: str) -> str:
     """پیامی که بلافاصله بعد از فعال‌سازی موفق لایسنس نمایش داده می‌شود."""
     return (
-        f"🎉 <b>{first_name} عزیز، خوش اومدی به بلاکسی تول (BlockSY Tool)!</b>\n\n"
+        f"🎉 <b>{first_name} عزیز، خوش اومدی به بلاکسی تول (Bloxy-Tools)!</b>\n\n"
         "قراره خیلی با هم پیشرفت کنیم 🚀\n\n"
         "برای شروع، یکی از گزینه‌های زیر رو انتخاب کن 👇"
     )
@@ -473,7 +473,7 @@ def build_welcome_activated_text(first_name: str) -> str:
 def build_no_license_text(first_name: str) -> str:
     """پیام خوش‌آمدگویی برای کاربرانی که هنوز لایسنسی فعال نکرده‌اند."""
     return (
-        f"👋 سلام {first_name} عزیز، به <b>بلاکسی تول (BlockSY Tool)</b> خوش اومدی!\n\n"
+        f"👋 سلام {first_name} عزیز، به <b>بلاکسی تول (Bloxy-Tools)</b> خوش اومدی!\n\n"
         "🤖 این بات کلی امکانات کاربردی برای ماینکرافت داره؛ از ساخت HUD Overlay و "
         "آیتم سه‌بعدی گرفته تا دانلود مستقیم فایل و جستجوی مود و ریسورس‌پک.\n\n"
         "🔑 برای استفاده از امکانات بات، ابتدا باید یک <b>لایسنس فعال</b> داشته باشی.\n"
