@@ -418,6 +418,21 @@ def build_main_inline_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+async def clear_old_reply_keyboard(chat_id: int):
+    """
+    منوی اصلی الان به‌صورت Inline کار می‌کند، ولی اگر کاربر قبلاً یک
+    ReplyKeyboard (کیبورد چسبیده به پایین صفحه) داشته، آن کیبورد قدیمی خودش به
+    خودی خود از بین نمی‌رود مگر با یک پیام جدید و reply_markup متفاوت جایگزین شود.
+    این تابع با یک پیام کوتاه که بلافاصله حذف می‌شود، آن کیبورد قدیمی را پاک می‌کند
+    تا فقط منوی Inline تازه دیده شود.
+    """
+    try:
+        sent = await bot.send_message(chat_id, "🔄", reply_markup=types.ReplyKeyboardRemove())
+        await bot.delete_message(chat_id, sent.message_id)
+    except Exception:
+        pass
+
+
 def build_welcome_back_text(first_name: str) -> str:
     """پیام خوش‌آمدگویی برای کاربرانی که لایسنس فعال دارند و دوباره /start می‌زنند."""
     greeting = get_persian_datetime_greeting()
@@ -432,7 +447,7 @@ def build_welcome_back_text(first_name: str) -> str:
 def build_welcome_activated_text(first_name: str) -> str:
     """پیامی که بلافاصله بعد از فعال‌سازی موفق لایسنس نمایش داده می‌شود."""
     return (
-        f"🎉 <b>{first_name} عزیز، خوش اومدی به بلاکسی تول (Bloxy Tool)!</b>\n\n"
+        f"🎉 <b>{first_name} عزیز، خوش اومدی به بلاکسی تول (BlockSY Tool)!</b>\n\n"
         "قراره خیلی با هم پیشرفت کنیم 🚀\n\n"
         "برای شروع، یکی از گزینه‌های زیر رو انتخاب کن 👇"
     )
@@ -441,7 +456,7 @@ def build_welcome_activated_text(first_name: str) -> str:
 def build_no_license_text(first_name: str) -> str:
     """پیام خوش‌آمدگویی برای کاربرانی که هنوز لایسنسی فعال نکرده‌اند."""
     return (
-        f"👋 سلام {first_name} عزیز، به <b>بلاکسی تول (Bloxy Tool)</b> خوش اومدی!\n\n"
+        f"👋 سلام {first_name} عزیز، به <b>بلاکسی تول (BlockSY Tool)</b> خوش اومدی!\n\n"
         "🤖 این بات کلی امکانات کاربردی برای ماینکرافت داره؛ از ساخت HUD Overlay و "
         "آیتم سه‌بعدی گرفته تا دانلود مستقیم فایل و جستجوی مود و ریسورس‌پک.\n\n"
         "🔑 برای استفاده از امکانات بات، ابتدا باید یک <b>لایسنس فعال</b> داشته باشی.\n"
@@ -644,6 +659,7 @@ async def start(message: types.Message):
 
     if block_msg is None:
         # کاربر لایسنس فعال دارد
+        await clear_old_reply_keyboard(message.chat.id)
         await message.answer(
             build_welcome_back_text(first_name),
             reply_markup=build_main_inline_menu()
@@ -656,6 +672,8 @@ async def start(message: types.Message):
             ).count() > 0
         finally:
             session.close()
+
+        await clear_old_reply_keyboard(message.chat.id)
 
         if has_any_license:
             # لایسنس داشته ولی الان منقضی شده؛ همون پیام مربوطه رو نشون بده
@@ -748,6 +766,7 @@ async def check_license(message: types.Message):
             session.commit()
 
             first_name = message.from_user.first_name or "دوست عزیز"
+            await clear_old_reply_keyboard(message.chat.id)
             await message.answer(
                 build_welcome_activated_text(first_name),
                 parse_mode="HTML",
@@ -828,6 +847,7 @@ async def auto_activate_license(callback: types.CallbackQuery):
         pass
 
     first_name = user.first_name or "دوست عزیز"
+    await clear_old_reply_keyboard(callback.message.chat.id)
     await callback.message.answer(
         build_welcome_activated_text(first_name),
         parse_mode="HTML",
