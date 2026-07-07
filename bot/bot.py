@@ -29,6 +29,50 @@ try:
 except ImportError:
     PIL_AVAILABLE = False
 
+try:
+    from zoneinfo import ZoneInfo
+    TEHRAN_TZ = ZoneInfo("Asia/Tehran")
+except Exception:
+    TEHRAN_TZ = None
+
+# ====================== زمان و احوال‌پرسی فارسی ======================
+PERSIAN_WEEKDAYS = {
+    0: "دوشنبه",
+    1: "سه‌شنبه",
+    2: "چهارشنبه",
+    3: "پنجشنبه",
+    4: "جمعه",
+    5: "شنبه",
+    6: "یکشنبه",
+}
+
+
+def get_tehran_now() -> datetime:
+    """زمان فعلی به وقت تهران (Asia/Tehran)."""
+    if TEHRAN_TZ:
+        return datetime.now(TEHRAN_TZ)
+    # fallback در صورت نبود دیتابیس tz: UTC+3:30
+    return datetime.utcnow() + timedelta(hours=3, minutes=30)
+
+
+def get_daypart_greeting(hour: int) -> str:
+    if 5 <= hour < 12:
+        return "صبح"
+    if 12 <= hour < 15:
+        return "ظهر"
+    if 15 <= hour < 19:
+        return "بعد از ظهر"
+    return "شب"
+
+
+def get_persian_datetime_greeting() -> str:
+    """مثال خروجی: «صبح روز یکشنبه بخیر»"""
+    now = get_tehran_now()
+    weekday_fa = PERSIAN_WEEKDAYS.get(now.weekday(), "")
+    daypart = get_daypart_greeting(now.hour)
+    return f"{daypart} روز {weekday_fa} بخیر"
+
+
 # ====================== FSM ======================
 class BroadcastState(StatesGroup):
     waiting_message = State()
@@ -351,6 +395,65 @@ def user_main_keyboard(user_id: int = None):
     )
 
 
+# ====================== منوی اصلی به‌صورت Inline ======================
+# ترتیب دقیقاً مطابق ReplyKeyboard منوی کاربر است
+MAIN_MENU_ROWS = [
+    [("📦 ساخت HUD Overlay از ریسورس پک", "menu_hud"), ("🧊 ساخت آیتم سه‌بعدی ماینکرافت", "menu_item3d")],
+    [("🔄 تبدیل JSON به OBJ", "menu_json2obj"), ("📥 گرفتن فایل‌های ماینکرافت", "menu_getfiles")],
+    [("🛡 ساخت آرمور با تریم", "menu_armor"), ("🖼 دانلود تامنیل یوتیوب", "menu_thumb")],
+    [("🔗 دانلود مستقیم با لینک", "menu_link")],
+    [("🔎 جستجوی مود/ریسورس‌پک", "menu_modsearch")],
+]
+
+# نگاشت callback_data به همان متنی که هندلرهای فعلی روی آن (F.text ==) گوش می‌دهند
+MENU_CALLBACK_TO_TEXT = {cb: text for row in MAIN_MENU_ROWS for text, cb in row}
+
+
+def build_main_inline_menu() -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=text, callback_data=cb) for text, cb in row]
+        for row in MAIN_MENU_ROWS
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_welcome_back_text(first_name: str) -> str:
+    """پیام خوش‌آمدگویی برای کاربرانی که لایسنس فعال دارند و دوباره /start می‌زنند."""
+    greeting = get_persian_datetime_greeting()
+    return (
+        f"سلام {first_name} 👋\n\n"
+        f"{greeting} 🌤\n\n"
+        "امروز می‌خوایم چه کاری انجام بدیم؟ 🚀\n"
+        "یکی از گزینه‌های زیر رو انتخاب کن 👇"
+    )
+
+
+def build_welcome_activated_text(first_name: str) -> str:
+    """پیامی که بلافاصله بعد از فعال‌سازی موفق لایسنس نمایش داده می‌شود."""
+    return (
+        f"🎉 <b>{first_name} عزیز، خوش اومدی به بلاکسی تول (BlockSY Tool)!</b>\n\n"
+        "قراره خیلی با هم پیشرفت کنیم 🚀\n\n"
+        "برای شروع، یکی از گزینه‌های زیر رو انتخاب کن 👇"
+    )
+
+
+def build_no_license_text(first_name: str) -> str:
+    """پیام خوش‌آمدگویی برای کاربرانی که هنوز لایسنسی فعال نکرده‌اند."""
+    return (
+        f"👋 سلام {first_name} عزیز، به <b>بلاکسی تول (BlockSY Tool)</b> خوش اومدی!\n\n"
+        "🤖 این بات کلی امکانات کاربردی برای ماینکرافت داره؛ از ساخت HUD Overlay و "
+        "آیتم سه‌بعدی گرفته تا دانلود مستقیم فایل و جستجوی مود و ریسورس‌پک.\n\n"
+        "🔑 برای استفاده از امکانات بات، ابتدا باید یک <b>لایسنس فعال</b> داشته باشی.\n"
+        "لایسنس یه کد با این فرمته:\n"
+        "<code>XXXX-XXXX-XXXX-XXXX</code>\n"
+        "مثال: <code>A1B2-C3D4-E5F6-G7H8</code>\n\n"
+        "✅ همین که لایسنستو گرفتی، کافیه دقیقاً همون کد رو همینجا برام بفرستی "
+        "تا خودکار فعال بشه.\n\n"
+        "📩 برای دریافت لایسنس به ادمین پیام بده:\n"
+        "@Amirmah198"
+    )
+
+
 def build_management_panel_kb():
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text="👥 لیست کاربران", callback_data=make_cb("list", p=1))],
@@ -510,16 +613,39 @@ async def start(message: types.Message):
             "سلام ادمین گرامی\n\nبرای مدیریت از دکمه‌های زیر استفاده کن:",
             reply_markup=keyboard
         )
-    else:
-        if is_user_banned(message.from_user.id):
-            await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
-            return
+        return
 
+    if is_user_banned(message.from_user.id):
+        await message.answer("❌ شما از استفاده از ربات بن شده‌اید.")
+        return
+
+    first_name = message.from_user.first_name or "دوست عزیز"
+    block_msg = get_access_block_message(message.from_user.id)
+
+    if block_msg is None:
+        # کاربر لایسنس فعال دارد
         await message.answer(
-            "سلام. بات استارت شد. اگر لایسنس دارید بزنید..\n\n"
-            "برای دریافت لایسنس به ادمین مراجعه کنید:\n"
-            "@Amirmah198"
+            build_welcome_back_text(first_name),
+            reply_markup=build_main_inline_menu()
         )
+    else:
+        session = Session()
+        try:
+            has_any_license = session.query(License).filter(
+                License.user_id == message.from_user.id
+            ).count() > 0
+        finally:
+            session.close()
+
+        if has_any_license:
+            # لایسنس داشته ولی الان منقضی شده؛ همون پیام مربوطه رو نشون بده
+            await message.answer(block_msg)
+        else:
+            # اولین بار است که استارت می‌زند و هیچ لایسنسی هم ندارد
+            await message.answer(
+                build_no_license_text(first_name),
+                parse_mode="HTML"
+            )
 
 @dp.message(F.text == "🔑 ساخت لایسنس جدید")
 async def create_license(message: types.Message, state: FSMContext):
@@ -601,13 +727,92 @@ async def check_license(message: types.Message):
                 license_glb.expires_at = None
             session.commit()
 
-            keyboard = user_main_keyboard(message.from_user.id)
-
-            await message.answer("✅ لایسنس فعال شد!\n\nبه پنل خوش آمدید 🎉", reply_markup=keyboard)
+            first_name = message.from_user.first_name or "دوست عزیز"
+            await message.answer(
+                build_welcome_activated_text(first_name),
+                parse_mode="HTML",
+                reply_markup=build_main_inline_menu()
+            )
         else:
             await message.answer("❌ لایسنس نامعتبر یا قبلاً استفاده شده.")
     finally:
         session.close()
+
+
+# ====================== اجرای گزینه‌های منو از طریق دکمه‌های شیشه‌ای ======================
+@dp.callback_query(F.data.in_(MENU_CALLBACK_TO_TEXT.keys()))
+async def handle_main_menu_inline(callback: types.CallbackQuery):
+    """
+    وقتی کاربر روی یکی از دکمه‌های Inline منوی اصلی می‌زند، همان اتفاقی می‌افتد
+    که با زدن دکمه‌ی متنی مشابه در ReplyKeyboard رخ می‌داد؛ چون یک پیام
+    مصنوعی با همان متن ساخته و به دیسپچر تحویل می‌دهیم تا هندلر واقعی همان
+    گزینه اجرا شود.
+    """
+    block_msg = get_access_block_message(callback.from_user.id)
+    if block_msg:
+        await callback.answer(block_msg, show_alert=True)
+        return
+
+    await callback.answer()
+
+    text = MENU_CALLBACK_TO_TEXT[callback.data]
+    fake_message = callback.message.model_copy(update={
+        "from_user": callback.from_user,
+        "text": text,
+        "date": datetime.now(),
+    })
+    await dp.feed_update(bot, types.Update(update_id=0, message=fake_message))
+
+
+@dp.callback_query(F.data.startswith("actlic:"))
+async def auto_activate_license(callback: types.CallbackQuery):
+    """
+    دکمه‌ی شیشه‌ای زیر پیام لایسنسِ ساخته‌شده توسط ادمین. کاربر نهایی با زدن این
+    دکمه، بدون نیاز به کپی/پیست کردن کد، لایسنس را برای خودش فعال می‌کند.
+    """
+    key = callback.data.split("actlic:", 1)[1]
+    user = callback.from_user
+
+    if is_admin(user.id):
+        await callback.answer("این دکمه مخصوص فعال‌سازی توسط کاربر نهایی است.", show_alert=True)
+        return
+
+    if is_user_banned(user.id):
+        await callback.answer("❌ شما از استفاده از ربات بن شده‌اید.", show_alert=True)
+        return
+
+    session = Session()
+    try:
+        license_glb = session.query(License).filter_by(key=key, used=False).first()
+        if not license_glb:
+            await callback.answer("❌ این لایسنس نامعتبر است یا قبلاً استفاده شده.", show_alert=True)
+            return
+
+        license_glb.used = True
+        license_glb.user_id = user.id
+        license_glb.username = user.username or "بدون یوزرنیم"
+        license_glb.used_at = datetime.utcnow()
+        if license_glb.duration_minutes:
+            license_glb.expires_at = license_glb.used_at + timedelta(minutes=license_glb.duration_minutes)
+        else:
+            license_glb.expires_at = None
+        session.commit()
+    finally:
+        session.close()
+
+    await callback.answer("✅ لایسنس شما با موفقیت فعال شد!", show_alert=True)
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+    first_name = user.first_name or "دوست عزیز"
+    await callback.message.answer(
+        build_welcome_activated_text(first_name),
+        parse_mode="HTML",
+        reply_markup=build_main_inline_menu()
+    )
 
 
 # ====================== BROADCAST ======================
@@ -970,7 +1175,10 @@ async def management_router(callback: types.CallbackQuery, state: FSMContext):
             "لطفاً آن را فقط در اکانتی وارد نمایید که از <b>امنیت آن اطمینان کامل</b> دارید.\n\n"
             "⚠️ لایسنس‌ها مجدد ساخته نمی‌شوند. هیچ پاسخی از طرف بنده در قبال دریافت مجدد لایسنس پذیرا نخواهم شد.\n\n"
             "<b>مبارکتون باشه 🌹</b>",
-            parse_mode='HTML'
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="✅ فعال‌سازی خودکار لایسنس", callback_data=f"actlic:{key}")
+            ]])
         )
 
         license_selection.pop(chat_id, None)
