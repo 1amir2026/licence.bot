@@ -431,7 +431,7 @@ def build_welcome_back_text(first_name: str) -> str:
 def build_welcome_activated_text(first_name: str) -> str:
     """پیامی که بلافاصله بعد از فعال‌سازی موفق لایسنس نمایش داده می‌شود."""
     return (
-        f"🎉 <b>{first_name} عزیز، خوش اومدی به بلاکسی تول (BlockSY Tool)!</b>\n\n"
+        f"🎉 <b>{first_name} عزیز، خوش اومدی به بلاکسی تول (Bloxy Tool)!</b>\n\n"
         "قراره خیلی با هم پیشرفت کنیم 🚀\n\n"
         "برای شروع، یکی از گزینه‌های زیر رو انتخاب کن 👇"
     )
@@ -440,7 +440,7 @@ def build_welcome_activated_text(first_name: str) -> str:
 def build_no_license_text(first_name: str) -> str:
     """پیام خوش‌آمدگویی برای کاربرانی که هنوز لایسنسی فعال نکرده‌اند."""
     return (
-        f"👋 سلام {first_name} عزیز، به <b>بلاکسی تول (BlockSY Tool)</b> خوش اومدی!\n\n"
+        f"👋 سلام {first_name} عزیز، به <b>بلاکسی تول (Bloxy Tool)</b> خوش اومدی!\n\n"
         "🤖 این بات کلی امکانات کاربردی برای ماینکرافت داره؛ از ساخت HUD Overlay و "
         "آیتم سه‌بعدی گرفته تا دانلود مستقیم فایل و جستجوی مود و ریسورس‌پک.\n\n"
         "🔑 برای استفاده از امکانات بات، ابتدا باید یک <b>لایسنس فعال</b> داشته باشی.\n"
@@ -452,6 +452,25 @@ def build_no_license_text(first_name: str) -> str:
         "📩 برای دریافت لایسنس به ادمین پیام بده:\n"
         "@Amirmah198"
     )
+
+
+def build_license_delivery_text(key: str, time_label: str) -> str:
+    """متن استاندارد تحویل لایسنس به خریدار (هم در پنل ادمین و هم در حالت Inline استفاده می‌شود)."""
+    return (
+        f"<b>✅ لایسنس شما آماده شد</b>\n\n"
+        f"<code>{key}</code>\n\n"
+        f"⏱ مدت اعتبار: {time_label}\n\n"
+        "⚠️ این لایسنس <b>یک‌بار مصرف</b> میباشد.\n"
+        "لطفاً آن را فقط در اکانتی وارد نمایید که از <b>امنیت آن اطمینان کامل</b> دارید.\n\n"
+        "⚠️ لایسنس‌ها مجدد ساخته نمی‌شوند. هیچ پاسخی از طرف بنده در قبال دریافت مجدد لایسنس پذیرا نخواهم شد.\n\n"
+        "<b>مبارکتون باشه 🌹</b>"
+    )
+
+
+def build_license_delivery_kb(key: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ فعال‌سازی خودکار لایسنس", callback_data=f"actlic:{key}")
+    ]])
 
 
 def build_management_panel_kb():
@@ -815,6 +834,65 @@ async def auto_activate_license(callback: types.CallbackQuery):
     )
 
 
+# ====================== ساخت و ارسال لایسنس با تگ کردن بات (Inline Mode) ======================
+# ادمین در هر پیوی/چتی کافیه بنویسه: @نام‌کاربری‌بات و یکی از گزینه‌ها رو انتخاب کنه
+# تا لایسنس همون‌جا ساخته و ارسال بشه، بدون نیاز به رفتن به پنل ادمین.
+# نکته: برای اینکه انتخاب کاربر (chosen_inline_result) هم قابل ردیابی باشه بهتره
+# در بات‌فادر با دستور /setinlinefeedback درصد گزارش‌دهی رو (مثلاً 100) فعال کنید.
+inline_license_cache = {}  # (admin_id, query_text) -> [{"label":.., "duration_minutes":.., "key":..}, ...]
+
+
+@dp.inline_query()
+async def handle_inline_license_creation(inline_query: types.InlineQuery):
+    if not is_admin(inline_query.from_user.id):
+        await inline_query.answer([], cache_time=1, is_personal=True)
+        return
+
+    query_text = inline_query.query.strip()
+    cache_key = (inline_query.from_user.id, query_text)
+
+    options = inline_license_cache.get(cache_key)
+    if options is None:
+        options = []
+
+        if query_text.isdigit() and int(query_text) > 0:
+            days = int(query_text)
+            options.append({"label": f"📅 {days} روز", "duration_minutes": days * 24 * 60})
+        else:
+            options.append({"label": "♾️ همیشگی", "duration_minutes": None})
+            for d in (5, 10, 15, 30):
+                options.append({"label": f"📅 {d} روز", "duration_minutes": d * 24 * 60})
+
+        session = Session()
+        try:
+            for opt in options:
+                key = generate_license()
+                session.add(License(key=key, duration_minutes=opt["duration_minutes"]))
+                opt["key"] = key
+            session.commit()
+        finally:
+            session.close()
+
+        inline_license_cache[cache_key] = options
+
+    results = []
+    for i, opt in enumerate(options):
+        results.append(
+            types.InlineQueryResultArticle(
+                id=f"{cache_key[1] or 'default'}_{i}",
+                title=f"ساخت لایسنس {opt['label']}",
+                description=f"کد: {opt['key']}",
+                input_message_content=types.InputTextMessageContent(
+                    message_text=build_license_delivery_text(opt["key"], opt["label"]),
+                    parse_mode="HTML"
+                ),
+                reply_markup=build_license_delivery_kb(opt["key"])
+            )
+        )
+
+    await inline_query.answer(results, cache_time=1, is_personal=True)
+
+
 # ====================== BROADCAST ======================
 @dp.message(F.text == "📢 اطلاع‌رسانی")
 async def start_broadcast(message: types.Message, state: FSMContext):
@@ -1168,17 +1246,9 @@ async def management_router(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.edit_text(f"✅ لایسنس با تایم «{time_text}» ساخته شد.")
 
         await callback.message.answer(
-            f"<b>✅ لایسنس شما آماده شد</b>\n\n"
-            f"<code>{key}</code>\n\n"
-            f"⏱ مدت اعتبار: {time_text}\n\n"
-            "⚠️ این لایسنس <b>یک‌بار مصرف</b> میباشد.\n"
-            "لطفاً آن را فقط در اکانتی وارد نمایید که از <b>امنیت آن اطمینان کامل</b> دارید.\n\n"
-            "⚠️ لایسنس‌ها مجدد ساخته نمی‌شوند. هیچ پاسخی از طرف بنده در قبال دریافت مجدد لایسنس پذیرا نخواهم شد.\n\n"
-            "<b>مبارکتون باشه 🌹</b>",
+            build_license_delivery_text(key, time_text),
             parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="✅ فعال‌سازی خودکار لایسنس", callback_data=f"actlic:{key}")
-            ]])
+            reply_markup=build_license_delivery_kb(key)
         )
 
         license_selection.pop(chat_id, None)
