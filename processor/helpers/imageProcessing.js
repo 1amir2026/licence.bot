@@ -1,3 +1,4 @@
+import fs from "fs";
 import { getPaths } from "./paths.js";
 import {
   combineIcons,
@@ -121,7 +122,22 @@ function getUpscaleRate() {
     throw new Error("Error fetching config: " + err);
   }
 }
+function assertValidSpriteFile(label, filePath) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    throw new Error(
+      `پیدا نشد: ${label} در مسیر "${filePath}". این پک ساختار غیرمعمول یا خرابی دارد (فایل مورد نظر وجود ندارد).`
+    );
+  }
+  if (!fs.lstatSync(filePath).isFile()) {
+    throw new Error(
+      `${label} در مسیر "${filePath}" یک فایل نیست (پوشه‌ای با همین نام پیدا شد). این پک ساختار غیرمعمول یا خراب دارد.`
+    );
+  }
+}
+
 async function imageDimsFix(iconsPath, widgetsPath) {
+  assertValidSpriteFile("icons.png", iconsPath);
+  assertValidSpriteFile("gui.png/widgets.png", widgetsPath);
   const widgetsDims = {
     width: (await loadImage(widgetsPath)).width,
     height: (await loadImage(widgetsPath)).height
