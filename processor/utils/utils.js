@@ -136,6 +136,24 @@ function findGuiSprite(packFolder) {
   );
 }
 
+// Some packs are malformed: the "expected" path (e.g. textures/gui/gui.png)
+// can be missing, or can even be a *folder* instead of a file (this happens
+// with some broken/re-packed texture packs). Rather than blindly trusting the
+// hardcoded expected path, this checks that it's actually a usable file first,
+// and if not, falls back to a recursive search for the real file anywhere in
+// the pack. Returns null if no valid file is found anywhere.
+function resolveSpritePath(packFolder, preferredPath, fileNames) {
+  if (
+    preferredPath &&
+    fs.existsSync(preferredPath) &&
+    fs.lstatSync(preferredPath).isFile()
+  ) {
+    return preferredPath;
+  }
+
+  return findFileRecursive(packFolder, fileNames);
+}
+
 export {
   checkAndMkdir,
   checkBedrock,
@@ -143,5 +161,6 @@ export {
   convertBedrock,
   findGuiSprite,
   getScale,
+  resolveSpritePath,
   unzipFile
 };
