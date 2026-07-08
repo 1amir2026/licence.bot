@@ -2,18 +2,40 @@ import fs from "fs";
 import unzipper from "unzipper";
 import path from "path";
 import { loadImage } from "@napi-rs/canvas";
-import { Readable } from "stream";
-function unzipFile(zipFileBuffer, outputDir) {
-  return new Promise((resolve, reject) => {
-    const bufferStream = new Readable();
-    bufferStream.push(zipFileBuffer);
-    bufferStream.push(null);
-    bufferStream.pipe(unzipper.Extract({ path: outputDir })).on("close", () => {
-      resolve();
-    }).on("error", (err) => {
-      reject(err);
-    });
-  });
+// قبلاً از unzipper.Extract() (استریمی) استفاده می‌شد. باگ: رویداد "close"
+// قبل از تموم شدن نوشتن همه‌ی entry ها روی دیسک فایر می‌شد (مشکل شناخته‌شده‌ی
+// این کتابخونه با zip هایی که تعداد entry زیادی دارن)، و هیچ خطایی هم پرتاب
+// نمی‌شد. نتیجه: پک‌های .mcpack به‌صورت ناقص extract می‌شدن (مثلاً فقط پوشه‌ی
+// textures استخراج می‌شد و manifest.json از قلم می‌افتاد)، checkBedrock به‌خاطر
+// نبود manifest.json در جای درست، پک رو Bedrock تشخیص نمی‌داد و مسیرهای Java
+// (assets/minecraft/textures/gui/...) به‌جای مسیرهای Bedrock (textures/gui/...)
+// استفاده می‌شدن که باعث خطای "gui.png/widgets.png ... یک فایل نیست" می‌شد.
+//
+// راه‌حل: به‌جای stream + رویداد close، از unzipper.Open.buffer استفاده می‌کنیم
+// و هر entry رو کامل و به‌صورت await‌شده می‌خونیم و می‌نویسیم، تا مطمئن بشیم
+// extract واقعاً کامل شده قبل از resolve شدن Promise.
+async function unzipFile(zipFileBuffer, outputDir) {
+  const directory = await unzipper.Open.buffer(zipFileBuffer);
+  const resolvedOutputDir = path.resolve(outputDir);
+  for (const entry of directory.files) {
+    // جلوگیری از zip-slip (entry هایی با مسیر ../ که می‌تونن بیرون از
+    // outputDir بنویسن)
+    const entryPath = path.resolve(resolvedOutputDir, entry.path);
+    if (
+      entryPath !== resolvedOutputDir &&
+      !entryPath.startsWith(resolvedOutputDir + path.sep)
+    ) {
+      throw new Error(`Unsafe zip entry path: ${entry.path}`);
+    }
+    if (entry.type === "Directory") {
+      fs.mkdirSync(entryPath, { recursive: true });
+      continue;
+    }
+    fs.mkdirSync(path.dirname(entryPath), { recursive: true });
+    const content = await entry.buffer();
+    fs.writeFileSync(entryPath, content);
+  }
+  return;
 }
 function clean(paths) {
   for (const pth of paths) {
