@@ -464,7 +464,7 @@ def build_welcome_back_text(first_name: str) -> str:
 def build_welcome_activated_text(first_name: str) -> str:
     """پیامی که بلافاصله بعد از فعال‌سازی موفق لایسنس نمایش داده می‌شود."""
     return (
-        f"🎉 <b>{first_name} عزیز، خوش اومدی به بلاکسی تول (Bloxy-Tools)!</b>\n\n"
+        f"🎉 <b>{first_name} عزیز، خوش اومدی به بلاکسی تول (BlockSY Tool)!</b>\n\n"
         "قراره خیلی با هم پیشرفت کنیم 🚀\n\n"
         "برای شروع، یکی از گزینه‌های زیر رو انتخاب کن 👇"
     )
@@ -473,7 +473,7 @@ def build_welcome_activated_text(first_name: str) -> str:
 def build_no_license_text(first_name: str) -> str:
     """پیام خوش‌آمدگویی برای کاربرانی که هنوز لایسنسی فعال نکرده‌اند."""
     return (
-        f"👋 سلام {first_name} عزیز، به <b>بلاکسی تول (Bloxy-Tools)</b> خوش اومدی!\n\n"
+        f"👋 سلام {first_name} عزیز، به <b>بلاکسی تول (BlockSY Tool)</b> خوش اومدی!\n\n"
         "🤖 این بات کلی امکانات کاربردی برای ماینکرافت داره؛ از ساخت HUD Overlay و "
         "آیتم سه‌بعدی گرفته تا دانلود مستقیم فایل و جستجوی مود و ریسورس‌پک.\n\n"
         "🔑 برای استفاده از امکانات بات، ابتدا باید یک <b>لایسنس فعال</b> داشته باشی.\n"
@@ -858,18 +858,41 @@ async def auto_activate_license(callback: types.CallbackQuery):
 
     await callback.answer("✅ لایسنس شما با موفقیت فعال شد!", show_alert=True)
 
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
+    # وقتی این دکمه از طریق Inline Mode ارسال شده باشد (ادمین ربات را در یک
+    # چت با @نام‌کاربری تگ کرده)، تلگرام هیچ‌وقت callback.message را پر
+    # نمی‌کند و به‌جایش فقط callback.inline_message_id را می‌فرستد. باید هر
+    # دو حالت را پوشش بدهیم وگرنه با AttributeError کرش می‌کند.
+    if callback.message is not None:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+    elif callback.inline_message_id:
+        try:
+            await bot.edit_message_reply_markup(
+                inline_message_id=callback.inline_message_id,
+                reply_markup=None
+            )
+        except Exception:
+            pass
 
+    # پیام خوش‌آمدگویی و منوی اصلی همیشه باید در چت خصوصی کاربر با ربات
+    # ارسال شود (نه در چتی که دکمه‌ی Inline در آن کلیک شده)، چون آن چت
+    # ممکن است اصلاً یک گروه یا چت دیگری باشد که ربات نمی‌تواند پیام
+    # معمولی در آن بفرستد یا اصلاً منطقی نیست منوی شخصی آنجا نمایش داده شود.
+    target_chat_id = user.id
     first_name = user.first_name or "دوست عزیز"
-    await clear_old_reply_keyboard(callback.message.chat.id)
-    await callback.message.answer(
-        build_welcome_activated_text(first_name),
-        parse_mode="HTML",
-        reply_markup=build_main_inline_menu()
-    )
+    try:
+        await clear_old_reply_keyboard(target_chat_id)
+        await bot.send_message(
+            target_chat_id,
+            build_welcome_activated_text(first_name),
+            parse_mode="HTML",
+            reply_markup=build_main_inline_menu()
+        )
+    except Exception:
+        # کاربر ممکن است هنوز چت خصوصی با ربات را استارت نکرده باشد
+        pass
 
 
 # ====================== ساخت و ارسال لایسنس با تگ کردن بات (Inline Mode) ======================
