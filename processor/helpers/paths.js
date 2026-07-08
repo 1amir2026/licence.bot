@@ -2,13 +2,16 @@ import path from "path";
 import { getConfig } from "../utils/configUtils.js";
 import { configPath } from "../utils/configUtils.js";
 import { checkAndMkdir, resolveSpritePath } from "../utils/utils.js";
+import { RUN_ID } from "../utils/runId.js";
 function getPaths(type) {
   const configValues = getConfigValues();
   if (!configValues) {
     throw new Error("Couldn't fetch config - paths.");
   }
   let { bedrock, packFileName } = configValues;
-  const tempPath = path.join(process.cwd(), "temp");
+  // اسم پوشه‌ی temp هم به RUN_ID وابسته‌ست تا اجراهای همزمان توی همدیگه
+  // تداخل نکنن (قبلاً "temp" ثابت بود).
+  const tempPath = path.join(process.cwd(), `.temp-${RUN_ID}`);
   let packSavePath = path.join(tempPath, packFileName);
   const guiFolderPath = bedrock === true ? path.join(packSavePath, "textures", "gui") : bedrock === false ? path.join(packSavePath, "assets", "minecraft", "textures", "gui") : bedrock === void 0 ? "" : "";
 
