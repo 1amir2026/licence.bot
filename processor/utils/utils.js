@@ -4,130 +4,141 @@ import path from "path";
 import { loadImage } from "@napi-rs/canvas";
 import { Readable } from "stream";
 
-export function unzipFile(zipBuffer, outputDir) {
+export function unzipFile(
+    zipFileBuffer: Buffer,
+    outputDir: string
+): Promise<void> {
     return new Promise((resolve, reject) => {
-        if (!zipBuffer || zipBuffer.length === 0) {
-            return reject(new Error("Empty or invalid zip buffer"));
-        }
+        const bufferStream = new Readable();
+        bufferStream.push(zipFileBuffer);
+        bufferStream.push(null); // End of stream indicator.
 
-        const stream = new Readable();
-        stream.push(zipBuffer);
-        stream.push(null);
-
-        stream
+        // Pipe the readable stream to unzipper.
+        bufferStream
             .pipe(unzipper.Extract({ path: outputDir }))
             .on("close", () => {
-                // چک اضافی بعد از unzip
-                if (!fs.existsSync(outputDir) || fs.readdirSync(outputDir).length === 0) {
-                    reject(new Error("Unzip failed - no files extracted"));
-                } else {
-                    resolve();
-                }
+                resolve();
             })
             .on("error", (err) => {
-                console.error("Unzip error:", err.message);
-                reject(new Error("Unzip failed: " + err.message));
+                reject(err);
             });
     });
 }
 
-export function clean(paths) {
-    for (const p of paths) {
-        if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true });
+export function clean(paths: string[]) {
+    for (const pth of paths) {
+        if (!fs.existsSync(pth)) continue;
+        fs.rmSync(pth, { recursive: true, force: true });
     }
+
+    return;
 }
 
-export async function getScale(spriteSheetPath) {
+export async function getScale(spriteSheetPath: string) {
     if (!fs.existsSync(spriteSheetPath))
-        throw new Error("Missing sprite sheet: " + spriteSheetPath);
+        throw new Error("Path does not exist: " + spriteSheetPath);
     return ~~((await loadImage(spriteSheetPath)).height / 256);
 }
 
-export function checkAndMkdir(folderPath) {
-    if (!folderPath) return;
+/* 
+    This function is used for checking if a folder exists.
+    If not, it makes the folder.
+    If it does exist it does nothing.
+    returns an error if the path provided is not a folder or doesn't exist.
+*/
+export function checkAndMkdir(folderPath: string) {
+    if (fs.existsSync(folderPath)) return;
+
     try {
-        if (!fs.existsSync(folderPath)) {
-            fs.mkdirSync(folderPath, { recursive: true });
-        }
+        fs.mkdirSync(folderPath);
     } catch (err) {
-        if (!folderPath.endsWith('.png') && !folderPath.endsWith('.json')) {
-            console.error(`Failed to mkdir: ${folderPath}`, err.message);
-        }
+        throw new Error("Error while creating directory: " + err);
     }
+
+    return;
 }
 
-export function checkBedrock(packPath) {
+// Only give the unzipped folder path.
+export function checkBedrock(packPath: string) {
+    let bedrock: boolean = false;
+
     if (!fs.existsSync(packPath))
-        throw new Error("Missing pack path: " + packPath);
+        throw new Error("Path does not exist: " + packPath);
+    if (!fs.lstatSync(packPath).isDirectory())
+        throw new Error("Path is not a directory: " + packPath);
 
-    let bedrock = false;
-
-    if (fs.readdirSync(packPath).includes("manifest.json"))
+    if (
+        packPath.split(".").pop() === "mcpack" &&
+        fs.readdirSync(packPath).includes("manifest.json")
+    ) {
         bedrock = true;
+    }
+
+    try {
+        let subfiles = fs.readdirSync(packPath);
+
+        if (subfiles.length <= 1) packPath = path.join(packPath, subfiles[0]);
+
+        if (fs.readdirSync(packPath).includes("manifest.json")) bedrock = true;
+    } catch (err) {
+        throw new Error("Error while reading directory: " + err);
+    }
 
     return bedrock;
 }
 
-export function convertBedrock(parentDir) {
+export function convertBedrock(parentDir: string) {
+    if (!fs.existsSync(parentDir)) {
+        console.error(`Source directory does not exist: ${parentDir}`);
+        return;
+    }
+
+    // Get the list of files and directories in the parent directory
     const subfiles = fs.readdirSync(parentDir);
-    if (subfiles.length !== 1) return;
 
-    const subfolder = path.join(parentDir, subfiles[0]);
-    if (!fs.statSync(subfolder).isDirectory()) return;
+    // Check if there's exactly one subfolder
+    if (subfiles.length === 1) {
+        const subfolder = path.join(parentDir, subfiles[0]);
 
-    for (const item of fs.readdirSync(subfolder)) {
-        fs.renameSync(
-            path.join(subfolder, item),
-            path.join(parentDir, item)
-        );
-    }
+        // Ensure the single item is a directory
+        if (fs.statSync(subfolder).isDirectory()) {
+            const subfolderContents = fs.readdirSync(subfolder);
 
-    fs.rmdirSync(subfolder);
-}
+            // Move each item from the subfolder to the parent directory
+            for (const item of subfolderContents) {
+                const itemPath = path.join(subfolder, item);
+                const targetPath = path.join(parentDir, item);
 
-export function findGuiSprite(packRoot) {
-    const possiblePaths = [
-        // مسیر اصلی
-        `${packRoot}/assets/minecraft/textures/gui/icons.png`,
-        `${packRoot}/assets/minecraft/textures/gui/gui.png`,
-        `${packRoot}/textures/gui/icons.png`,
-        `${packRoot}/textures/gui/gui.png`,
-        `${packRoot}/textures/gui/icon.png`,
-        `${packRoot}/textures/gui/icons1.png`,
-        
-        // مسیرهای رایج Bedrock
-        `${packRoot}/assets/minecraft/textures/gui/container/icons.png`,
-        `${packRoot}/textures/gui/container/icons.png`,
-        
-        // جستجوی عمیق‌تر (اگر لازم شد)
-        // `${packRoot}/**/*icons*.png`  ← بعداً اگر لازم شد پیاده‌سازی کن
-    ];
-
-    for (const path of possiblePaths) {
-        if (fs.existsSync(path)) {
-            return path;
-        }
-    }
-
-    // جستجوی ساده در gui فولدر
-    const guiFolders = [
-        `${packRoot}/assets/minecraft/textures/gui`,
-        `${packRoot}/textures/gui`,
-        `${packRoot}/assets/minecraft/textures/gui/container`
-    ];
-
-    for (const guiDir of guiFolders) {
-        if (fs.existsSync(guiDir)) {
-            const files = fs.readdirSync(guiDir);
-            console.log(`GUI folder ${guiDir} contains:`, files);
-            
-            for (const file of files) {
-                if (file.toLowerCase().includes('icon') && file.endsWith('.png')) {
-                    return `${guiDir}/${file}`;
+                try {
+                    fs.renameSync(itemPath, targetPath);
+                } catch (error) {
+                    console.error(
+                        `Error moving ${itemPath} to ${targetPath}:`,
+                        error
+                    );
                 }
             }
+
+            // Optionally remove the now-empty subfolder
+            try {
+                fs.rmdirSync(subfolder);
+            } catch (error: any) {
+                if (error.split(" ")[0] === "ENOTEMPTY") {
+                    console.warn(
+                        `Directory not empty after moving contents: ${subfolder}`
+                    );
+                } else {
+                    console.error(
+                        `Error removing directory ${subfolder}:`,
+                        error
+                    );
+                }
+            }
+        } else {
+            console.error(
+                `The only item in the directory is not a folder: ${subfolder}`
+            );
         }
     }
-
-    return null;
+    return;
 }
