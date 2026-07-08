@@ -98,11 +98,50 @@ function convertBedrock(parentDir) {
   }
   return;
 }
+function findFileRecursive(dir, targetNames) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    return null;
+  }
+
+  for (const entry of entries) {
+    if (entry.isFile() && targetNames.includes(entry.name.toLowerCase())) {
+      return path.join(dir, entry.name);
+    }
+  }
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const found = findFileRecursive(path.join(dir, entry.name), targetNames);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
+// Recursively searches the (unzipped) pack folder for the icon sprite sheet,
+// preferring "icons.png" (Java layout) and falling back to "gui.png" (Bedrock layout).
+function findGuiSprite(packFolder) {
+  if (!fs.existsSync(packFolder)) {
+    throw new Error("Path does not exist: " + packFolder);
+  }
+
+  return (
+    findFileRecursive(packFolder, ["icons.png"]) ||
+    findFileRecursive(packFolder, ["gui.png"]) ||
+    null
+  );
+}
+
 export {
   checkAndMkdir,
   checkBedrock,
   clean,
   convertBedrock,
+  findGuiSprite,
   getScale,
   unzipFile
 };
