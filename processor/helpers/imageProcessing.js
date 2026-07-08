@@ -1,3 +1,4 @@
+import { ICoordinatesType, IIconInfo } from "../../types.js";
 import { getPaths } from "./paths.js";
 import {
     combineIcons,
@@ -10,108 +11,157 @@ import { getCoordinates, getDestinationCoordinates } from "./coordinates.js";
 import { loadImage } from "@napi-rs/canvas";
 import { getConfig } from "../utils/configUtils.js";
 
-export async function crop(type) {
+export async function crop(type: ICoordinatesType) {
     const systemPaths = getPaths("SYS");
     const imagePaths = getPaths(type);
+
     const imageCoordinates = getCoordinates(type);
 
     const spriteSheetPath =
         type === "ICON"
             ? systemPaths.packIconsPath
-            : systemPaths.packWidgetsPath;
+            : type === "GUI"
+            ? systemPaths.packWidgetsPath
+            : undefined;
+
+    if (!spriteSheetPath) {
+        throw new Error("Invalid Type: " + type);
+    }
 
     const imagePathEntries = Object.entries(imagePaths);
     const imageCoordinateEntries = Object.entries(imageCoordinates);
 
     for (let i = 0; i < imagePathEntries.length; i++) {
-        const [, path] = imagePathEntries[i];
-        const [, coords] = imageCoordinateEntries[i];
+        const [_, path] = imagePathEntries[i];
+        const [__, coordinates] = imageCoordinateEntries[i];
 
         await cropIcon(
             spriteSheetPath,
             path,
-            coords.x,
-            coords.y,
-            coords.width,
-            coords.height
+            coordinates.x,
+            coordinates.y,
+            coordinates.width,
+            coordinates.height
         );
     }
+
+    return;
 }
 
+// returns the combined image buffer;
 async function combine() {
-    const iconsInfo = generateIconInfo("ICON");
-    const guiInfo = generateIconInfo("GUI");
+    try {
+        const iconsInfo = generateIconInfo("ICON");
+        const guiInfo = generateIconInfo("GUI");
 
-    let repeatKeys = ["heart", "armor", "hunger"];
-    repeatKeys.push(...repeatKeys.map((x) => x + "Bg"));
+        let repeatImageKeys = ["heart", "armor", "hunger"];
+        repeatImageKeys.push(...repeatImageKeys.map((item) => `${item}Bg`));
 
-    for (const icon of iconsInfo) {
-        if (repeatKeys.includes(icon.name)) {
-            icon.destCoordinates.width *= 3;
-            icon.path = await repeatIcon(icon.path, 3);
+        for (const iconInfo of iconsInfo) {
+            if (repeatImageKeys.includes(iconInfo.name)) {
+                iconInfo.destCoordinates.width *= 3;
+                const iconBuffer = await repeatIcon(iconInfo.path, 3);
+                iconInfo.path = iconBuffer;
+            }
         }
+
+        const iconsCanvas = await combineIcons(iconsInfo);
+        const guiCanvas = await combineIcons(guiInfo);
+
+        const finalIconsInfo: IIconInfo = {
+            name: "iconspng",
+            path: iconsCanvas.toBuffer("image/png"),
+            destCoordinates: {
+                x: 0,
+                y: 0,
+                width: iconsCanvas.width,
+                height: iconsCanvas.height,
+            },
+        };
+
+        const finalGuiInfo: IIconInfo = {
+            name: "guipng",
+            path: guiCanvas.toBuffer("image/png"),
+            destCoordinates: {
+                x: 0,
+                y: iconsCanvas.height,
+                width: guiCanvas.width,
+                height: guiCanvas.height,
+            },
+        };
+
+        const finalUiCanvas = await combineIcons([
+            finalIconsInfo,
+            finalGuiInfo,
+        ]);
+
+        return finalUiCanvas.toBuffer("image/png");
+    } catch (error) {
+        console.error("Error in combine function:", error);
+        return;
+    }
+}
+
+function generateIconInfo<T extends ICoordinatesType>(type: T) {
+    const imagePaths = getPaths(type);
+
+    const destinationCoordinates = getDestinationCoordinates(type);
+
+    const imagePathEntries = Object.entries(imagePaths);
+    const imageCoordinateEntries = Object.entries(destinationCoordinates);
+
+    const iconsInfo: IIconInfo[] = [];
+
+    for (let i = 0; i < imagePathEntries.length; i++) {
+        const [_, path] = imagePathEntries[i];
+        const [name, coordinates] = imageCoordinateEntries[i];
+
+        const icon: IIconInfo = {
+            name: name,
+            path: path,
+            destCoordinates: {
+                x: coordinates.x,
+                y: coordinates.y,
+                width: coordinates.width,
+                height: coordinates.height,
+            },
+        };
+
+        iconsInfo.push(icon);
     }
 
-    const iconsCanvas = await combineIcons(iconsInfo);
-    const guiCanvas = await combineIcons(guiInfo);
-
-    const finalIcons = {
-        name: "icons",
-        path: iconsCanvas.toBuffer("image/png"),
-        destCoordinates: {
-            x: 0,
-            y: 0,
-            width: iconsCanvas.width,
-            height: iconsCanvas.height,
-        },
-    };
-
-    const finalGui = {
-        name: "gui",
-        path: guiCanvas.toBuffer("image/png"),
-        destCoordinates: {
-            x: 0,
-            y: iconsCanvas.height,
-            width: guiCanvas.width,
-            height: guiCanvas.height,
-        },
-    };
-
-    const finalCanvas = await combineIcons([finalIcons, finalGui]);
-    return finalCanvas.toBuffer("image/png");
+    return iconsInfo;
 }
 
-function generateIconInfo(type) {
-    const imagePaths = getPaths(type);
-    const destCoords = getDestinationCoordinates(type);
-
-    const entries = Object.entries(imagePaths);
-    const coords = Object.entries(destCoords);
-
-    return entries.map(([name, path], i) => ({
-        name,
-        path,
-        destCoordinates: coords[i][1],
-    }));
-}
-
+// just runs combine() and then upscales.
+// returns buffer of final ui image
 export async function processImage() {
     const uiBuffer = await combine();
     const upscaleRate = getUpscaleRate();
 
+    let finalImageBuffer: Buffer = Buffer.from("");
     if (upscaleRate > 1) {
-        return await upscaleImage(uiBuffer, upscaleRate);
+        finalImageBuffer = await upscaleImage(uiBuffer, 10);
+    } else {
+        finalImageBuffer = uiBuffer;
     }
 
-    return uiBuffer;
+    return finalImageBuffer;
 }
 
 function getUpscaleRate() {
-    const config = getConfig();
-    return config.upscaleRate;
+    try {
+        const config = getConfig();
+        const upscaleRate = config.upscaleRate;
+
+        return upscaleRate;
+    } catch (err) {
+        // Handle error from getConfig()
+        throw new Error("Error fetching config: " + err);
+    }
 }
 
-export async function imageDimsFix(iconsPath, widgetsPath) {
+export async function imageDimsFix(iconsPath: string, widgetsPath: string) {
     const widgetsDims = {
         width: (await loadImage(widgetsPath)).width,
         height: (await loadImage(widgetsPath)).height,
@@ -122,19 +172,24 @@ export async function imageDimsFix(iconsPath, widgetsPath) {
         height: (await loadImage(iconsPath)).height,
     };
 
-    if (widgetsDims.width === iconsDims.width) return;
-
-    if (widgetsDims.width < iconsDims.width) {
-        const buffer = await upscaleImage(
+    // Only comparing widths as they are always a squared image.
+    if (widgetsDims.width === iconsDims.width) {
+        return;
+    } else if (widgetsDims.width < iconsDims.width) {
+        const imageBuffer = await upscaleImage(
             widgetsPath,
             ~~(iconsDims.width / widgetsDims.width)
         );
-        savePngBuffer(buffer, widgetsPath);
-    } else {
-        const buffer = await upscaleImage(
+        savePngBuffer(imageBuffer, widgetsPath);
+    } else if (iconsDims.width < widgetsDims.width) {
+        const imageBuffer = await upscaleImage(
             iconsPath,
             ~~(widgetsDims.width / iconsDims.width)
         );
-        savePngBuffer(buffer, iconsPath);
+        savePngBuffer(imageBuffer, iconsPath);
+    } else {
+        throw new Error(
+            `Error while fixing dimentions.\nWidgetsWidth = ${widgetsDims.width}\nIconsWidth = ${iconsDims.width}`
+        );
     }
 }
