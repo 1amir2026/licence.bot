@@ -1,6 +1,10 @@
 import fs from "fs";
 import path from "path";
-const configPath = path.join(process.cwd(), "config.json");
+import { RUN_ID } from "./runId.js";
+// اسم فایل کانفیگ به RUN_ID وابسته‌ست تا اجراهای همزمان (چند کاربر همزمان)
+// روی فایل همدیگه ننویسن - قبلاً اسم ثابت "config.json" بود که باعث
+// race condition بین پروسه‌های Node همزمان می‌شد.
+const configPath = path.join(process.cwd(), `.config-${RUN_ID}.json`);
 function createConfig() {
   if (fs.existsSync(configPath)) fs.rmSync(configPath);
   try {
