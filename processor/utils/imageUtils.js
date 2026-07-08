@@ -1,22 +1,34 @@
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { createCanvas, Image, loadImage } from "@napi-rs/canvas";
 import fs from "fs";
 import sharp from "sharp";
+import { IIconInfo } from "../../types.js";
 
-// Upscale image
-export async function upscaleImage(input, scale) {
+// Returns the buffer of the upscaled png.
+export async function upscaleImage(input: string | Buffer, scale: number) {
     const image = sharp(input);
+    if (image.errored) {
+        // image.errored is the actual error message.
+        throw image.errored;
+    }
+
     const metadata = await image.metadata();
 
-    return await image
-        .resize(metadata.width * scale, metadata.height * scale, {
+    const width = metadata.width! * scale;
+    const height = metadata.height! * scale;
+
+    const upscaledBuffer = await image
+        .resize(width, height, {
             kernel: sharp.kernel.nearest,
         })
         .toBuffer();
+
+    return upscaledBuffer;
 }
 
-// Combine multiple icons into one canvas
-export async function combineIcons(icons) {
-    // Calculate canvas size
+function calculateCanvasSize(icons: IIconInfo[]): {
+    width: number;
+    height: number;
+} {
     let maxWidth = 0;
     let maxHeight = 0;
 
@@ -26,48 +38,89 @@ export async function combineIcons(icons) {
         maxHeight = Math.max(maxHeight, y + height);
     }
 
-    const canvas = createCanvas(maxWidth, maxHeight);
+    return { width: maxWidth, height: maxHeight };
+}
+
+// returns the whole canvas.
+export async function combineIcons(icons: IIconInfo[]) {
+    const { width, height } = calculateCanvasSize(icons);
+
+    const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
     for (const icon of icons) {
-        const img = await loadImage(icon.path);
+        const image = await loadImage(icon.path);
         ctx.drawImage(
-            img,
+            image,
             icon.destCoordinates.x,
             icon.destCoordinates.y,
-            img.width,
-            img.height
+            image.width,
+            image.height
         );
     }
 
     return canvas;
 }
 
-// Crop icon from sprite sheet
-export async function cropIcon(spriteSheet, outputPath, x, y, w, h) {
-    const img = await loadImage(spriteSheet);
-    const canvas = createCanvas(w, h);
-    const ctx = canvas.getContext("2d");
+export async function cropIcon(
+    spriteSheetPath: string,
+    outputPath: string,
+    x: number, // the x coordinate of the icon
+    y: number, // the y coordinate of the icon
+    width: number,
+    height: number
+) {
+    try {
+        const spriteImage = await loadImage(spriteSheetPath);
 
-    ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+        const spriteSize = {
+            width,
+            height,
+        };
 
-    fs.writeFileSync(outputPath, canvas.toBuffer("image/png"));
-}
+        const canvas = createCanvas(spriteSize.width, spriteSize.height);
+        const ctx = canvas.getContext("2d");
 
-// Repeat icon horizontally
-export async function repeatIcon(imagePath, times) {
-    const img = await loadImage(imagePath);
-    const canvas = createCanvas(img.width * times, img.height);
-    const ctx = canvas.getContext("2d");
+        ctx.drawImage(
+            spriteImage,
+            x,
+            y,
+            spriteSize.width,
+            spriteSize.height,
+            0,
+            0,
+            spriteSize.width,
+            spriteSize.height
+        );
 
-    for (let i = 0; i < times; i++) {
-        ctx.drawImage(img, img.width * i, 0);
+        const iconBuffer = canvas.toBuffer("image/png");
+
+        savePngBuffer(iconBuffer, outputPath);
+        return;
+    } catch (err) {
+        throw new Error("Error while cropping image: " + err);
     }
-
-    return canvas.toBuffer("image/png");
 }
 
-// Save PNG buffer
-export function savePngBuffer(buffer, outputPath) {
-    fs.writeFileSync(outputPath, buffer);
+export async function repeatIcon(imagePath: string | Buffer, times: number) {
+    const image = await loadImage(imagePath);
+
+    const canvas = createCanvas(image.width * times, image.height);
+    const context = canvas.getContext("2d");
+
+    for (let i = 0; i <= times; i++) {
+        context.drawImage(image, image.width * i, 0);
+    }
+    const repeatedIconBuffer = canvas.toBuffer("image/png");
+
+    return repeatedIconBuffer;
+}
+
+export function savePngBuffer(buffer: Buffer, outputPath: string) {
+    try {
+        fs.writeFileSync(outputPath, buffer);
+    } catch (err) {
+        console.error("Error while saving PNG buffer: " + err);
+        return;
+    }
 }
