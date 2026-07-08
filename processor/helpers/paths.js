@@ -1,9 +1,10 @@
 import path from "path";
+import { IPaths, IPathType } from "../../types.js";
 import { getConfig } from "../utils/configUtils.js";
 import { configPath } from "../utils/configUtils.js";
 import { checkAndMkdir } from "../utils/utils.js";
 
-export function getPaths(type) {
+export function getPaths<T extends IPathType>(type: T): IPaths<T> {
     const configValues = getConfigValues();
     if (!configValues) {
         throw new Error("Couldn't fetch config - paths.");
@@ -19,20 +20,25 @@ export function getPaths(type) {
             ? path.join(packSavePath, "textures", "gui")
             : bedrock === false
             ? path.join(packSavePath, "assets", "minecraft", "textures", "gui")
+            : bedrock === undefined
+            ? ""
             : "";
-
     const iconsPath = path.join(guiFolderPath, "icons.png");
     const widgetsPath =
         bedrock === true
             ? path.join(guiFolderPath, "gui.png")
             : bedrock === false
             ? path.join(guiFolderPath, "widgets.png")
+            : bedrock === undefined
+            ? ""
             : "";
 
     const iconsSavePath = path.join(tempPath, "icons");
     const widgetsSavePath = path.join(tempPath, "widgets");
 
-    const sysPaths = {
+    const _configPath = configPath;
+
+    const sysPaths: IPaths<"SYS"> = {
         tempPath: tempPath,
         packFolder: packSavePath,
         packGuiFolder: guiFolderPath,
@@ -40,12 +46,12 @@ export function getPaths(type) {
         packWidgetsPath: widgetsPath,
         tempIconsPath: iconsSavePath,
         tempWidgetsPath: widgetsSavePath,
-        configPath: configPath,
+        configPath: _configPath,
     };
 
-    if (type === "SYS") return sysPaths;
+    if (type === "SYS") return sysPaths as IPaths<T>;
 
-    const iconsPaths = {
+    const iconsPaths: IPaths<"ICON"> = {
         xpBg: path.join(iconsSavePath, "xpBg.png"),
         hungerBg: path.join(iconsSavePath, "hungerBg.png"),
         heartBg: path.join(iconsSavePath, "heartBg.png"),
@@ -55,53 +61,44 @@ export function getPaths(type) {
         armor: path.join(iconsSavePath, "armor.png"),
     };
 
-    if (type === "ICON") return iconsPaths;
+    if (type === "ICON") return iconsPaths as IPaths<T>;
 
-    const guiPaths = {
+    const guiPaths: IPaths<"GUI"> = {
         twoSlots: path.join(widgetsSavePath, "firstTwoSlots.png"),
         lastSlot: path.join(widgetsSavePath, "lastSlot.png"),
         selector: path.join(widgetsSavePath, "selector.png"),
     };
 
-    if (type === "GUI") return guiPaths;
+    if (type === "GUI") return guiPaths as IPaths<T>;
 
     throw new Error(`Invalid type: ${type}`);
 }
 
+// This function checks if the "bedrock" && "packFileName" already exists in the config.
+// If so, it returns them. If not, it returns undefined.
+// If configPath is undefined then the caller would have to provide the file path or getPath() will throw an error.
 function getConfigValues() {
     try {
         const config = getConfig();
         const bedrock = config.bedrock ?? undefined;
         const packFileName = config.packFileName ?? undefined;
+
         return { bedrock, packFileName };
     } catch (err) {
+        // Handle error from getConfig()
         console.error("Error fetching config: ", err);
         return undefined;
     }
 }
 
-// جایگزین تابع initializePaths کن
-export function initializePaths(paths) {
-    for (const key in paths) {
-        const p = paths[key];
-        if (!p) continue;
-
-        // فقط برای مسیرهای فولدر mkdir بزن (نه فایل)
-        if (!p.endsWith('.png') && !p.endsWith('.json')) {
-            try {
-                checkAndMkdir(p);
-            } catch (err) {
-                console.error(`Error while initialising path ${key}:`, err.message);
-            }
+// Create all the directories mentioned in getPaths();
+export function initializePaths(paths: IPaths<"SYS">) {
+    for (const pth in paths) {
+        if (paths[pth as keyof typeof paths] === undefined) continue;
+        try {
+            checkAndMkdir(paths[pth as keyof typeof paths]);
+        } catch (err) {
+            console.error("Error while initialising paths: " + err);
         }
     }
-}
-
-// تابع کمکی جدید
-function isDirectoryPath(key) {
-    const dirKeys = [
-        'tempPath', 'packFolder', 'packGuiFolder',
-        'tempIconsPath', 'tempWidgetsPath'
-    ];
-    return dirKeys.includes(key);
 }
