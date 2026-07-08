@@ -418,37 +418,6 @@ def build_main_inline_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-# چت‌هایی که کیبورد قدیمی‌شان قبلاً پاک شده؛ برای جلوگیری از اجرای مکرر و
-# بی‌مورد clear_old_reply_keyboard در هر /start (که خودش باعث گیر کردن آیکون
-# کیبورد در کلاینت تلگرام می‌شود).
-_keyboard_cleared_chats: set[int] = set()
-
-
-async def clear_old_reply_keyboard(chat_id: int):
-    """
-    منوی اصلی الان به‌صورت Inline کار می‌کند، ولی اگر کاربر قبلاً یک
-    ReplyKeyboard (کیبورد چسبیده به پایین صفحه) داشته، آن کیبورد قدیمی خودش به
-    خودی خود از بین نمی‌رود مگر با یک پیام جدید و reply_markup متفاوت جایگزین شود.
-    این تابع با یک پیام کوتاه، آن کیبورد قدیمی را پاک می‌کند تا فقط منوی
-    Inline تازه دیده شود.
-
-    نکته مهم: اگر پیامِ حاوی ReplyKeyboardRemove بلافاصله (بدون هیچ فاصله‌ای)
-    حذف شود، کلاینت تلگرام (خصوصاً دسکتاپ/وب) فرصت نمی‌کند وضعیتِ کیبورد چت را
-    کامل به‌روزرسانی کند؛ نتیجه‌اش این می‌شود که آیکون کیبورد کنار باکس تایپ در
-    حالت «گیر کرده» باقی می‌ماند: نمایش داده می‌شود ولی با تپ‌کردن چیزی باز
-    نمی‌شود. برای همین یک تأخیر کوتاه قبل از حذف گذاشته شده و ضمناً این کار
-    فقط یک‌بار برای هر چت انجام می‌شود، نه در هر /start.
-    """
-    if chat_id in _keyboard_cleared_chats:
-        return
-    try:
-        sent = await bot.send_message(chat_id, "🔄", reply_markup=types.ReplyKeyboardRemove())
-        await asyncio.sleep(0.8)
-        await bot.delete_message(chat_id, sent.message_id)
-        _keyboard_cleared_chats.add(chat_id)
-    except Exception:
-        pass
-
 
 def build_welcome_back_text(first_name: str) -> str:
     """پیام خوش‌آمدگویی برای کاربرانی که لایسنس فعال دارند و دوباره /start می‌زنند."""
@@ -675,11 +644,10 @@ async def start(message: types.Message):
     block_msg = get_access_block_message(message.from_user.id)
 
     if block_msg is None:
-        # کاربر لایسنس فعال دارد
-        await clear_old_reply_keyboard(message.chat.id)
+        # کاربر لایسنس فعال دارد → کیبورد اصلی واقعی کاربر نمایش داده شود
         await message.answer(
             build_welcome_back_text(first_name),
-            reply_markup=build_main_inline_menu()
+            reply_markup=user_main_keyboard(message.from_user.id)
         )
     else:
         session = Session()
@@ -690,16 +658,15 @@ async def start(message: types.Message):
         finally:
             session.close()
 
-        await clear_old_reply_keyboard(message.chat.id)
-
         if has_any_license:
-            # لایسنس داشته ولی الان منقضی شده؛ همون پیام مربوطه رو نشون بده
-            await message.answer(block_msg)
+            # لایسنس داشته ولی الان منقضی شده؛ کیبورد باید حذف شود
+            await message.answer(block_msg, reply_markup=types.ReplyKeyboardRemove())
         else:
-            # اولین بار است که استارت می‌زند و هیچ لایسنسی هم ندارد
+            # اولین بار است که استارت می‌زند و هیچ لایسنسی هم ندارد؛ کیبوردی نباید باشد
             await message.answer(
                 build_no_license_text(first_name),
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=types.ReplyKeyboardRemove()
             )
 
 @dp.message(F.text == "🔑 ساخت لایسنس جدید")
@@ -783,11 +750,10 @@ async def check_license(message: types.Message):
             session.commit()
 
             first_name = message.from_user.first_name or "دوست عزیز"
-            await clear_old_reply_keyboard(message.chat.id)
             await message.answer(
                 build_welcome_activated_text(first_name),
                 parse_mode="HTML",
-                reply_markup=build_main_inline_menu()
+                reply_markup=user_main_keyboard(message.from_user.id)
             )
         else:
             await message.answer("❌ لایسنس نامعتبر یا قبلاً استفاده شده.")
@@ -883,12 +849,11 @@ async def auto_activate_license(callback: types.CallbackQuery):
     target_chat_id = user.id
     first_name = user.first_name or "دوست عزیز"
     try:
-        await clear_old_reply_keyboard(target_chat_id)
         await bot.send_message(
             target_chat_id,
             build_welcome_activated_text(first_name),
             parse_mode="HTML",
-            reply_markup=build_main_inline_menu()
+            reply_markup=user_main_keyboard(user.id)
         )
     except Exception:
         # کاربر ممکن است هنوز چت خصوصی با ربات را استارت نکرده باشد
