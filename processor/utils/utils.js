@@ -30,7 +30,11 @@ async function getScale(spriteSheetPath) {
 function checkAndMkdir(folderPath) {
   if (fs.existsSync(folderPath)) return;
   try {
-    fs.mkdirSync(folderPath);
+    // recursive:true هم پوشه‌های والد رو در صورت نبودن می‌سازه و هم اگه
+    // پوشه از قبل وجود داشت خطا نمی‌ده. بدون این، مسیرهای چند سطحی که
+    // پوشه‌ی والدشون هنوز وجود نداره (مثل مسیر Java روی یه پک Bedrock) با
+    // ENOENT می‌ترکیدن.
+    fs.mkdirSync(folderPath, { recursive: true });
   } catch (err) {
     throw new Error("Error while creating directory: " + err);
   }
