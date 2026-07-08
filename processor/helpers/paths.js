@@ -72,9 +72,24 @@ function getConfigValues() {
     return void 0;
   }
 }
+// فقط کلیدهایی که واقعاً پوشه هستن باید mkdir بشن. قبلاً این تابع روی همه‌ی
+// مقادیر sysPaths (از جمله packIconsPath/packWidgetsPath/configPath که مسیر
+// فایل هستن، نه پوشه) checkAndMkdir صدا می‌زد. اگه فایل مورد نظر (مثلاً به‌خاطر
+// یه پک ناقص/خراب یا تشخیص اشتباه bedrock) وجود نداشت، checkAndMkdir به‌جاش یه
+// پوشه با همون اسم می‌ساخت؛ این هم اون فایل رو برای همیشه غیرقابل‌بازیابی
+// می‌کرد و هم باعث می‌شد ارور واقعی («فایل پیدا نشد») به یه ارور گمراه‌کننده‌ی
+// «یک فایل نیست، پوشه‌ای با همین اسم پیدا شد» تبدیل بشه.
+const DIRECTORY_PATH_KEYS = /* @__PURE__ */ new Set([
+  "tempPath",
+  "packFolder",
+  "packGuiFolder",
+  "tempIconsPath",
+  "tempWidgetsPath"
+]);
 function initializePaths(paths) {
   for (const pth in paths) {
     if (paths[pth] === void 0) continue;
+    if (!DIRECTORY_PATH_KEYS.has(pth)) continue;
     try {
       checkAndMkdir(paths[pth]);
     } catch (err) {
