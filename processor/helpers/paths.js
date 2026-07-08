@@ -1,7 +1,7 @@
 import path from "path";
 import { getConfig } from "../utils/configUtils.js";
 import { configPath } from "../utils/configUtils.js";
-import { checkAndMkdir } from "../utils/utils.js";
+import { checkAndMkdir, resolveSpritePath } from "../utils/utils.js";
 function getPaths(type) {
   const configValues = getConfigValues();
   if (!configValues) {
@@ -11,8 +11,21 @@ function getPaths(type) {
   const tempPath = path.join(process.cwd(), "temp");
   let packSavePath = path.join(tempPath, packFileName);
   const guiFolderPath = bedrock === true ? path.join(packSavePath, "textures", "gui") : bedrock === false ? path.join(packSavePath, "assets", "minecraft", "textures", "gui") : bedrock === void 0 ? "" : "";
-  const iconsPath = path.join(guiFolderPath, "icons.png");
-  const widgetsPath = bedrock === true ? path.join(guiFolderPath, "gui.png") : bedrock === false ? path.join(guiFolderPath, "widgets.png") : bedrock === void 0 ? "" : "";
+
+  // The expected location isn't always correct: some packs are missing the
+  // file there, or (rarely) have a folder with that same name instead of a
+  // file. resolveSpritePath validates the expected path and, if it's not a
+  // usable file, searches the whole pack for the real one before giving up.
+  const preferredIconsPath = path.join(guiFolderPath, "icons.png");
+  const iconsPath = guiFolderPath
+    ? resolveSpritePath(packSavePath, preferredIconsPath, ["icons.png"]) || preferredIconsPath
+    : preferredIconsPath;
+
+  const widgetsFileName = bedrock === true ? "gui.png" : bedrock === false ? "widgets.png" : "";
+  const preferredWidgetsPath = widgetsFileName ? path.join(guiFolderPath, widgetsFileName) : "";
+  const widgetsPath = widgetsFileName
+    ? resolveSpritePath(packSavePath, preferredWidgetsPath, [widgetsFileName]) || preferredWidgetsPath
+    : "";
   const iconsSavePath = path.join(tempPath, "icons");
   const widgetsSavePath = path.join(tempPath, "widgets");
   const _configPath = configPath;
