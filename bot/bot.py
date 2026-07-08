@@ -1441,10 +1441,26 @@ async def handle_document(message: types.Message, state: FSMContext):
             await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
         except Exception as e:
             err_text = str(e)
+            # همیشه خطای کامل رو تو لاگ سرور چاپ کن، چون پیام کوتاه‌شده‌ای که به
+            # کاربر نشون داده میشه ممکنه دلیل واقعی خطا رو نشون نده
+            print(f"[resource_pack] processing failed for {doc.file_name!r} (user={user_id}):\n{err_text}", flush=True)
+
             is_mcpack = doc.file_name.endswith(".mcpack")
-            path_error = any(x in err_text.lower() for x in ["icon", "pack_icon", "not found", "no such", "inventory"])
-            if is_mcpack and path_error:
-                await _send_manual_upload_prompt(message, user_id, reason="مسیر فایل‌ها در mcpack با Java فرق داره")
+            # قبلاً اینجا فقط چک می‌شد که آیا کلمه‌ی "icon" (یا مشابه) تو متن خطا هست،
+            # ولی تقریباً هر خطایی تو این پایپ‌لاین (حتی خطاهای بی‌ربط مثل کرش شارپ/کنواس)
+            # به یه مسیر یا فایل مربوط به icons.png اشاره می‌کنه، پس اون شرط تقریباً
+            # همیشه true می‌شد و خطای واقعی رو مخفی می‌کرد. الان فقط وقتی این پیام رو
+            # نشون بده که واقعاً فایل sprite (icons.png/gui.png/widgets.png) پیدا نشده
+            # یا به‌جای فایل، پوشه‌ست - یعنی همون خطاهایی که assertValidSpriteFile می‌ده.
+            lowered = err_text.lower()
+            missing_sprite_file = ("پیدا نشد:" in err_text or "یک فایل نیست" in err_text or "missing sprite sheet" in lowered)
+            path_error = is_mcpack and missing_sprite_file
+
+            if path_error:
+                await _send_manual_upload_prompt(
+                    message, user_id,
+                    reason=f"مسیر فایل‌ها در mcpack با Java فرق داره\n<code>{err_text[:200]}</code>"
+                )
             else:
                 await message.answer(
                     f"❌ خطا در پردازش:\n<code>{err_text[:300]}</code>\n\n"
