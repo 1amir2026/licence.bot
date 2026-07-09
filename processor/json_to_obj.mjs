@@ -1,34 +1,61 @@
 /**
- * json_to_obj.mjs
+ * json_to_obj.mjs  (v3 — دقیق‌تر)
  * Minecraft JSON Model → OBJ + MTL converter
  *
  * پشتیبانی از:
- *   • Bedrock Edition (geometry.json  با  "minecraft:geometry" یا فرمت قدیمی "geometry.xxx")
+ *   • Bedrock Edition (geometry.json با "minecraft:geometry" یا فرمت قدیمی "geometry.xxx")
  *   • Java Edition (block/item model با "elements" و "textures")
- *   • Resource Pack مستقل (هر دو فرمت)
+ *
+ * تغییرات نسبت به نسخه قبل (رفع باگ‌های اصلی که باعث خرابی مدل‌های بزرگ می‌شد):
+ *   1) زنجیره والد-فرزند استخوان‌ها (bone.parent) حالا واقعاً اعمال می‌شود.
+ *      قبلاً هر bone فقط با چرخش خودش تبدیل می‌شد و زنجیره‌ی چرخش‌های والدها
+ *      نادیده گرفته می‌شد → همین باعث «پر پر شدن» و جابجایی تکه‌ها در
+ *      مدل‌های چند-استخوانی (mob ها، ریگ‌های پیچیده) می‌شد.
+ *   2) نرمال هر فیس بعد از چرخش cube/bone دوباره محاسبه می‌شود (قبلاً همیشه
+ *      از ۶ نرمال ثابت محوری استفاده می‌شد، حتی برای مکعب‌های چرخیده — همین
+ *      باعث سایه‌زنی و شیدینگ اشتباه در نرم‌افزارهایی مثل بلندر می‌شد).
+ *   3) inflate دیگر روی UV تاثیر نمی‌گذارد (طبق رفتار واقعی Bedrock) — فقط
+ *      روی هندسه (اندازه ظاهری) تاثیر دارد.
+ *   4) mirror (چه در سطح bone و چه cube) پشتیبانی می‌شود.
+ *   5) در Java: اندازه واقعی تکسچر از "texture_size" خوانده می‌شود، نه فرض
+ *      ثابت ۱۶×۱۶ — روی مدل‌هایی با تکسچر بزرگ‌تر (مثل خیلی از مدل‌های آیتم/
+ *      بلاک سفارشی) این دقیقاً همان چیزی است که باعث می‌شد تکسچر جابجا افتد.
+ *   6) در Java: هر element حالا واقعاً متریال مخصوص به تکسچر خودش را می‌گیرد
+ *      (قبلاً تکسچر هر فیس محاسبه می‌شد ولی هرگز استفاده نمی‌شد و همه چیز با
+ *      یک متریال "mat_default" و یک texture.png ساختگی خروجی می‌گرفت).
+ *   7) در Java: وقتی یک فیس "uv" مشخص ندارد، UV پیش‌فرض حالا بر اساس محور
+ *      درست همان فیس محاسبه می‌شود (قبلاً همیشه از x,y استفاده می‌شد، حتی
+ *      برای فیس‌های east/west/up/down).
+ *   8) پشتیبانی از rotation.rescale در المان‌های جاوا.
  *
  * خروجی:
- *   • model.obj  — مش کامل با UV دقیق
- *   • model.mtl  — تعریف متریال
+ *   • model.obj — مش کامل با UV و نرمال دقیق
+ *   • model.mtl — تعریف متریال (یک متریال به‌ازای هر تکسچر واقعی، نه یک متریال قلابی)
  *
  * استفاده:
- *   node json_to_obj.mjs  input.json  output.obj
+ *   node json_to_obj_v3.mjs input.json output.obj [textureForBedrock.png]
  */
 
 import fs   from "fs";
 import path from "path";
 
 // ─── ورودی‌ها ────────────────────────────────────────────────────────────────
-const [,, jsonFile, objFile] = process.argv;
+const [,, jsonFile, objFile, bedrockTextureArg] = process.argv;
 if (!jsonFile || !objFile) {
-  console.error("Usage: node json_to_obj.mjs <input.json> <output.obj>");
+  console.error("Usage: node json_to_obj_v3.mjs <input.json> <output.obj> [texture.png]");
   process.exit(1);
 }
 
-const raw  = fs.readFileSync(jsonFile, "utf-8");
-const data = JSON.parse(raw);
+let raw, data;
+try {
+  raw  = fs.readFileSync(jsonFile, "utf-8");
+  data = JSON.parse(raw);
+} catch (e) {
+  console.error(`❌ خطا در خواندن/پارس JSON: ${e.message}`);
+  process.exit(1);
+}
 
-const outDir  = path.dirname(objFile);
+const outDir   = path.dirname(objFile);
 const baseName = path.basename(objFile, ".obj");
 const mtlFile  = path.join(outDir, baseName + ".mtl");
 
@@ -38,9 +65,8 @@ fs.mkdirSync(outDir, { recursive: true });
 function detectFormat(d) {
   if (d["minecraft:geometry"] || Array.isArray(d.geometry)) return "bedrock";
   if (d.elements)                                            return "java";
-  // فرمت قدیمی Bedrock: کلیدهایی مثل "geometry.humanoid"
   const keys = Object.keys(d);
-  if (keys.some(k => k.startsWith("geometry.")))            return "bedrock_legacy";
+  if (keys.some(k => k.startsWith("geometry.")))             return "bedrock_legacy";
   return "unknown";
 }
 
@@ -52,195 +78,7 @@ if (fmt === "unknown") {
 
 console.log(`✅ فرمت شناسایی شد: ${fmt}`);
 
-// ─── ابزارهای هندسی ──────────────────────────────────────────────────────────
-
-/** محاسبه UV برای هر فیس باکس با رویکرد pixel-perfect */
-function boxUVFaces(x, y, z, sx, sy, sz, uOffset, vOffset, textureW, textureH) {
-  /**
-   * چیدمان استاندارد Bedrock UV برای یک cube:
-   *
-   *          [top]
-   *  [west][north][east][south]
-   *         [bottom]
-   *
-   *  uOffset, vOffset = گوشه بالا-چپ باکس UV در atlas
-   */
-  const tw = textureW, th = textureH;
-  const u0 = uOffset, v0 = vOffset;
-
-  // ابعاد فیس‌ها (pixel)
-  // north/south: sx × sy   east/west: sz × sy   top/bottom: sx × sz
-  const faces = {
-    //          u1                v1                u2                v2
-    bottom: [u0 + sz,           v0,                u0 + sz + sx,     v0 + sz        ],
-    top:    [u0 + sz + sx,      v0,                u0 + sz + sx*2,   v0 + sz        ],
-    north:  [u0 + sz,           v0 + sz,           u0 + sz + sx,     v0 + sz + sy   ],
-    south:  [u0 + sz + sx + sz, v0 + sz,           u0 + sz*2 + sx*2, v0 + sz + sy   ],
-    west:   [u0,                v0 + sz,           u0 + sz,          v0 + sz + sy   ],
-    east:   [u0 + sz + sx,      v0 + sz,           u0 + sz*2 + sx,   v0 + sz + sy   ],
-  };
-
-  // تبدیل به 0..1 نرمال
-  const norm = {};
-  for (const [face, [fu1, fv1, fu2, fv2]] of Object.entries(faces)) {
-    norm[face] = [fu1/tw, 1 - fv2/th, fu2/tw, 1 - fv1/th];
-  }
-  return norm;
-}
-
-/** UV دلخواه per-face (Java Edition) */
-function javaFaceUV(uvArray, textureW, textureH, rotation = 0) {
-  let [u1, v1, u2, v2] = uvArray;
-  // نرمال‌سازی
-  u1 /= 16; v1 /= 16; u2 /= 16; v2 /= 16;
-  // چرخش UV (rotation های ۰، ۹۰، ۱۸۰، ۲۷۰ درجه)
-  // خروجی: آرایه چهار جفت [u,v] برای چهار گوشه فیس (bl, br, tr, tl)
-  const corners = [
-    [u1, 1 - v2],
-    [u2, 1 - v2],
-    [u2, 1 - v1],
-    [u1, 1 - v1],
-  ];
-  const rot = ((rotation % 360) + 360) % 360;
-  const steps = rot / 90;
-  const rotated = [];
-  for (let i = 0; i < 4; i++) {
-    rotated.push(corners[(i + steps) % 4]);
-  }
-  return rotated; // [bl, br, tr, tl]
-}
-
-// ─── OBJ builder ─────────────────────────────────────────────────────────────
-
-const vertices  = [];   // [x, y, z]
-const uvCoords  = [];   // [u, v]
-const normals   = [];   // [nx, ny, nz]
-const faces_out = [];   // strings مستقیم OBJ
-let   vOffset_v = 0;    // offset شمارنده vertex
-let   vOffset_u = 0;    // offset شمارنده uv
-let   vOffset_n = 0;    // offset شمارنده normal
-
-// نرمال‌های استاندارد ۶ جهت
-const STD_NORMALS = [
-  [ 0,  0,  1],  // south  (1)
-  [ 0,  0, -1],  // north  (2)
-  [ 1,  0,  0],  // east   (3)
-  [-1,  0,  0],  // west   (4)
-  [ 0,  1,  0],  // up     (5)
-  [ 0, -1,  0],  // down   (6)
-];
-STD_NORMALS.forEach(n => normals.push(n));
-vOffset_n = 6;
-
-const NORMAL_IDX = { south:1, north:2, east:3, west:4, up:5, down:6,
-                     bottom:6, top:5 };
-
-// شمارنده گروه برای پارت‌ها
-let groupCounter = 0;
-
-/**
- * افزودن یک cube به OBJ
- * @param {number[]} origin  [x, y, z] گوشه کوچک
- * @param {number[]} size    [sx, sy, sz]
- * @param {object}  uvData  { north, south, east, west, top, bottom }
- *                           هر فیس: [u1, v1, u2, v2] نرمال‌شده 0..1
- *                           یا null برای حذف فیس
- * @param {number[][]} rot   ماتریس چرخش ۳×۳ (اختیاری)
- * @param {number[]}   pivot مرکز چرخش (اختیاری)
- * @param {string}     groupName
- * @param {string}     materialName
- */
-function addCube(origin, size, uvData, rot3x3, pivot, groupName, materialName) {
-  const [ox, oy, oz] = origin;
-  const [sx, sy, sz] = size;
-
-  // ۸ راس cube (ترتیب ثابت)
-  const rawVerts = [
-    [ox,      oy,      oz     ],  // 0 ---
-    [ox + sx, oy,      oz     ],  // 1 +--
-    [ox + sx, oy + sy, oz     ],  // 2 ++-
-    [ox,      oy + sy, oz     ],  // 3 -+-
-    [ox,      oy,      oz + sz],  // 4 --+
-    [ox + sx, oy,      oz + sz],  // 5 +-+
-    [ox + sx, oy + sy, oz + sz],  // 6 +++
-    [ox,      oy + sy, oz + sz],  // 7 -++
-  ];
-
-  // اعمال چرخش
-  const finalVerts = rawVerts.map(v => {
-    if (!rot3x3) return v;
-    const [px, py, pz] = pivot || [0, 0, 0];
-    const dx = v[0] - px, dy = v[1] - py, dz = v[2] - pz;
-    const r = rot3x3;
-    return [
-      r[0][0]*dx + r[0][1]*dy + r[0][2]*dz + px,
-      r[1][0]*dx + r[1][1]*dy + r[1][2]*dz + py,
-      r[2][0]*dx + r[2][1]*dy + r[2][2]*dz + pz,
-    ];
-  });
-
-  const vBase = vOffset_v + 1;
-  finalVerts.forEach(([x, y, z]) => vertices.push([x, y, z]));
-  vOffset_v += 8;
-
-  // تعریف هر فیس: [i0,i1,i2,i3] از ۸ راس + کدام نرمال + کلید UV
-  const FACE_DEFS = [
-    { key: "north",  vi: [3, 2, 1, 0], nk: "north"  },  // -Z
-    { key: "south",  vi: [4, 5, 6, 7], nk: "south"  },  // +Z
-    { key: "west",   vi: [0, 4, 7, 3], nk: "west"   },  // -X
-    { key: "east",   vi: [1, 2, 6, 5], nk: "east"   },  // +X  ← اصلاح ترتیب
-    { key: "down",   vi: [0, 1, 5, 4], nk: "down"   },  // -Y
-    { key: "up",     vi: [3, 7, 6, 2], nk: "up"     },  // +Y
-    // نام‌های جایگزین برای UV
-    { key: "bottom", vi: [0, 1, 5, 4], nk: "down"   },
-    { key: "top",    vi: [3, 7, 6, 2], nk: "up"     },
-  ];
-
-  // فیلتر تکراری
-  const seenKeys = new Set();
-  const filteredFaces = FACE_DEFS.filter(f => {
-    if (seenKeys.has(f.nk)) return false;
-    seenKeys.add(f.nk);
-    return true;
-  });
-
-  faces_out.push(`g ${groupName || "cube_" + groupCounter++}`);
-  faces_out.push(`usemtl ${materialName || "mat_default"}`);
-
-  filteredFaces.forEach(({ key, vi, nk }) => {
-    const uv = uvData[key] || uvData[nk];
-    if (!uv) return;  // فیس حذف شده
-
-    let uvCorners;
-    if (Array.isArray(uv[0])) {
-      // حالت Java: آرایه ۴ جفت [u,v]
-      uvCorners = uv;
-    } else {
-      // حالت Bedrock: [u1, v1, u2, v2]
-      const [u1, v1, u2, v2] = uv;
-      uvCorners = [
-        [u1, v1],
-        [u2, v1],
-        [u2, v2],
-        [u1, v2],
-      ];
-    }
-
-    const uBase = vOffset_u + 1;
-    uvCorners.forEach(([u, v]) => uvCoords.push([u, v]));
-    vOffset_u += 4;
-
-    const nIdx = NORMAL_IDX[nk] || 1;
-    const [i0, i1, i2, i3] = vi.map(i => vBase + i);
-    const [t0, t1, t2, t3] = [uBase, uBase+1, uBase+2, uBase+3];
-
-    // quad → دو مثلث
-    faces_out.push(`f ${i0}/${t0}/${nIdx} ${i1}/${t1}/${nIdx} ${i2}/${t2}/${nIdx}`);
-    faces_out.push(`f ${i0}/${t0}/${nIdx} ${i2}/${t2}/${nIdx} ${i3}/${t3}/${nIdx}`);
-  });
-}
-
-// ─── تبدیل زاویه به ماتریس چرخش ─────────────────────────────────────────────
+// ─── ماتریس‌های چرخش ─────────────────────────────────────────────────────────
 
 function rotationMatrix(axis, angleDeg) {
   const a = (angleDeg * Math.PI) / 180;
@@ -258,10 +96,221 @@ function multiplyMat(A, B) {
   return R;
 }
 
+const IDENTITY = [[1,0,0],[0,1,0],[0,0,1]];
+
+// چرخش با ترتیب استاندارد Minecraft entity model: اول Z سپس X سپس Y
+function eulerMatrix(rx, ry, rz) {
+  return multiplyMat(multiplyMat(rotationMatrix("y", ry), rotationMatrix("x", rx)), rotationMatrix("z", rz));
+}
+
+/**
+ * یک مرحله تبدیل: چرخش matrix حول نقطه pivot.
+ * چند مرحله به‌ترتیب (از داخلی‌ترین به بیرونی‌ترین/ریشه) روی نقطه اعمال می‌شود.
+ * این دقیقاً چیزی است که برای زنجیره والد-فرزند استخوان‌ها لازم است، چون هر
+ * استخوان pivot خودش را دارد و نمی‌توان همه را در یک ماتریس/pivot واحد ادغام کرد.
+ */
+function applyTransformSteps(point, steps) {
+  let [x, y, z] = point;
+  for (const { matrix, pivot } of steps) {
+    const [px, py, pz] = pivot;
+    const dx = x - px, dy = y - py, dz = z - pz;
+    const nx = matrix[0][0]*dx + matrix[0][1]*dy + matrix[0][2]*dz + px;
+    const ny = matrix[1][0]*dx + matrix[1][1]*dy + matrix[1][2]*dz + py;
+    const nz = matrix[2][0]*dx + matrix[2][1]*dy + matrix[2][2]*dz + pz;
+    x = nx; y = ny; z = nz;
+  }
+  return [x, y, z];
+}
+
+// فقط بخش چرخشی (بدون جابجایی) — برای نرمال‌ها
+function rotateDirection(dir, steps) {
+  let [x, y, z] = dir;
+  for (const { matrix } of steps) {
+    const nx = matrix[0][0]*x + matrix[0][1]*y + matrix[0][2]*z;
+    const ny = matrix[1][0]*x + matrix[1][1]*y + matrix[1][2]*z;
+    const nz = matrix[2][0]*x + matrix[2][1]*y + matrix[2][2]*z;
+    x = nx; y = ny; z = nz;
+  }
+  const len = Math.hypot(x, y, z) || 1;
+  return [x/len, y/len, z/len];
+}
+
+// ─── UV باکس استاندارد (Bedrock box-uv) ─────────────────────────────────────
+
+function boxUVFaces(sx, sy, sz, uOffset, vOffset, textureW, textureH) {
+  const tw = textureW, th = textureH;
+  const u0 = uOffset, v0 = vOffset;
+
+  const faces = {
+    bottom: [u0 + sz,           v0,                u0 + sz + sx,     v0 + sz        ],
+    top:    [u0 + sz + sx,      v0,                u0 + sz + sx*2,   v0 + sz        ],
+    north:  [u0 + sz,           v0 + sz,           u0 + sz + sx,     v0 + sz + sy   ],
+    south:  [u0 + sz + sx + sz, v0 + sz,           u0 + sz*2 + sx*2, v0 + sz + sy   ],
+    west:   [u0,                v0 + sz,           u0 + sz,          v0 + sz + sy   ],
+    east:   [u0 + sz + sx,      v0 + sz,           u0 + sz*2 + sx,   v0 + sz + sy   ],
+  };
+
+  const norm = {};
+  for (const [face, [fu1, fv1, fu2, fv2]] of Object.entries(faces)) {
+    norm[face] = [fu1/tw, 1 - fv2/th, fu2/tw, 1 - fv1/th];
+  }
+  return norm;
+}
+
+/** UV دلخواه per-face (Java Edition) */
+function javaFaceUV(uvArray, textureW, textureH, rotation = 0) {
+  let [u1, v1, u2, v2] = uvArray;
+  u1 /= textureW; v1 /= textureH; u2 /= textureW; v2 /= textureH;
+  const corners = [
+    [u1, 1 - v2],
+    [u2, 1 - v2],
+    [u2, 1 - v1],
+    [u1, 1 - v1],
+  ];
+  const rot = ((rotation % 360) + 360) % 360;
+  const steps = rot / 90;
+  const rotated = [];
+  for (let i = 0; i < 4; i++) rotated.push(corners[(i + steps) % 4]);
+  return rotated; // [bl, br, tr, tl]
+}
+
+// پیش‌فرض UV بر اساس محور درست هر فیس (وقتی "uv" در JSON جاوا مشخص نشده)
+function defaultJavaUV(faceName, from, to) {
+  switch (faceName) {
+    case "north": case "south": return [from[0], from[1], to[0], to[1]]; // x,y
+    case "east":  case "west":  return [from[2], from[1], to[2], to[1]]; // z,y
+    case "up":    case "down":  return [from[0], from[2], to[0], to[2]]; // x,z
+    default:                    return [from[0], from[1], to[0], to[1]];
+  }
+}
+
+// ─── OBJ builder ─────────────────────────────────────────────────────────────
+
+const vertices  = [];
+const uvCoords  = [];
+const normals   = [];
+const faces_out = [];
+let vOffset_v = 0;
+let vOffset_u = 0;
+
+let groupCounter = 0;
+let lastMaterial = null;
+
+// ترتیب استاندارد نرمال‌های محوری (پیش از چرخش)
+const AXIS_NORMALS = {
+  south: [ 0,  0,  1],
+  north: [ 0,  0, -1],
+  east:  [ 1,  0,  0],
+  west:  [-1,  0,  0],
+  up:    [ 0,  1,  0],
+  down:  [ 0, -1,  0],
+};
+const FACE_ORDER = ["south", "north", "east", "west", "up", "down"];
+
+/**
+ * افزودن یک cube به OBJ.
+ * uvData[faceKey] می‌تواند یکی از این دو باشد:
+ *   - آرایه [u1,v1,u2,v2]  (Bedrock box-uv, یک متریال مشترک)
+ *   - آرایه ۴ جفت [u,v]     (Java per-face uv)
+ *   - { corners, material }  برای اختصاص متریال مجزا به هر فیس (Java چند-تکسچر)
+ * transformSteps: آرایه‌ای از {matrix, pivot} که به ترتیب از داخلی‌ترین (cube)
+ *                 تا بیرونی‌ترین (ریشه استخوان) اعمال می‌شود.
+ */
+function addCube(origin, size, uvData, transformSteps, groupName, defaultMaterial, mirror) {
+  const [ox, oy, oz] = origin;
+  const [sx, sy, sz] = size;
+
+  const rawVerts = [
+    [ox,      oy,      oz     ],
+    [ox + sx, oy,      oz     ],
+    [ox + sx, oy + sy, oz     ],
+    [ox,      oy + sy, oz     ],
+    [ox,      oy,      oz + sz],
+    [ox + sx, oy,      oz + sz],
+    [ox + sx, oy + sy, oz + sz],
+    [ox,      oy + sy, oz + sz],
+  ];
+
+  const finalVerts = rawVerts.map(v => applyTransformSteps(v, transformSteps || []));
+
+  const vBase = vOffset_v + 1;
+  finalVerts.forEach(v => vertices.push(v));
+  vOffset_v += 8;
+
+  // نرمال‌های چرخیده‌شده مخصوص همین cube (نه نرمال‌های ثابت محوری)
+  const nBase = normals.length;
+  FACE_ORDER.forEach(face => {
+    normals.push(rotateDirection(AXIS_NORMALS[face], transformSteps || []));
+  });
+  const NIDX = {};
+  FACE_ORDER.forEach((f, i) => { NIDX[f] = nBase + i + 1; });
+
+  const FACE_DEFS = [
+    { key: "north",  vi: [3, 2, 1, 0], nk: "north" },
+    { key: "south",  vi: [4, 5, 6, 7], nk: "south" },
+    { key: "west",   vi: [0, 4, 7, 3], nk: "west"  },
+    { key: "east",   vi: [1, 2, 6, 5], nk: "east"  },
+    { key: "down",   vi: [0, 1, 5, 4], nk: "down"  },
+    { key: "up",     vi: [3, 7, 6, 2], nk: "up"    },
+    { key: "bottom", vi: [0, 1, 5, 4], nk: "down"  },
+    { key: "top",    vi: [3, 7, 6, 2], nk: "up"    },
+  ];
+  const seenKeys = new Set();
+  const filteredFaces = FACE_DEFS.filter(f => {
+    if (seenKeys.has(f.nk)) return false;
+    seenKeys.add(f.nk);
+    return true;
+  });
+
+  faces_out.push(`g ${groupName || "cube_" + groupCounter++}`);
+
+  filteredFaces.forEach(({ key, vi, nk }) => {
+    let uv = uvData[key] || uvData[nk];
+    if (!uv) return;
+
+    // mirror: در حالت box-uv، ستون east و west جابه‌جا می‌شود (رفتار واقعی Bedrock)
+    if (mirror && (nk === "east" || nk === "west") && Array.isArray(uv) && !Array.isArray(uv[0])) {
+      const otherKey = nk === "east" ? "west" : "east";
+      const otherUV = uvData[otherKey];
+      if (otherUV) uv = otherUV;
+    }
+
+    let uvCorners, material;
+    if (uv && !Array.isArray(uv) && uv.corners) {
+      uvCorners = uv.corners;
+      material  = uv.material || defaultMaterial;
+    } else if (Array.isArray(uv[0])) {
+      uvCorners = uv;
+      material  = defaultMaterial;
+    } else {
+      const [u1, v1, u2, v2] = uv;
+      uvCorners = [[u1, v1], [u2, v1], [u2, v2], [u1, v2]];
+      material  = defaultMaterial;
+    }
+
+    if (material !== lastMaterial) {
+      faces_out.push(`usemtl ${material || "mat_default"}`);
+      lastMaterial = material;
+    }
+
+    const uBase = vOffset_u + 1;
+    uvCorners.forEach(([u, v]) => uvCoords.push([u, v]));
+    vOffset_u += 4;
+
+    const nIdx = NIDX[nk];
+    const [i0, i1, i2, i3] = vi.map(i => vBase + i);
+    const [t0, t1, t2, t3] = [uBase, uBase+1, uBase+2, uBase+3];
+
+    faces_out.push(`f ${i0}/${t0}/${nIdx} ${i1}/${t1}/${nIdx} ${i2}/${t2}/${nIdx}`);
+    faces_out.push(`f ${i0}/${t0}/${nIdx} ${i2}/${t2}/${nIdx} ${i3}/${t3}/${nIdx}`);
+  });
+}
+
 // ─── پارسر Bedrock ───────────────────────────────────────────────────────────
 
+const materialSet = new Map(); // materialName -> textureFile (برای mtl)
+
 function parseBedrock(d) {
-  // پشتیبانی از هر دو فرمت جدید و قدیمی
   let geos = [];
   if (d["minecraft:geometry"]) {
     const mg = d["minecraft:geometry"];
@@ -269,71 +318,80 @@ function parseBedrock(d) {
   } else if (Array.isArray(d.geometry)) {
     geos = d.geometry;
   } else {
-    // فرمت قدیمی
     for (const [k, v] of Object.entries(d)) {
       if (k.startsWith("geometry.")) geos.push({ description: { identifier: k }, ...v });
     }
   }
 
-  // تکسچر پیش‌فرض ۱۶×۱۶
-  let texW = 64, texH = 64;
+  const bedrockTexture = bedrockTextureArg || "texture.png";
+  materialSet.set("mat_default", bedrockTexture);
 
-  geos.forEach((geo, gi) => {
+  geos.forEach(geo => {
     const desc = geo.description || geo;
-    texW = desc.texture_width  || desc.texturewidth  || 64;
-    texH = desc.texture_height || desc.textureheight || 64;
+    const texW = desc.texture_width  || desc.texturewidth  || 64;
+    const texH = desc.texture_height || desc.textureheight || 64;
 
     const bones = geo.bones || [];
-    bones.forEach((bone, bi) => {
-      const boneName = bone.name || `bone_${bi}`;
-      const pivot    = bone.pivot || [0, 0, 0];
-      const cubes    = bone.cubes || [];
+    if (geo.poly_mesh || bones.some(b => b.poly_mesh)) {
+      console.warn("⚠️  این مدل شامل poly_mesh است که در این نسخه پشتیبانی نمی‌شود و نادیده گرفته می‌شود.");
+    }
 
-      // چرخش استخوان
-      let boneMat = null;
-      if (bone.rotation) {
-        const [rx, ry, rz] = bone.rotation;
-        boneMat = multiplyMat(multiplyMat(rotationMatrix("y", ry), rotationMatrix("x", rx)), rotationMatrix("z", rz));
-      }
+    const boneMap = {};
+    bones.forEach(b => { boneMap[b.name] = b; });
+
+    bones.forEach((bone, bi) => {
+      const boneName   = bone.name || `bone_${bi}`;
+      const bonePivot  = bone.pivot || [0, 0, 0];
+      const cubes      = bone.cubes || [];
+      const boneMirror = !!bone.mirror;
 
       cubes.forEach((cube, ci) => {
-        const origin = cube.origin || [0, 0, 0];
-        const size   = cube.size   || [1, 1, 1];
+        const origin  = cube.origin || [0, 0, 0];
+        const size    = cube.size   || [1, 1, 1];
         const inflate = cube.inflate || 0;
 
-        // اعمال inflate
         const inflatedOrigin = [origin[0]-inflate, origin[1]-inflate, origin[2]-inflate];
         const inflatedSize   = [size[0]+inflate*2, size[1]+inflate*2, size[2]+inflate*2];
 
-        // چرخش cube
-        let cubeMat = boneMat;
-        let cubePivot = pivot;
+        // زنجیره تبدیل: اول چرخش خود cube، بعد استخوان خودش، بعد همه والدها تا ریشه
+        const transformSteps = [];
+
         if (cube.rotation) {
           const [rx, ry, rz] = cube.rotation;
-          const cm = multiplyMat(multiplyMat(rotationMatrix("y", ry), rotationMatrix("x", rx)), rotationMatrix("z", rz));
-          cubeMat = cubeMat ? multiplyMat(cubeMat, cm) : cm;
-          cubePivot = cube.pivot || pivot;
+          transformSteps.push({
+            matrix: eulerMatrix(rx, ry, rz),
+            pivot:  cube.pivot || bonePivot,
+          });
         }
 
-        let uvData = {};
+        let cur = bone;
+        while (cur) {
+          if (cur.rotation) {
+            const [rx, ry, rz] = cur.rotation;
+            transformSteps.push({
+              matrix: eulerMatrix(rx, ry, rz),
+              pivot:  cur.pivot || [0, 0, 0],
+            });
+          }
+          cur = cur.parent ? boneMap[cur.parent] : null;
+        }
 
+        const cubeMirror = cube.mirror !== undefined ? !!cube.mirror : boneMirror;
+
+        let uvData = {};
         if (cube.uv) {
           if (Array.isArray(cube.uv)) {
-            // UV box mode: [u, v]
             const [u0, v0] = cube.uv;
-            const [sx, sy, sz] = inflatedSize;
-            uvData = boxUVFaces(
-              inflatedOrigin[0], inflatedOrigin[1], inflatedOrigin[2],
-              sx, sy, sz, u0, v0, texW, texH
-            );
+            // نکته مهم: UV از اندازه اصلی (غیر inflate‌شده) محاسبه می‌شود،
+            // چون inflate فقط روی هندسه اثر دارد نه روی UV — طبق رفتار واقعی Bedrock.
+            uvData = boxUVFaces(size[0], size[1], size[2], u0, v0, texW, texH);
           } else {
-            // Per-face UV mode
             for (const [face, faceUV] of Object.entries(cube.uv)) {
               if (!faceUV) continue;
               const { uv, uv_size } = faceUV;
               if (!uv) continue;
               const [fu, fv] = uv;
-              const [fw, fh] = uv_size || [inflatedSize[0], inflatedSize[1]];
+              const [fw, fh] = uv_size || [size[0], size[1]];
               const faceLower = face.toLowerCase();
               uvData[faceLower] = [
                 fu / texW,
@@ -347,19 +405,17 @@ function parseBedrock(d) {
 
         addCube(
           inflatedOrigin, inflatedSize, uvData,
-          cubeMat, cubePivot,
+          transformSteps,
           `${boneName}_${ci}`,
-          "mat_default"
+          "mat_default",
+          cubeMirror
         );
       });
     });
   });
 }
 
-// ─── پارسر Bedrock Legacy ────────────────────────────────────────────────────
-
 function parseBedrockLegacy(d) {
-  // تبدیل به ساختار جدید و ارسال به پارسر اصلی
   const converted = { "minecraft:geometry": [] };
   for (const [k, v] of Object.entries(d)) {
     if (!k.startsWith("geometry.")) continue;
@@ -375,36 +431,60 @@ function parseBedrockLegacy(d) {
 
 // ─── پارسر Java Edition ──────────────────────────────────────────────────────
 
+function sanitizeMatName(name) {
+  return "mat_" + name.replace(/[^a-zA-Z0-9_]/g, "_");
+}
+
 function parseJava(d) {
-  const texW = 16, texH = 16;  // Java همیشه ۱۶×۱۶ per face UV
+  const [texW, texH] = d.texture_size || [16, 16];
 
   const elements = d.elements || [];
   const textures = d.textures || {};
 
-  // نقشه texture variable → نام فایل
   function resolveTexture(ref) {
-    if (!ref) return "texture";
+    if (!ref) return "missing";
+    let seen = new Set();
     while (ref.startsWith("#")) {
+      if (seen.has(ref)) break;
+      seen.add(ref);
       const key = ref.slice(1);
       ref = textures[key] || ref;
       if (!ref.startsWith("#")) break;
     }
-    return path.basename(ref.replace(/^minecraft:/, "")).replace(/^block\/|^item\//, "");
+    const clean = ref.replace(/^#/, "").replace(/^minecraft:/, "");
+    return clean; // مسیر کامل را نگه می‌داریم (مثلاً block/iron_block)
   }
 
   elements.forEach((el, ei) => {
     const from = el.from || [0, 0, 0];
     const to   = el.to   || [16, 16, 16];
 
-    const origin = [from[0]/16, from[1]/16, from[2]/16];
-    const size   = [(to[0]-from[0])/16, (to[1]-from[1])/16, (to[2]-from[2])/16];
+    let origin = [from[0]/16, from[1]/16, from[2]/16];
+    let size   = [(to[0]-from[0])/16, (to[1]-from[1])/16, (to[2]-from[2])/16];
 
-    // چرخش
-    let mat = null, pivotPt = null;
+    const transformSteps = [];
     if (el.rotation) {
-      const { origin: rOrig, axis, angle } = el.rotation;
-      pivotPt = rOrig ? [rOrig[0]/16, rOrig[1]/16, rOrig[2]/16] : [0.5, 0.5, 0.5];
-      mat = rotationMatrix(axis || "y", angle || 0);
+      const { origin: rOrig, axis, angle, rescale } = el.rotation;
+      const pivotPt = rOrig ? [rOrig[0]/16, rOrig[1]/16, rOrig[2]/16] : [0.5, 0.5, 0.5];
+      const ax = axis || "y";
+
+      // rescale: بزرگ‌نمایی محورهای عمود بر محور چرخش با ضریب 1/cos(angle)
+      // (طبق رفتار واقعی Minecraft برای زوایای ۲۲.۵ و ۴۵ درجه)
+      if (rescale && angle) {
+        const factor = 1 / Math.cos((angle * Math.PI) / 180);
+        const scaleAxes = ax === "x" ? [1,2] : ax === "y" ? [0,2] : [0,1];
+        const newOrigin = origin.slice();
+        const newSize   = size.slice();
+        scaleAxes.forEach(i => {
+          const center = pivotPt[i];
+          const lo = origin[i], hi = origin[i] + size[i];
+          newOrigin[i] = center + (lo - center) * factor;
+          newSize[i]   = size[i] * factor;
+        });
+        origin = newOrigin; size = newSize;
+      }
+
+      transformSteps.push({ matrix: rotationMatrix(ax, angle || 0), pivot: pivotPt });
     }
 
     const uvData = {};
@@ -412,20 +492,28 @@ function parseJava(d) {
 
     for (const [faceName, faceDef] of Object.entries(elFaces)) {
       if (!faceDef) continue;
-      const faceUV = faceDef.uv || [from[0], from[1], to[0], to[1]];  // fallback
-      const rot    = faceDef.rotation || 0;
-      const texVar = faceDef.texture || "#all";
-      const texName = resolveTexture(texVar);
+      const faceUV = faceDef.uv || defaultJavaUV(faceName, from, to);
+      const rot     = faceDef.rotation || 0;
+      const texVar  = faceDef.texture || "#all";
+      const texPath = resolveTexture(texVar);
+      const matName = sanitizeMatName(texPath);
 
-      // UV corners [bl, br, tr, tl]
-      uvData[faceName] = javaFaceUV(faceUV, 16, 16, rot);
+      if (!materialSet.has(matName)) {
+        materialSet.set(matName, path.basename(texPath) + ".png");
+      }
 
-      // material per texture
-      // (در این نسخه یک متریال داریم؛ چند تکسچر → نام اول)
+      uvData[faceName] = {
+        corners:  javaFaceUV(faceUV, texW, texH, rot),
+        material: matName,
+      };
     }
 
-    addCube(origin, size, uvData, mat, pivotPt, `el_${ei}`, "mat_default");
+    addCube(origin, size, uvData, transformSteps, `el_${ei}`, "mat_default", false);
   });
+
+  if (materialSet.size === 0) {
+    materialSet.set("mat_default", "texture.png");
+  }
 }
 
 // ─── اجرا ────────────────────────────────────────────────────────────────────
@@ -437,8 +525,8 @@ else if (fmt === "java")           parseJava(data);
 // ─── نوشتن OBJ ───────────────────────────────────────────────────────────────
 
 const objLines = [
-  `# Generated by json_to_obj.mjs`,
-  `# Minecraft JSON Model Converter`,
+  `# Generated by json_to_obj_v3.mjs`,
+  `# Minecraft JSON Model Converter (accurate bone-hierarchy edition)`,
   `# Format: ${fmt}`,
   ``,
   `mtllib ${baseName}.mtl`,
@@ -459,19 +547,22 @@ fs.writeFileSync(objFile, objLines.join("\n"), "utf-8");
 
 // ─── نوشتن MTL ───────────────────────────────────────────────────────────────
 
-const mtlLines = [
-  `# MTL generated by json_to_obj.mjs`,
-  ``,
-  `newmtl mat_default`,
-  `Ka 1.000 1.000 1.000`,
-  `Kd 1.000 1.000 1.000`,
-  `Ks 0.000 0.000 0.000`,
-  `d 1.0`,
-  `illum 1`,
-  `map_Kd texture.png`,
-];
-
+const mtlLines = [`# MTL generated by json_to_obj_v3.mjs`, ``];
+for (const [matName, texFile] of materialSet.entries()) {
+  mtlLines.push(
+    `newmtl ${matName}`,
+    `Ka 1.000 1.000 1.000`,
+    `Kd 1.000 1.000 1.000`,
+    `Ks 0.000 0.000 0.000`,
+    `d 1.0`,
+    `illum 1`,
+    `map_Kd ${texFile}`,
+    ``
+  );
+}
 fs.writeFileSync(mtlFile, mtlLines.join("\n"), "utf-8");
+
+// ─── خلاصه ───────────────────────────────────────────────────────────────────
 
 const vCount = vertices.length;
 const fCount = faces_out.filter(l => l.startsWith("f ")).length;
@@ -479,5 +570,11 @@ console.log(`✅ تبدیل موفق!`);
 console.log(`   فرمت: ${fmt}`);
 console.log(`   Vertices: ${vCount}`);
 console.log(`   Triangles: ${fCount}`);
+console.log(`   متریال‌ها: ${materialSet.size}`);
 console.log(`   OBJ: ${objFile}`);
 console.log(`   MTL: ${mtlFile}`);
+console.log(``);
+console.log(`   📁 این فایل‌های تکسچر باید کنار OBJ قرار بگیرند تا مدل درست دیده شود:`);
+for (const [matName, texFile] of materialSet.entries()) {
+  console.log(`      - ${texFile}   (متریال: ${matName})`);
+}
