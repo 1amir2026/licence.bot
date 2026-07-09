@@ -256,20 +256,17 @@ function addCube(origin, size, uvData, transformSteps, groupName, defaultMateria
     { key: "east",   vi: [1, 2, 6, 5], nk: "east"  },
     { key: "down",   vi: [0, 1, 5, 4], nk: "down"  },
     { key: "up",     vi: [3, 7, 6, 2], nk: "up"    },
-    { key: "bottom", vi: [0, 1, 5, 4], nk: "down"  },
-    { key: "top",    vi: [3, 7, 6, 2], nk: "up"    },
   ];
-  const seenKeys = new Set();
-  const filteredFaces = FACE_DEFS.filter(f => {
-    if (seenKeys.has(f.nk)) return false;
-    seenKeys.add(f.nk);
-    return true;
-  });
 
   faces_out.push(`g ${groupName || "cube_" + groupCounter++}`);
 
-  filteredFaces.forEach(({ key, vi, nk }) => {
-    let uv = uvData[key] || uvData[nk];
+  FACE_DEFS.forEach(({ key, vi, nk }) => {
+    // uvData از boxUVFaces با کلیدهای "top"/"bottom" پر می‌شود (نه up/down)،
+    // پس هر دو نام معادل را برای هر فیس امتحان می‌کنیم تا هیچ فیسی گم نشود
+    // (باگ قبلی: فیس‌های up/down هر مکعب همیشه حذف می‌شدند چون کلیدشان با
+    // uvData هم‌خوان نبود و seenKeys اجازه تلاش دوباره با نام درست را نمی‌داد).
+    const altKey = nk === "up" ? "top" : nk === "down" ? "bottom" : nk;
+    let uv = uvData[key] || uvData[nk] || uvData[altKey];
     if (!uv) return;
 
     // mirror: در حالت box-uv، ستون east و west جابه‌جا می‌شود (رفتار واقعی Bedrock)
