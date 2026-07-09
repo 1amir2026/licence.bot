@@ -89,6 +89,11 @@ class ResourcePackManualState(StatesGroup):
     waiting_icon = State()
     waiting_inventory = State()
 
+class ResourcePackSettingsState(StatesGroup):
+    settings_menu = State()
+    choosing_percent = State()
+    waiting_custom_percent = State()
+
 # گزینه‌های زمانی لایسنس به ترتیب چرخش: (متن نمایشی, مقدار به دقیقه / None برای همیشگی / "custom" برای دلخواه)
 LICENSE_TIME_OPTIONS = [
     ("♾️ همیشگی", None),
@@ -207,6 +212,61 @@ async def run_node_processor(input_path: str, output_path: str, xp_percent: floa
     stdout, stderr = await proc.communicate()
     if proc.returncode != 0:
         raise RuntimeError(f"Node processor failed: {stderr.decode()}")
+
+
+# ====================== HUD OVERLAY - تنظیمات درصد نوار XP ======================
+DEFAULT_XP_PERCENT = 0.7  # مقدار پیش‌فرض (۷۰٪)
+
+# مقادیر آماده‌ی درصد که به‌صورت دکمه نشون داده می‌شن
+RP_XP_PERCENT_PRESETS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+
+
+def _rp_xp_percent_value(state_data: dict) -> float:
+    return state_data.get("rp_xp_percent", DEFAULT_XP_PERCENT)
+
+
+def build_rp_settings_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎚 تغییر درصد نوار XP", callback_data="rp_settings_xp")],
+        [InlineKeyboardButton(text="▶️ شروع پردازش", callback_data="rp_settings_start")],
+        [InlineKeyboardButton(text="❌ لغو", callback_data="rp_settings_cancel")],
+    ])
+
+
+def build_rp_settings_text(xp_percent: float) -> str:
+    percent_int = round(xp_percent * 100)
+    return (
+        "⚙️ <b>تنظیمات ساخت HUD</b>\n\n"
+        f"📊 درصد فعلی نوار XP: <b>{percent_int}٪</b>\n\n"
+        "می‌تونی قبل از شروع، درصد نوار XP رو تغییر بدی یا مستقیم پردازش رو شروع کنی."
+    )
+
+
+def build_rp_percent_kb(pending_percent: int) -> InlineKeyboardMarkup:
+    rows = []
+    row = []
+    for value in RP_XP_PERCENT_PRESETS:
+        mark = "✅ " if value == pending_percent else ""
+        row.append(InlineKeyboardButton(text=f"{mark}{value}٪", callback_data=f"rp_percent_set:{value}"))
+        if len(row) == 4:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+
+    rows.append([InlineKeyboardButton(text="✏️ وارد کردن عدد دلخواه", callback_data="rp_percent_custom")])
+    rows.append([InlineKeyboardButton(text="🔙 خروج", callback_data="rp_percent_exit")])
+    rows.append([InlineKeyboardButton(text="▶️ ادامه دادن", callback_data="rp_percent_continue")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_rp_percent_text(pending_percent: int) -> str:
+    return (
+        "🎚 <b>انتخاب درصد نوار XP</b>\n\n"
+        f"درصد انتخاب‌شده‌ی فعلی: <b>{pending_percent}٪</b>\n\n"
+        "یکی از درصدهای آماده رو بزن، یا با «✏️ وارد کردن عدد دلخواه» یک عدد دلخواه بین ۰ تا ۱۰۰ وارد کن.\n"
+        "در پایان روی «▶️ ادامه دادن» بزن تا تأیید بشه."
+    )
 
 
 async def run_item3d(input_path: str, output_obj: str):
@@ -1419,7 +1479,6 @@ async def handle_document(message: types.Message, state: FSMContext):
             await _send_manual_upload_prompt(message, user_id, reason="حجم فایل بیشتر از ۲۰ مگابایته و تلگرام اجازه دانلود نمیده")
             return
 
-        await message.answer("🔄 در حال پردازش...")
         input_path = os.path.join(INPUT_DIR, doc.file_name)
         output_name = os.path.splitext(doc.file_name)[0] + "_ui.png"
         output_path = os.path.join(OUTPUT_DIR, output_name)
@@ -1435,41 +1494,20 @@ async def handle_document(message: types.Message, state: FSMContext):
                 await message.answer(f"❌ خطا در دریافت فایل:\n{e}")
             return
 
-        try:
-            await run_node_processor(input_path, output_path)
-            user_modes.pop(user_id, None)
-            await message.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
-        except Exception as e:
-            err_text = str(e)
-            # همیشه خطای کامل رو تو لاگ سرور چاپ کن، چون پیام کوتاه‌شده‌ای که به
-            # کاربر نشون داده میشه ممکنه دلیل واقعی خطا رو نشون نده
-            print(f"[resource_pack] processing failed for {doc.file_name!r} (user={user_id}):\n{err_text}", flush=True)
-
-            is_mcpack = doc.file_name.endswith(".mcpack")
-            # قبلاً اینجا فقط چک می‌شد که آیا کلمه‌ی "icon" (یا مشابه) تو متن خطا هست،
-            # ولی تقریباً هر خطایی تو این پایپ‌لاین (حتی خطاهای بی‌ربط مثل کرش شارپ/کنواس)
-            # به یه مسیر یا فایل مربوط به icons.png اشاره می‌کنه، پس اون شرط تقریباً
-            # همیشه true می‌شد و خطای واقعی رو مخفی می‌کرد. الان فقط وقتی این پیام رو
-            # نشون بده که واقعاً فایل sprite (icons.png/gui.png/widgets.png) پیدا نشده
-            # یا به‌جای فایل، پوشه‌ست - یعنی همون خطاهایی که assertValidSpriteFile می‌ده.
-            lowered = err_text.lower()
-            missing_sprite_file = ("پیدا نشد:" in err_text or "یک فایل نیست" in err_text or "missing sprite sheet" in lowered)
-            path_error = is_mcpack and missing_sprite_file
-
-            if path_error:
-                await _send_manual_upload_prompt(
-                    message, user_id,
-                    reason=f"مسیر فایل‌ها در mcpack با Java فرق داره\n<code>{err_text[:200]}</code>"
-                )
-            else:
-                await message.answer(
-                    f"❌ خطا در پردازش:\n<code>{err_text[:300]}</code>\n\n"
-                    "میتونی فایل‌ها رو دستی بفرستی 👇",
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                        InlineKeyboardButton(text="📤 ارسال دستی فایل‌ها", callback_data="manual_pack_start")
-                    ]])
-                )
+        # فایل با موفقیت دانلود شد. به‌جای پردازش فوری، اول تنظیمات (درصد نوار XP) نشون داده می‌شه
+        # تا کاربر بتونه قبل از شروع پردازش، درصد دلخواهش رو انتخاب کنه.
+        await state.update_data(
+            rp_input_path=input_path,
+            rp_output_path=output_path,
+            rp_doc_name=doc.file_name,
+            rp_xp_percent=DEFAULT_XP_PERCENT,
+        )
+        await state.set_state(ResourcePackSettingsState.settings_menu)
+        await message.answer(
+            build_rp_settings_text(DEFAULT_XP_PERCENT),
+            parse_mode="HTML",
+            reply_markup=build_rp_settings_kb()
+        )
 
     # MINECRAFT 3D ITEM
     elif mode == "minecraft_3d":
@@ -2711,6 +2749,191 @@ async def _send_asset_files(callback: types.CallbackQuery, files: list, user_id:
     user_selections.pop(user_id, None)
     user_data.pop(user_id, None)
     user_modes.pop(user_id, None)
+
+# ====================== HUD OVERLAY - تنظیمات و انتخاب درصد XP ======================
+
+async def _process_resource_pack(answer_target, user_id: int, input_path: str, output_path: str, doc_name: str, xp_percent: float):
+    """اجرای واقعی پردازش پک و ارسال نتیجه یا خطا. answer_target هر آبجکتی با متد answer/answer_document (message یا callback.message)."""
+    try:
+        await run_node_processor(input_path, output_path, xp_percent=xp_percent)
+        user_modes.pop(user_id, None)
+        await answer_target.answer_document(FSInputFile(output_path), caption="✅ ریسورس پک پردازش و UI ساخته شد!")
+    except Exception as e:
+        err_text = str(e)
+        # همیشه خطای کامل رو تو لاگ سرور چاپ کن، چون پیام کوتاه‌شده‌ای که به
+        # کاربر نشون داده میشه ممکنه دلیل واقعی خطا رو نشون نده
+        print(f"[resource_pack] processing failed for {doc_name!r} (user={user_id}):\n{err_text}", flush=True)
+
+        is_mcpack = doc_name.endswith(".mcpack")
+        lowered = err_text.lower()
+        missing_sprite_file = ("پیدا نشد:" in err_text or "یک فایل نیست" in err_text or "missing sprite sheet" in lowered)
+        path_error = is_mcpack and missing_sprite_file
+
+        if path_error:
+            await _send_manual_upload_prompt(
+                answer_target, user_id,
+                reason=f"مسیر فایل‌ها در mcpack با Java فرق داره\n<code>{err_text[:200]}</code>"
+            )
+        else:
+            await answer_target.answer(
+                f"❌ خطا در پردازش:\n<code>{err_text[:300]}</code>\n\n"
+                "میتونی فایل‌ها رو دستی بفرستی 👇",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="📤 ارسال دستی فایل‌ها", callback_data="manual_pack_start")
+                ]])
+            )
+
+
+def _cleanup_rp_temp_file(state_data: dict):
+    input_path = state_data.get("rp_input_path")
+    if input_path and os.path.exists(input_path):
+        try:
+            os.remove(input_path)
+        except Exception:
+            pass
+
+
+@dp.callback_query(ResourcePackSettingsState.settings_menu, F.data == "rp_settings_xp")
+async def rp_settings_open_percent(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    pending_percent = round(_rp_xp_percent_value(data) * 100)
+    await state.update_data(rp_pending_percent=pending_percent)
+    await state.set_state(ResourcePackSettingsState.choosing_percent)
+    await callback.message.edit_text(
+        build_rp_percent_text(pending_percent),
+        parse_mode="HTML",
+        reply_markup=build_rp_percent_kb(pending_percent)
+    )
+    await callback.answer()
+
+
+@dp.callback_query(ResourcePackSettingsState.settings_menu, F.data == "rp_settings_start")
+async def rp_settings_start(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    data = await state.get_data()
+    input_path = data.get("rp_input_path")
+    output_path = data.get("rp_output_path")
+    doc_name = data.get("rp_doc_name", "")
+    xp_percent = _rp_xp_percent_value(data)
+
+    if not input_path or not os.path.exists(input_path):
+        await callback.answer("❌ فایل پک پیدا نشد. لطفاً دوباره ارسال کن.", show_alert=True)
+        await state.clear()
+        user_modes.pop(user_id, None)
+        return
+
+    await callback.answer()
+    await callback.message.edit_text("🔄 در حال پردازش...", reply_markup=None)
+    await _process_resource_pack(callback.message, user_id, input_path, output_path, doc_name, xp_percent)
+    await state.clear()
+
+
+@dp.callback_query(ResourcePackSettingsState.settings_menu, F.data == "rp_settings_cancel")
+async def rp_settings_cancel(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    _cleanup_rp_temp_file(data)
+    await state.clear()
+    user_modes.pop(callback.from_user.id, None)
+    await callback.message.edit_text("❌ عملیات لغو شد.\n\nمیتونی دوباره از منو شروع کنی.")
+    await callback.answer()
+
+
+@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data.startswith("rp_percent_set:"))
+async def rp_percent_set(callback: types.CallbackQuery, state: FSMContext):
+    try:
+        value = int(callback.data.split(":", 1)[1])
+    except (IndexError, ValueError):
+        await callback.answer()
+        return
+    value = max(0, min(100, value))
+
+    await state.update_data(rp_pending_percent=value)
+    await callback.message.edit_text(
+        build_rp_percent_text(value),
+        parse_mode="HTML",
+        reply_markup=build_rp_percent_kb(value)
+    )
+    await callback.answer(f"{value}٪ انتخاب شد")
+
+
+@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_percent_custom")
+async def rp_percent_custom(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(ResourcePackSettingsState.waiting_custom_percent)
+    await callback.message.edit_text(
+        "✏️ <b>وارد کردن درصد دلخواه</b>\n\n"
+        "یک عدد بین <b>0</b> تا <b>100</b> بفرست (فقط عدد، بدون علامت ٪).\n"
+        "مثال: <code>65</code>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="🔙 انصراف", callback_data="rp_percent_custom_cancel")
+        ]])
+    )
+    await callback.answer()
+
+
+@dp.callback_query(ResourcePackSettingsState.waiting_custom_percent, F.data == "rp_percent_custom_cancel")
+async def rp_percent_custom_cancel(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    pending_percent = data.get("rp_pending_percent", round(_rp_xp_percent_value(data) * 100))
+    await state.set_state(ResourcePackSettingsState.choosing_percent)
+    await callback.message.edit_text(
+        build_rp_percent_text(pending_percent),
+        parse_mode="HTML",
+        reply_markup=build_rp_percent_kb(pending_percent)
+    )
+    await callback.answer()
+
+
+@dp.message(ResourcePackSettingsState.waiting_custom_percent, F.text)
+async def rp_percent_custom_receive(message: types.Message, state: FSMContext):
+    text = message.text.strip().replace("٪", "").replace("%", "")
+    try:
+        value = int(text)
+    except ValueError:
+        await message.answer("❌ لطفاً فقط یک عدد بین 0 تا 100 بفرست. مثال: 65")
+        return
+
+    if value < 0 or value > 100:
+        await message.answer("❌ عدد باید بین 0 تا 100 باشه.")
+        return
+
+    await state.update_data(rp_pending_percent=value)
+    await state.set_state(ResourcePackSettingsState.choosing_percent)
+    await message.answer(
+        build_rp_percent_text(value),
+        parse_mode="HTML",
+        reply_markup=build_rp_percent_kb(value)
+    )
+
+
+@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_percent_exit")
+async def rp_percent_exit(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    xp_percent = _rp_xp_percent_value(data)
+    await state.set_state(ResourcePackSettingsState.settings_menu)
+    await callback.message.edit_text(
+        build_rp_settings_text(xp_percent),
+        parse_mode="HTML",
+        reply_markup=build_rp_settings_kb()
+    )
+    await callback.answer()
+
+
+@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_percent_continue")
+async def rp_percent_continue(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    pending_percent = data.get("rp_pending_percent", round(_rp_xp_percent_value(data) * 100))
+    xp_percent = pending_percent / 100
+    await state.update_data(rp_xp_percent=xp_percent)
+    await state.set_state(ResourcePackSettingsState.settings_menu)
+    await callback.message.edit_text(
+        build_rp_settings_text(xp_percent),
+        parse_mode="HTML",
+        reply_markup=build_rp_settings_kb()
+    )
+    await callback.answer("✅ درصد ثبت شد")
+
 
 # ====================== RESOURCE PACK MANUAL UPLOAD ======================
 
