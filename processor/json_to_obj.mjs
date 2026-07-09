@@ -104,7 +104,7 @@ const IDENTITY = [[1,0,0],[0,1,0],[0,0,1]];
 // استخوان تودرتو) ترتیب اشتباه به‌سرعت با هم جمع می‌شود و باعث می‌شد پرها/تکه‌ها
 // در مسیرهای کاملاً غلط قرار بگیرند — همان چیزی که در عکس‌ها دیده می‌شد.
 function eulerMatrix(rx, ry, rz) {
-  return multiplyMat(multiplyMat(rotationMatrix("x", -rx), rotationMatrix("y", -ry)), rotationMatrix("z", -rz));
+  return multiplyMat(multiplyMat(rotationMatrix("x", rx), rotationMatrix("y", ry)), rotationMatrix("z", rz));
 }
 
 /**
