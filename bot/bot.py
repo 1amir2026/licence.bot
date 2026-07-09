@@ -90,9 +90,7 @@ class ResourcePackManualState(StatesGroup):
     waiting_inventory = State()
 
 class ResourcePackSettingsState(StatesGroup):
-    settings_menu = State()
     choosing_percent = State()
-    waiting_custom_percent = State()
 
 # گزینه‌های زمانی لایسنس به ترتیب چرخش: (متن نمایشی, مقدار به دقیقه / None برای همیشگی / "custom" برای دلخواه)
 LICENSE_TIME_OPTIONS = [
@@ -214,59 +212,33 @@ async def run_node_processor(input_path: str, output_path: str, xp_percent: floa
         raise RuntimeError(f"Node processor failed: {stderr.decode()}")
 
 
-# ====================== HUD OVERLAY - تنظیمات درصد نوار XP ======================
-DEFAULT_XP_PERCENT = 0.7  # مقدار پیش‌فرض (۷۰٪)
-
-# مقادیر آماده‌ی درصد که به‌صورت دکمه نشون داده می‌شن
-RP_XP_PERCENT_PRESETS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+# ====================== HUD OVERLAY - انتخاب درصد نوار XP ======================
+DEFAULT_XP_PERCENT_INT = 70  # درصد پیش‌فرض (عدد صحیح 0 تا 100)
 
 
-def _rp_xp_percent_value(state_data: dict) -> float:
-    return state_data.get("rp_xp_percent", DEFAULT_XP_PERCENT)
+def _rp_xp_percent_int(state_data: dict) -> int:
+    return state_data.get("rp_xp_percent_int", DEFAULT_XP_PERCENT_INT)
 
 
-def build_rp_settings_kb() -> InlineKeyboardMarkup:
+def build_rp_percent_text(percent_int: int) -> str:
+    return (
+        "🎚 <b>تنظیم درصد نوار XP</b>\n\n"
+        f"📊 درصد فعلی: <b>{percent_int}٪</b>\n\n"
+        "با دکمه‌های پایین درصد رو کم/زیاد کن و بعد «شروع پردازش» رو بزن."
+    )
+
+
+def build_rp_percent_kb(percent_int: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎚 تغییر درصد نوار XP", callback_data="rp_settings_xp")],
-        [InlineKeyboardButton(text="▶️ شروع پردازش", callback_data="rp_settings_start")],
-        [InlineKeyboardButton(text="❌ لغو", callback_data="rp_settings_cancel")],
+        [InlineKeyboardButton(text=f"📊 {percent_int}٪", callback_data="rp_xp_noop")],
+        [
+            InlineKeyboardButton(text="➖10", callback_data="rp_xp_dec10"),
+            InlineKeyboardButton(text="➖5", callback_data="rp_xp_dec5"),
+            InlineKeyboardButton(text="➕5", callback_data="rp_xp_inc5"),
+            InlineKeyboardButton(text="➕10", callback_data="rp_xp_inc10"),
+        ],
+        [InlineKeyboardButton(text="✅ شروع پردازش", callback_data="rp_xp_start", style="success")],
     ])
-
-
-def build_rp_settings_text(xp_percent: float) -> str:
-    percent_int = round(xp_percent * 100)
-    return (
-        "⚙️ <b>تنظیمات ساخت HUD</b>\n\n"
-        f"📊 درصد فعلی نوار XP: <b>{percent_int}٪</b>\n\n"
-        "می‌تونی قبل از شروع، درصد نوار XP رو تغییر بدی یا مستقیم پردازش رو شروع کنی."
-    )
-
-
-def build_rp_percent_kb(pending_percent: int) -> InlineKeyboardMarkup:
-    rows = []
-    row = []
-    for value in RP_XP_PERCENT_PRESETS:
-        mark = "✅ " if value == pending_percent else ""
-        row.append(InlineKeyboardButton(text=f"{mark}{value}٪", callback_data=f"rp_percent_set:{value}"))
-        if len(row) == 4:
-            rows.append(row)
-            row = []
-    if row:
-        rows.append(row)
-
-    rows.append([InlineKeyboardButton(text="✏️ وارد کردن عدد دلخواه", callback_data="rp_percent_custom")])
-    rows.append([InlineKeyboardButton(text="🔙 خروج", callback_data="rp_percent_exit")])
-    rows.append([InlineKeyboardButton(text="▶️ ادامه دادن", callback_data="rp_percent_continue")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def build_rp_percent_text(pending_percent: int) -> str:
-    return (
-        "🎚 <b>انتخاب درصد نوار XP</b>\n\n"
-        f"درصد انتخاب‌شده‌ی فعلی: <b>{pending_percent}٪</b>\n\n"
-        "یکی از درصدهای آماده رو بزن، یا با «✏️ وارد کردن عدد دلخواه» یک عدد دلخواه بین ۰ تا ۱۰۰ وارد کن.\n"
-        "در پایان روی «▶️ ادامه دادن» بزن تا تأیید بشه."
-    )
 
 
 async def run_item3d(input_path: str, output_obj: str):
@@ -1494,19 +1466,18 @@ async def handle_document(message: types.Message, state: FSMContext):
                 await message.answer(f"❌ خطا در دریافت فایل:\n{e}")
             return
 
-        # فایل با موفقیت دانلود شد. به‌جای پردازش فوری، اول تنظیمات (درصد نوار XP) نشون داده می‌شه
-        # تا کاربر بتونه قبل از شروع پردازش، درصد دلخواهش رو انتخاب کنه.
+        # فایل با موفقیت دانلود شد. به‌جای پردازش فوری، مستقیم صفحه‌ی تنظیم درصد نوار XP نشون داده می‌شه.
         await state.update_data(
             rp_input_path=input_path,
             rp_output_path=output_path,
             rp_doc_name=doc.file_name,
-            rp_xp_percent=DEFAULT_XP_PERCENT,
+            rp_xp_percent_int=DEFAULT_XP_PERCENT_INT,
         )
-        await state.set_state(ResourcePackSettingsState.settings_menu)
+        await state.set_state(ResourcePackSettingsState.choosing_percent)
         await message.answer(
-            build_rp_settings_text(DEFAULT_XP_PERCENT),
+            build_rp_percent_text(DEFAULT_XP_PERCENT_INT),
             parse_mode="HTML",
-            reply_markup=build_rp_settings_kb()
+            reply_markup=build_rp_percent_kb(DEFAULT_XP_PERCENT_INT)
         )
 
     # MINECRAFT 3D ITEM
@@ -2785,37 +2756,53 @@ async def _process_resource_pack(answer_target, user_id: int, input_path: str, o
             )
 
 
-def _cleanup_rp_temp_file(state_data: dict):
-    input_path = state_data.get("rp_input_path")
-    if input_path and os.path.exists(input_path):
-        try:
-            os.remove(input_path)
-        except Exception:
-            pass
+@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_xp_noop")
+async def rp_xp_noop(callback: types.CallbackQuery, state: FSMContext):
+    # این دکمه فقط درصد فعلی رو نشون می‌ده و کاری انجام نمی‌ده
+    await callback.answer()
 
 
-@dp.callback_query(ResourcePackSettingsState.settings_menu, F.data == "rp_settings_xp")
-async def rp_settings_open_percent(callback: types.CallbackQuery, state: FSMContext):
+async def _rp_adjust_percent(callback: types.CallbackQuery, state: FSMContext, delta: int):
     data = await state.get_data()
-    pending_percent = round(_rp_xp_percent_value(data) * 100)
-    await state.update_data(rp_pending_percent=pending_percent)
-    await state.set_state(ResourcePackSettingsState.choosing_percent)
+    current = _rp_xp_percent_int(data)
+    new_value = max(0, min(100, current + delta))
+    await state.update_data(rp_xp_percent_int=new_value)
     await callback.message.edit_text(
-        build_rp_percent_text(pending_percent),
+        build_rp_percent_text(new_value),
         parse_mode="HTML",
-        reply_markup=build_rp_percent_kb(pending_percent)
+        reply_markup=build_rp_percent_kb(new_value)
     )
     await callback.answer()
 
 
-@dp.callback_query(ResourcePackSettingsState.settings_menu, F.data == "rp_settings_start")
-async def rp_settings_start(callback: types.CallbackQuery, state: FSMContext):
+@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_xp_dec10")
+async def rp_xp_dec10(callback: types.CallbackQuery, state: FSMContext):
+    await _rp_adjust_percent(callback, state, -10)
+
+
+@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_xp_dec5")
+async def rp_xp_dec5(callback: types.CallbackQuery, state: FSMContext):
+    await _rp_adjust_percent(callback, state, -5)
+
+
+@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_xp_inc5")
+async def rp_xp_inc5(callback: types.CallbackQuery, state: FSMContext):
+    await _rp_adjust_percent(callback, state, 5)
+
+
+@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_xp_inc10")
+async def rp_xp_inc10(callback: types.CallbackQuery, state: FSMContext):
+    await _rp_adjust_percent(callback, state, 10)
+
+
+@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_xp_start")
+async def rp_xp_start(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     data = await state.get_data()
     input_path = data.get("rp_input_path")
     output_path = data.get("rp_output_path")
     doc_name = data.get("rp_doc_name", "")
-    xp_percent = _rp_xp_percent_value(data)
+    xp_percent = _rp_xp_percent_int(data) / 100
 
     if not input_path or not os.path.exists(input_path):
         await callback.answer("❌ فایل پک پیدا نشد. لطفاً دوباره ارسال کن.", show_alert=True)
@@ -2827,112 +2814,6 @@ async def rp_settings_start(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text("🔄 در حال پردازش...", reply_markup=None)
     await _process_resource_pack(callback.message, user_id, input_path, output_path, doc_name, xp_percent)
     await state.clear()
-
-
-@dp.callback_query(ResourcePackSettingsState.settings_menu, F.data == "rp_settings_cancel")
-async def rp_settings_cancel(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    _cleanup_rp_temp_file(data)
-    await state.clear()
-    user_modes.pop(callback.from_user.id, None)
-    await callback.message.edit_text("❌ عملیات لغو شد.\n\nمیتونی دوباره از منو شروع کنی.")
-    await callback.answer()
-
-
-@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data.startswith("rp_percent_set:"))
-async def rp_percent_set(callback: types.CallbackQuery, state: FSMContext):
-    try:
-        value = int(callback.data.split(":", 1)[1])
-    except (IndexError, ValueError):
-        await callback.answer()
-        return
-    value = max(0, min(100, value))
-
-    await state.update_data(rp_pending_percent=value)
-    await callback.message.edit_text(
-        build_rp_percent_text(value),
-        parse_mode="HTML",
-        reply_markup=build_rp_percent_kb(value)
-    )
-    await callback.answer(f"{value}٪ انتخاب شد")
-
-
-@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_percent_custom")
-async def rp_percent_custom(callback: types.CallbackQuery, state: FSMContext):
-    await state.set_state(ResourcePackSettingsState.waiting_custom_percent)
-    await callback.message.edit_text(
-        "✏️ <b>وارد کردن درصد دلخواه</b>\n\n"
-        "یک عدد بین <b>0</b> تا <b>100</b> بفرست (فقط عدد، بدون علامت ٪).\n"
-        "مثال: <code>65</code>",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="🔙 انصراف", callback_data="rp_percent_custom_cancel")
-        ]])
-    )
-    await callback.answer()
-
-
-@dp.callback_query(ResourcePackSettingsState.waiting_custom_percent, F.data == "rp_percent_custom_cancel")
-async def rp_percent_custom_cancel(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    pending_percent = data.get("rp_pending_percent", round(_rp_xp_percent_value(data) * 100))
-    await state.set_state(ResourcePackSettingsState.choosing_percent)
-    await callback.message.edit_text(
-        build_rp_percent_text(pending_percent),
-        parse_mode="HTML",
-        reply_markup=build_rp_percent_kb(pending_percent)
-    )
-    await callback.answer()
-
-
-@dp.message(ResourcePackSettingsState.waiting_custom_percent, F.text)
-async def rp_percent_custom_receive(message: types.Message, state: FSMContext):
-    text = message.text.strip().replace("٪", "").replace("%", "")
-    try:
-        value = int(text)
-    except ValueError:
-        await message.answer("❌ لطفاً فقط یک عدد بین 0 تا 100 بفرست. مثال: 65")
-        return
-
-    if value < 0 or value > 100:
-        await message.answer("❌ عدد باید بین 0 تا 100 باشه.")
-        return
-
-    await state.update_data(rp_pending_percent=value)
-    await state.set_state(ResourcePackSettingsState.choosing_percent)
-    await message.answer(
-        build_rp_percent_text(value),
-        parse_mode="HTML",
-        reply_markup=build_rp_percent_kb(value)
-    )
-
-
-@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_percent_exit")
-async def rp_percent_exit(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    xp_percent = _rp_xp_percent_value(data)
-    await state.set_state(ResourcePackSettingsState.settings_menu)
-    await callback.message.edit_text(
-        build_rp_settings_text(xp_percent),
-        parse_mode="HTML",
-        reply_markup=build_rp_settings_kb()
-    )
-    await callback.answer()
-
-
-@dp.callback_query(ResourcePackSettingsState.choosing_percent, F.data == "rp_percent_continue")
-async def rp_percent_continue(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    pending_percent = data.get("rp_pending_percent", round(_rp_xp_percent_value(data) * 100))
-    xp_percent = pending_percent / 100
-    await state.update_data(rp_xp_percent=xp_percent)
-    await state.set_state(ResourcePackSettingsState.settings_menu)
-    await callback.message.edit_text(
-        build_rp_settings_text(xp_percent),
-        parse_mode="HTML",
-        reply_markup=build_rp_settings_kb()
-    )
-    await callback.answer("✅ درصد ثبت شد")
 
 
 # ====================== RESOURCE PACK MANUAL UPLOAD ======================
