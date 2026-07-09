@@ -161,10 +161,21 @@ function boxUVFaces(sx, sy, sz, uOffset, vOffset, textureW, textureH) {
   return norm;
 }
 
-/** UV دلخواه per-face (Java Edition) */
+/** UV دلخواه per-face (Java Edition)
+ *
+ * ⚠️ رفع باگ اصلی UV/تکسچر جاوا:
+ * مقادیر "uv" در فرمت Java همیشه بر مبنای گرید استاندارد ۱۶×۱۶ ماینکرفت تعریف می‌شوند —
+ * حتی وقتی "texture_size" چیزی غیر از ۱۶ باشد (مثلاً ۶۴×۶۴ برای بافت‌های سفارشی با وضوح بالا).
+ * "texture_size" فقط وضوح واقعی فایل PNG را مشخص می‌کند تا بشود جزئیات ریزتر (زیر-پیکسل) در uv
+ * نوشت؛ اما نقطه‌ی uv=16 همیشه یعنی «کل عرض/ارتفاع فیس»، صرف نظر از اینکه بافت واقعی ۱۶ پیکسل
+ * باشد یا ۶۴ پیکسل. نسخه قبلی روی texture_size واقعی (مثلاً ۶۴) تقسیم می‌کرد، در نتیجه هر UV
+ * فقط ۱/۴ اندازه‌ی واقعی‌اش را می‌گرفت و کل تکسچر در گوشه‌ی پایین-چپ مدل فشرده می‌شد — این دقیقاً
+ * همان «UV Mapping bug and Texture Bug» بود که روی gasmask.json دیده شد (تأیید شده با مقایسه‌ی
+ * دقیق ۳۳ المان × ۶ فیس با خروجی رسمی Blockbench: ضریب واقعی همیشه ۱۶ بود، نه texture_size).
+ */
 function javaFaceUV(uvArray, textureW, textureH, rotation = 0) {
   let [u1, v1, u2, v2] = uvArray;
-  u1 /= textureW; v1 /= textureH; u2 /= textureW; v2 /= textureH;
+  u1 /= 16; v1 /= 16; u2 /= 16; v2 /= 16;
   const corners = [
     [u1, 1 - v2],
     [u2, 1 - v2],
@@ -532,6 +543,37 @@ function parseJava(d) {
 if      (fmt === "bedrock")        parseBedrock(data);
 else if (fmt === "bedrock_legacy") parseBedrockLegacy(data);
 else if (fmt === "java")           parseJava(data);
+
+// ─── رفع باگ محور X در Bedrock ────────────────────────────────────────────────
+//
+// ⚠️ باگ اصلی «Bedrock Rotations» که در mermaid_tail.geo.json دیده شد:
+// محور X در فرمت Bedrock نسبت به فضای خروجی استاندارد OBJ/three.js (دست‌راستی) وارونه
+// است. یعنی origin/pivot/rotation در JSON همگی در یک فضای «X معکوس» نوشته شده‌اند؛
+// تا وقتی شکل حول X=0 متقارن باشد (مثل waistband/tail/tail_mid) این هیچ فرقی
+// نمی‌کند، اما به محض اینکه یک cube/bone نامتقارن باشد (مثل باله‌های چپ/راست دم،
+// یا دو‌تکه‌ی fin_alph) نتیجه دقیقاً روی محور X آینه می‌شود — همان چیزی که باعث
+// می‌شد «leftSideFin_alph» در خروجی قبلی دقیقاً جای «rightSideFin_alph» بنشیند
+// (تأیید شده با محاسبه‌ی دستی روی داده‌های واقعی JSON و تطبیق ۱۰۰٪ با خروجی رسمی
+// Blockbench پس از این تصحیح: هر ۷۲ ورتکس مدل mermaid tail).
+//
+// نکته مهم: خود محاسبات چرخش (rotationMatrix/eulerMatrix/applyTransformSteps) باید
+// دقیقاً با مقادیر خام JSON (بدون دستکاری) انجام شوند چون داخلی‌شان کاملاً سازگارند؛
+// فقط در همین مرحله‌ی پایانی، به‌عنوان یک تبدیل «آینه‌ای» (determinant = -1)، مختصات
+// X نهایی هر ورتکس/نرمال باید negate شود، و برای اینکه فیس‌ها بعد از آینه‌شدن دوباره
+// رو به بیرون باشند (در غیر این صورت مدل از داخل دیده می‌شود / backface-culled)،
+// ترتیب رأس‌های هر فیس هم باید معکوس شود.
+if (fmt === "bedrock" || fmt === "bedrock_legacy") {
+  for (let i = 0; i < vertices.length; i++) vertices[i][0] *= -1;
+  for (let i = 0; i < normals.length;  i++) normals[i][0]  *= -1;
+  for (let i = 0; i < faces_out.length; i++) {
+    const line = faces_out[i];
+    if (line.startsWith("f ")) {
+      const parts = line.trim().split(/\s+/);
+      const verts = parts.slice(1).reverse();
+      faces_out[i] = "f " + verts.join(" ");
+    }
+  }
+}
 
 // ─── نوشتن OBJ ───────────────────────────────────────────────────────────────
 
