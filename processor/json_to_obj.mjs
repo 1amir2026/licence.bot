@@ -98,9 +98,13 @@ function multiplyMat(A, B) {
 
 const IDENTITY = [[1,0,0],[0,1,0],[0,0,1]];
 
-// چرخش با ترتیب استاندارد Minecraft entity model: اول Z سپس X سپس Y
+// چرخش با ترتیب استاندارد Bedrock/Blockbench (معادل Euler order 'ZYX' در three.js):
+// یعنی اول X روی نقطه اعمال می‌شود (داخلی‌ترین)، بعد Y، و در نهایت Z (بیرونی‌ترین).
+// این نکته حیاتی است: توی زنجیره‌های عمیق (مثلاً بال‌ها/پرهای گریفین با ۵-۷ سطح
+// استخوان تودرتو) ترتیب اشتباه به‌سرعت با هم جمع می‌شود و باعث می‌شد پرها/تکه‌ها
+// در مسیرهای کاملاً غلط قرار بگیرند — همان چیزی که در عکس‌ها دیده می‌شد.
 function eulerMatrix(rx, ry, rz) {
-  return multiplyMat(multiplyMat(rotationMatrix("y", ry), rotationMatrix("x", rx)), rotationMatrix("z", rz));
+  return multiplyMat(multiplyMat(rotationMatrix("x", -rx), rotationMatrix("y", -ry)), rotationMatrix("z", -rz));
 }
 
 /**
@@ -346,12 +350,22 @@ function parseBedrock(d) {
       const boneMirror = !!bone.mirror;
 
       cubes.forEach((cube, ci) => {
+        // مقادیر origin/size/pivot در Bedrock بر حسب "پیکسل مدل" (۱۶ واحد = ۱ بلاک) هستند،
+        // دقیقاً مثل Java. Blockbench هنگام خروجی OBJ همه را بر ۱۶ تقسیم می‌کند تا مقیاس
+        // نهایی با بلاک واقعی یکی شود. نسخه قبلی این تقسیم را انجام نمی‌داد و باعث می‌شد
+        // مدل خروجی ۱۶ برابر بزرگ‌تر از حد واقعی باشد.
         const origin  = cube.origin || [0, 0, 0];
         const size    = cube.size   || [1, 1, 1];
         const inflate = cube.inflate || 0;
 
         const inflatedOrigin = [origin[0]-inflate, origin[1]-inflate, origin[2]-inflate];
         const inflatedSize   = [size[0]+inflate*2, size[1]+inflate*2, size[2]+inflate*2];
+
+        // تبدیل به مقیاس بلاک (÷۱۶) — هم برای هندسه و هم برای همه‌ی pivot ها،
+        // چون بعد از این نقطه همه محاسبات چرخش روی فضای بلاک انجام می‌شود.
+        const scaledOrigin = inflatedOrigin.map(v => v / 16);
+        const scaledSize   = inflatedSize.map(v => v / 16);
+        const scale16 = p => (p || [0, 0, 0]).map(v => v / 16);
 
         // زنجیره تبدیل: اول چرخش خود cube، بعد استخوان خودش، بعد همه والدها تا ریشه
         const transformSteps = [];
@@ -360,7 +374,7 @@ function parseBedrock(d) {
           const [rx, ry, rz] = cube.rotation;
           transformSteps.push({
             matrix: eulerMatrix(rx, ry, rz),
-            pivot:  cube.pivot || bonePivot,
+            pivot:  scale16(cube.pivot || bonePivot),
           });
         }
 
@@ -370,7 +384,7 @@ function parseBedrock(d) {
             const [rx, ry, rz] = cur.rotation;
             transformSteps.push({
               matrix: eulerMatrix(rx, ry, rz),
-              pivot:  cur.pivot || [0, 0, 0],
+              pivot:  scale16(cur.pivot || [0, 0, 0]),
             });
           }
           cur = cur.parent ? boneMap[cur.parent] : null;
@@ -404,7 +418,7 @@ function parseBedrock(d) {
         }
 
         addCube(
-          inflatedOrigin, inflatedSize, uvData,
+          scaledOrigin, scaledSize, uvData,
           transformSteps,
           `${boneName}_${ci}`,
           "mat_default",
