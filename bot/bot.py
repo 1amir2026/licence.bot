@@ -157,7 +157,10 @@ def get_access_block_message(user_id: int):
     """
     بررسی می‌کند آیا کاربر اجازه استفاده از امکانات بات (دکمه‌ها) را دارد یا نه.
     اگر دسترسی نداشته باشد (لایسنس نزده، بن شده یا لایسنسش تموم شده)
-    پیام مناسب را برمی‌گرداند، در غیر این صورت None یعنی دسترسی آزاد است.
+    پیام مناسب (فرمت‌شده با HTML) را برمی‌گرداند، در غیر این صورت None یعنی دسترسی آزاد است.
+    توجه: خروجی این تابع شامل تگ HTML است؛ هرجا با message.answer استفاده می‌شود
+    باید parse_mode="HTML" هم پاس داده شود. برای نمایش در alert (که HTML پشتیبانی
+    نمی‌شود) از strip_html_tags() روی خروجی استفاده کنید.
     """
     if is_admin(user_id):
         return None
@@ -168,19 +171,17 @@ def get_access_block_message(user_id: int):
 
         if not licenses:
             return (
-                "🔒 شما لایسنس فعالی ندارید\n"
-                "▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
-                "برای استفاده از امکانات ربات، ابتدا باید یک لایسنس فعال داشته باشید.\n\n"
+                "🔒 <b>شما لایسنس فعالی ندارید</b>\n\n"
+                "<blockquote>برای استفاده از امکانات ربات، ابتدا باید یک لایسنس فعال داشته باشید.\n\n"
                 "📩 برای دریافت لایسنس به ادمین پیام بدید:\n"
-                "@Amirmah198"
+                "@Amirmah198</blockquote>"
             )
 
         if any(l.banned for l in licenses):
             return (
-                "🚫 شما از استفاده از ربات بن شده‌اید\n"
-                "▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
-                "در صورت اعتراض می‌تونید به ادمین پیام بدید:\n"
-                "@Amirmah198"
+                "🚫 <b>شما از استفاده از ربات بن شده‌اید</b>\n\n"
+                "<blockquote>در صورت اعتراض می‌تونید به ادمین پیام بدید:\n"
+                "@Amirmah198</blockquote>"
             )
 
         now = datetime.utcnow()
@@ -193,14 +194,21 @@ def get_access_block_message(user_id: int):
             return None
 
         return (
-            "⏳ لایسنس شما به پایان رسیده\n"
-            "▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
-            "مدت اعتبار لایسنس قبلی‌تون تموم شده.\n"
+            "⏳ <b>لایسنس شما به پایان رسیده</b>\n\n"
+            "<blockquote>مدت اعتبار لایسنس قبلی‌تون تموم شده.\n"
             "برای خرید مجدد و ادامه استفاده از امکانات ربات:\n\n"
-            "📩 @AmirMah198"
+            "📩 @AmirMah198</blockquote>"
         )
     finally:
         session.close()
+
+
+def strip_html_tags(text: str) -> str:
+    """حذف تگ‌های HTML از یک متن، برای نمایش در جاهایی مثل alert که HTML پشتیبانی نمی‌شود."""
+    import re
+    return re.sub(r"<[^>]+>", "", text)
+
+
 
 
 # ثبت هندلرهای دانلود تامنیل یوتیوب (بعد از تعریف get_access_block_message)
@@ -703,7 +711,7 @@ async def start(message: types.Message):
 
         if has_any_license:
             # لایسنس داشته ولی الان منقضی شده؛ کیبورد باید حذف شود
-            await message.answer(block_msg, reply_markup=types.ReplyKeyboardRemove())
+            await message.answer(block_msg, parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
         else:
             # اولین بار است که استارت می‌زند و هیچ لایسنسی هم ندارد؛ کیبوردی نباید باشد
             await message.answer(
@@ -815,7 +823,7 @@ async def handle_main_menu_inline(callback: types.CallbackQuery):
     """
     block_msg = get_access_block_message(callback.from_user.id)
     if block_msg:
-        await callback.answer(block_msg, show_alert=True)
+        await callback.answer(strip_html_tags(block_msg), show_alert=True)
         return
 
     await callback.answer()
@@ -1373,7 +1381,7 @@ async def admin_search_user(message: types.Message, state: FSMContext):
 async def ask_for_pack(message: types.Message):
     block_msg = get_access_block_message(message.from_user.id)
     if block_msg:
-        await message.answer(block_msg)
+        await message.answer(block_msg, parse_mode="HTML")
         return
 
     user_modes[message.from_user.id] = "resource_pack"
@@ -1392,7 +1400,7 @@ async def ask_for_pack(message: types.Message):
 async def minecraft_3d(message: types.Message):
     block_msg = get_access_block_message(message.from_user.id)
     if block_msg:
-        await message.answer(block_msg)
+        await message.answer(block_msg, parse_mode="HTML")
         return
 
     user_modes[message.from_user.id] = "minecraft_3d"
@@ -1409,7 +1417,7 @@ async def minecraft_3d(message: types.Message):
 async def json_to_obj_mode(message: types.Message):
     block_msg = get_access_block_message(message.from_user.id)
     if block_msg:
-        await message.answer(block_msg)
+        await message.answer(block_msg, parse_mode="HTML")
         return
 
     user_modes[message.from_user.id] = "json_to_obj"
@@ -1427,7 +1435,7 @@ async def json_to_obj_mode(message: types.Message):
 async def minecraft_assets_mode(message: types.Message):
     block_msg = get_access_block_message(message.from_user.id)
     if block_msg:
-        await message.answer(block_msg)
+        await message.answer(block_msg, parse_mode="HTML")
         return
 
     user_modes[message.from_user.id] = "minecraft_assets"
@@ -1463,7 +1471,7 @@ async def handle_document(message: types.Message, state: FSMContext):
 
     block_msg = get_access_block_message(user_id)
     if block_msg:
-        await message.answer(block_msg)
+        await message.answer(block_msg, parse_mode="HTML")
         return
 
     mode = user_modes.get(user_id)
@@ -2913,7 +2921,7 @@ async def manual_pack_start(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     block_msg = get_access_block_message(user_id)
     if block_msg:
-        await callback.answer(block_msg, show_alert=True)
+        await callback.answer(strip_html_tags(block_msg), show_alert=True)
         return
 
     await state.set_state(ResourcePackManualState.waiting_icon)
@@ -3078,11 +3086,11 @@ async def license_expiry_checker():
                             try:
                                 await bot.send_message(
                                     lic.user_id,
-                                    "⏳ لایسنس شما به پایان رسیده\n"
-                                    "▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
-                                    "مدت اعتبار لایسنس‌تون تموم شده و دسترسیتون به امکانات ربات غیرفعال شد.\n\n"
+                                    "⏳ <b>لایسنس شما به پایان رسیده</b>\n\n"
+                                    "<blockquote>مدت اعتبار لایسنس‌تون تموم شده و دسترسیتون به امکانات ربات غیرفعال شد.\n\n"
                                     "برای خرید مجدد و ادامه استفاده از امکانات ربات:\n\n"
-                                    "📩 @AmirMah198",
+                                    "📩 @AmirMah198</blockquote>",
+                                    parse_mode="HTML",
                                     reply_markup=types.ReplyKeyboardRemove()
                                 )
                                 user_modes.pop(lic.user_id, None)
