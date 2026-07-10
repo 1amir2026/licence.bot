@@ -168,12 +168,20 @@ def get_access_block_message(user_id: int):
 
         if not licenses:
             return (
-                "❌ شما لایسنس فعالی ندارید.\n\n"
-                "برای دریافت لایسنس به ادمین مراجعه کنید:\n@Amirmah198"
+                "🔒 شما لایسنس فعالی ندارید\n"
+                "▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+                "برای استفاده از امکانات ربات، ابتدا باید یک لایسنس فعال داشته باشید.\n\n"
+                "📩 برای دریافت لایسنس به ادمین پیام بدید:\n"
+                "@Amirmah198"
             )
 
         if any(l.banned for l in licenses):
-            return "❌ شما از استفاده از ربات بن شده‌اید."
+            return (
+                "🚫 شما از استفاده از ربات بن شده‌اید\n"
+                "▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+                "در صورت اعتراض می‌تونید به ادمین پیام بدید:\n"
+                "@Amirmah198"
+            )
 
         now = datetime.utcnow()
         has_active = any(
@@ -185,8 +193,11 @@ def get_access_block_message(user_id: int):
             return None
 
         return (
-            "❌ لایسنس شما تموم شده.\n\n"
-            "میتونید برای خرید مجدد به @AmirMah198 برید."
+            "⏳ لایسنس شما به پایان رسیده\n"
+            "▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+            "مدت اعتبار لایسنس قبلی‌تون تموم شده.\n"
+            "برای خرید مجدد و ادامه استفاده از امکانات ربات:\n\n"
+            "📩 @AmirMah198"
         )
     finally:
         session.close()
@@ -1366,7 +1377,15 @@ async def ask_for_pack(message: types.Message):
         return
 
     user_modes[message.from_user.id] = "resource_pack"
-    await message.answer("📤 لطفاً فایل ریسورس پک خود را ارسال کنید.\nفقط فرمت‌های .zip یا .mcpack")
+    await message.answer(
+        "📦 <b>ساخت HUD Overlay از ریسورس پک</b>\n\n"
+        "📤 فایل ریسورس پکتو همینجا بفرست.\n"
+        "فقط فرمت <code>.zip</code> یا <code>.mcpack</code> قبول میشه.\n\n"
+        "<blockquote>💡 بعد از دریافت فایل، یه صفحه برای تنظیم درصد نوار XP باز میشه؛ "
+        "خودت درصد رو تنظیم می‌کنی و بعدش پردازش شروع میشه.\n"
+        "⏱ زمان تقریبی پردازش: ۱۰ تا ۲۵ ثانیه (بسته به حجم پک)</blockquote>",
+        parse_mode="HTML"
+    )
 
 
 @dp.message(F.text == "🧊 ساخت آیتم سه‌بعدی ماینکرافت")
@@ -1377,7 +1396,13 @@ async def minecraft_3d(message: types.Message):
         return
 
     user_modes[message.from_user.id] = "minecraft_3d"
-    await message.answer("🧊 فایل PNG آیتم را ارسال کنید.")
+    await message.answer(
+        "🧊 <b>ساخت آیتم سه‌بعدی ماینکرافت</b>\n\n"
+        "📤 فایل <b>PNG</b> آیتم موردنظرتو بفرست.\n\n"
+        "<blockquote>💡 از روی همون تکسچر، یه مدل سه‌بعدی (OBJ) ساخته میشه و به‌صورت فایل برات ارسال میشه.\n"
+        "⏱ زمان تقریبی ساخت: ۵ تا ۱۵ ثانیه</blockquote>",
+        parse_mode="HTML"
+    )
 
 
 @dp.message(F.text == "🔄 تبدیل JSON به OBJ")
@@ -1389,7 +1414,13 @@ async def json_to_obj_mode(message: types.Message):
 
     user_modes[message.from_user.id] = "json_to_obj"
     user_data.pop(message.from_user.id, None)
-    await message.answer("📤 **فایل JSON** مدل ماینکرافت را ارسال کنید.", parse_mode="Markdown")
+    await message.answer(
+        "🔄 <b>تبدیل JSON به OBJ</b>\n\n"
+        "📤 <b>مرحله ۱ از ۲</b> — فایل <b>JSON</b> مدل ماینکرافتو بفرست.\n\n"
+        "<blockquote>💡 بعدش فایل تکسچر (PNG) رو هم ازت می‌خوایم و در نهایت یه فایل OBJ + MTL همراه با پیش‌نمایش تصویری تحویلت میدیم.\n"
+        "⏱ زمان تقریبی کل فرایند: ۱۰ تا ۲۰ ثانیه</blockquote>",
+        parse_mode="HTML"
+    )
 
 # ====================== MINECRAFT ASSETS DOWNLOADER ======================
 @dp.message(F.text == "📥 گرفتن فایل‌های ماینکرافت")
@@ -1401,8 +1432,8 @@ async def minecraft_assets_mode(message: types.Message):
 
     user_modes[message.from_user.id] = "minecraft_assets"
     await message.answer(
-        "<b>📥 نام آیتم ماینکرافت را وارد کنید</b>\n\n"
-        "مثال:\n"
+        "📥 <b>گرفتن فایل‌های ماینکرافت</b>\n\n"
+        "اسم آیتم موردنظرتو بنویس، مثال:\n"
         "<code>diamond_sword</code>\n"
         "<code>copper tools</code>\n"
         "<code>spear</code>\n"
@@ -1416,7 +1447,9 @@ async def minecraft_assets_mode(message: types.Message):
         "• برای نیزه بنویس: <code>spear</code> یا <code>spear in hand</code>\n"
         "• برای ابزار بنویس: <code>netherite tools</code> یا <code>...</code>\n"
         "• برای لایه آرمور بنویس: <code>armor layer</code>\n"
-        "• برای ore بنویس: <code>ore</code> یا <code>copper_ore</code>",
+        "• برای ore بنویس: <code>ore</code> یا <code>copper_ore</code>\n\n"
+        "<blockquote>💡 بعد از جستجو، لیست فایل‌های پیدا شده رو با دکمه نشونت میدیم تا انتخاب کنی و برات بفرستیم (حداکثر ۵ فایل هر بار).\n"
+        "⏱ زمان تقریبی جستجو: ۲ تا ۵ ثانیه</blockquote>",
     
         parse_mode="HTML"
     )
@@ -1442,7 +1475,11 @@ async def handle_document(message: types.Message, state: FSMContext):
     # RESOURCE PACK
     if mode == "resource_pack":
         if not (doc.file_name.endswith(".zip") or doc.file_name.endswith(".mcpack")):
-            await message.answer("❌ فقط ZIP یا MCPACK")
+            await message.answer(
+                "❌ <b>فرمت فایل اشتباهه</b>\n\n"
+                "<blockquote>فقط فایل <b>ZIP</b> یا <b>MCPACK</b> قبول میشه.</blockquote>",
+                parse_mode="HTML"
+            )
             return
 
         # بررسی حجم فایل قبل از دانلود (20MB)
@@ -1483,10 +1520,18 @@ async def handle_document(message: types.Message, state: FSMContext):
     # MINECRAFT 3D ITEM
     elif mode == "minecraft_3d":
         if not doc.file_name.lower().endswith(".png"):
-            await message.answer("❌ فقط فایل PNG مجاز است")
+            await message.answer(
+                "❌ <b>فرمت فایل اشتباهه</b>\n\n"
+                "<blockquote>فقط فایل <b>PNG</b> قبول میشه.</blockquote>",
+                parse_mode="HTML"
+            )
             return
 
-        await message.answer("🔄 در حال ساخت مدل سه‌بعدی...")
+        await message.answer(
+            "🔄 <b>در حال ساخت مدل سه‌بعدی...</b>\n\n"
+            "<blockquote>⏱ چند ثانیه صبر کن، معمولاً ۵ تا ۱۵ ثانیه طول می‌کشه.</blockquote>",
+            parse_mode="HTML"
+        )
         input_path = os.path.join(INPUT_DIR, doc.file_name)
         output_obj = os.path.join(OUTPUT_DIR, os.path.splitext(doc.file_name)[0] + ".obj")
 
@@ -1505,10 +1550,20 @@ async def handle_document(message: types.Message, state: FSMContext):
     # JSON TO OBJ - STEP 1
     elif mode == "json_to_obj":
         if not doc.file_name.lower().endswith(".json"):
-            await message.answer("❌ فقط فایل JSON مجاز است.")
+            await message.answer(
+                "❌ <b>فرمت فایل اشتباهه</b>\n\n"
+                "<blockquote>فقط فایل <b>JSON</b> قبول میشه.</blockquote>",
+                parse_mode="HTML"
+            )
             return
 
-        await message.answer("✅ JSON دریافت شد.\n\n📤 حالا **فایل تکسچر (PNG)** را ارسال کنید.")
+        await message.answer(
+            "✅ <b>JSON دریافت شد!</b>\n\n"
+            "📤 <b>مرحله ۲ از ۲</b> — حالا فایل تکسچر (<b>PNG</b>) رو بفرست.\n\n"
+            "<blockquote>💡 بعد از دریافت تکسچر، مدل OBJ + MTL ساخته میشه و یه پیش‌نمایش تصویری هم برات می‌فرستیم.\n"
+            "⏱ زمان تقریبی: ۱۰ تا ۲۰ ثانیه</blockquote>",
+            parse_mode="HTML"
+        )
 
         json_path = os.path.join(INPUT_DIR, doc.file_name)
         file = await bot.get_file(doc.file_id)
@@ -1523,10 +1578,18 @@ async def handle_document(message: types.Message, state: FSMContext):
     # JSON TO OBJ - STEP 2
     elif mode == "json_to_obj_waiting_texture":
         if not doc.file_name.lower().endswith(".png"):
-            await message.answer("❌ فقط فایل PNG مجاز است.")
+            await message.answer(
+                "❌ <b>فرمت فایل اشتباهه</b>\n\n"
+                "<blockquote>فقط فایل <b>PNG</b> قبول میشه.</blockquote>",
+                parse_mode="HTML"
+            )
             return
 
-        await message.answer("🔄 در حال ساخت OBJ + MTL + ZIP...")
+        await message.answer(
+            "🔄 <b>در حال ساخت OBJ + MTL + ZIP...</b>\n\n"
+            "<blockquote>⏱ چند ثانیه صبر کن، معمولاً ۱۰ تا ۲۰ ثانیه طول می‌کشه.</blockquote>",
+            parse_mode="HTML"
+        )
 
         data = user_data.get(user_id)
         if not data:
@@ -2550,18 +2613,22 @@ async def handle_minecraft_asset_name(message: types.Message):
     raw_input = message.text.strip()
     user_id = message.from_user.id
 
-    await message.answer(f"🔍 جستجو برای <b>{raw_input}</b> ...", parse_mode="HTML")
+    await message.answer(
+        f"🔍 <b>در حال جستجو برای «{raw_input}»...</b>\n\n"
+        "<blockquote>⏱ چند لحظه صبر کن، معمولاً ۲ تا ۵ ثانیه طول می‌کشه.</blockquote>",
+        parse_mode="HTML"
+    )
 
     names_to_search = resolve_names(raw_input)
     found_files = await search_mc_assets(names_to_search)
 
     if not found_files:
         await message.answer(
-            f"❌ هیچ فایلی برای <b>{raw_input}</b> پیدا نشد.\n\n"
-            "💡 نکات:\n"
+            f"❌ <b>هیچ فایلی برای «{raw_input}» پیدا نشد</b>\n\n"
+            "<blockquote>💡 نکات:\n"
             "• اسم انگلیسی دقیق بنویس (مثل <code>iron_sword</code>)\n"
             "• می‌تونی از فاصله یا آندرلاین استفاده کنی\n"
-            "• برای زره بنویس: <code>iron armor</code> یا <code>diamond armor</code>",
+            "• برای زره بنویس: <code>iron armor</code> یا <code>diamond armor</code></blockquote>",
             parse_mode="HTML"
         )
         user_modes.pop(user_id, None)
@@ -2576,8 +2643,8 @@ async def handle_minecraft_asset_name(message: types.Message):
     sent = await message.answer(
         f"✅ <b>{len(found_files)} فایل پیدا شد!</b>\n"
         f"(جستجو در {len(names_to_search)} نام: {', '.join(names_to_search[:5])}{'...' if len(names_to_search) > 5 else ''})\n\n"
-        "🔘 <b>۰ از ۵ فایل انتخاب شده</b>\n"
-        "فایل‌های مورد نظر رو انتخاب کن، سپس ارسال بزن:",
+        "🔘 <b>۰ از ۵ فایل انتخاب شده</b>\n\n"
+        "<blockquote>💡 فایل‌های مورد نظرتو با دکمه‌ها انتخاب کن (حداکثر ۵تا)، بعد «ارسال انتخاب‌ها» یا «ارسال همه» رو بزن.</blockquote>",
         reply_markup=kb,
         parse_mode="HTML"
     )
@@ -2624,7 +2691,7 @@ async def select_asset(callback: types.CallbackQuery):
         f"(جستجو در {len(names_to_search)} نام: {', '.join(names_to_search[:5])}{'...' if len(names_to_search) > 5 else ''})\n\n"
         f"🟢 <b>{count} از ۵ فایل انتخاب شده</b>\n"
         f"{'📋 انتخاب‌ها: ' + selected_names if count > 0 else '🔘 هنوز چیزی انتخاب نشده'}\n\n"
-        "فایل‌های مورد نظر رو انتخاب کن، سپس ارسال بزن:"
+        "<blockquote>💡 فایل‌های مورد نظرتو با دکمه‌ها انتخاب کن، بعد «ارسال انتخاب‌ها» یا «ارسال همه» رو بزن.</blockquote>"
     )
     new_kb = build_asset_keyboard(files, user_selections[user_id])
 
@@ -2670,7 +2737,11 @@ async def cancel_asset(callback: types.CallbackQuery):
 
 async def _send_asset_files(callback: types.CallbackQuery, files: list, user_id: int):
     """هلپر ارسال فایل‌ها با فرمت دلخواه"""
-    await callback.message.answer(f"📤 در حال ارسال {len(files)} فایل...")
+    await callback.message.answer(
+        f"📤 <b>در حال ارسال {len(files)} فایل...</b>\n\n"
+        "<blockquote>⏱ چند ثانیه صبر کن، بسته به تعداد فایل‌ها کمی طول می‌کشه.</blockquote>",
+        parse_mode="HTML"
+    )
 
     success = 0
     for file in files:
@@ -2811,7 +2882,12 @@ async def rp_xp_start(callback: types.CallbackQuery, state: FSMContext):
         return
 
     await callback.answer()
-    await callback.message.edit_text("🔄 در حال پردازش...", reply_markup=None)
+    await callback.message.edit_text(
+        "🔄 <b>در حال پردازش ریسورس پک...</b>\n\n"
+        "<blockquote>⏱ چند ثانیه صبر کن، معمولاً ۱۰ تا ۲۵ ثانیه طول می‌کشه.</blockquote>",
+        reply_markup=None,
+        parse_mode="HTML"
+    )
     await _process_resource_pack(callback.message, user_id, input_path, output_path, doc_name, xp_percent)
     await state.clear()
 
@@ -2849,7 +2925,9 @@ async def manual_pack_start(callback: types.CallbackQuery, state: FSMContext):
         "  مسیر: <code>assets/minecraft/textures/gui/icons.png</code>\n\n"
         "📁 <b>Bedrock (mcpack):</b>\n"
         "  مسیر: <code>textures/gui/icons.png ( هر اسم دیگری شبیه این )</code>\n\n"
-        "➡️ <b>فایل PNG رو بفرست:</b>",
+        "➡️ <b>فایل PNG رو بفرست:</b>\n\n"
+        "<blockquote>💡 بعد از این، یه فایل PNG دیگه (widgets.png) هم ازت می‌خوایم و در نهایت پک ساخته و پردازش میشه.\n"
+        "⏱ زمان تقریبی کل فرایند: ۱۵ تا ۳۰ ثانیه</blockquote>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="❌ لغو", callback_data="manual_pack_cancel")
@@ -2895,7 +2973,9 @@ async def manual_receive_icon(message: types.Message, state: FSMContext):
         "  مسیر: <code>assets/minecraft/textures/gui/widgets.png</code>\n\n"
         "📁 <b>Bedrock (mcpack):</b>\n"
         "  مسیر: <code>textures/gui/gui.png ( هر اسم دیگری شبیه این )</code>\n\n"
-        "➡️ <b>فایل PNG رو بفرست:</b>",
+        "➡️ <b>فایل PNG رو بفرست:</b>\n\n"
+        "<blockquote>💡 بعد از دریافت این فایل، پک ساخته میشه و بلافاصله پردازش شروع میشه.\n"
+        "⏱ زمان تقریبی پردازش: ۱۰ تا ۲۰ ثانیه</blockquote>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="❌ لغو", callback_data="manual_pack_cancel")
@@ -2929,7 +3009,11 @@ async def manual_receive_inventory(message: types.Message, state: FSMContext):
         await state.clear()
         return
 
-    await message.answer("🔄 در حال ساخت پک و پردازش...")
+    await message.answer(
+        "🔄 <b>در حال ساخت پک و پردازش...</b>\n\n"
+        "<blockquote>⏱ چند ثانیه صبر کن، معمولاً ۱۰ تا ۲۰ ثانیه طول می‌کشه.</blockquote>",
+        parse_mode="HTML"
+    )
 
     # هر اسمی داشت، به widgets.png تغییر میده
     widgets_path = os.path.join(INPUT_DIR, f"manual_{user_id}_widgets.png")
@@ -2994,8 +3078,11 @@ async def license_expiry_checker():
                             try:
                                 await bot.send_message(
                                     lic.user_id,
-                                    "❌ لایسنس شما تموم شده.\n\n"
-                                    "میتونید برای خرید مجدد به @AmirMah198 برید.",
+                                    "⏳ لایسنس شما به پایان رسیده\n"
+                                    "▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+                                    "مدت اعتبار لایسنس‌تون تموم شده و دسترسیتون به امکانات ربات غیرفعال شد.\n\n"
+                                    "برای خرید مجدد و ادامه استفاده از امکانات ربات:\n\n"
+                                    "📩 @AmirMah198",
                                     reply_markup=types.ReplyKeyboardRemove()
                                 )
                                 user_modes.pop(lic.user_id, None)
