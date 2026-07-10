@@ -32,19 +32,27 @@ const mtlPath = path.join(dir, baseName + ".mtl");
 
 // ─── خواندن MTL ──────────────────────────────────────────────────────────────
 function parseMTL(p) {
-  const map = {}; // matName -> textureFileName
-  if (!fs.existsSync(p)) return map;
+  const map = {};   // matName -> textureFileName
+  const tints = {};  // matName -> [r,g,b] هرکدوم 0..1 (برای وجه‌هایی مثل بالای grass_block)
+  if (!fs.existsSync(p)) return { map, tints };
   const lines = fs.readFileSync(p, "utf-8").split("\n");
   let current = null;
   for (const raw of lines) {
     const line = raw.trim();
     if (line.startsWith("newmtl ")) current = line.slice(7).trim();
     else if (line.startsWith("map_Kd ") && current) map[current] = line.slice(7).trim();
+    else if (line.startsWith("# tint ") && current) {
+      // خط غیراستاندارد که bot.py برای وجه‌های biome-tinted (مثل grass_block_top) می‌نویسه
+      const parts = line.slice(7).trim().split(/\s+/).map(Number);
+      if (parts.length === 3 && parts.every(n => isFinite(n))) {
+        tints[current] = [parts[0] / 255, parts[1] / 255, parts[2] / 255];
+      }
+    }
   }
-  return map;
+  return { map, tints };
 }
 
-const matToTexFile = parseMTL(mtlPath);
+const { map: matToTexFile, tints: matTint } = parseMTL(mtlPath);
 
 // ─── خواندن OBJ (با آگاهی از usemtl) ────────────────────────────────────────
 function parseOBJ(p) {
@@ -226,6 +234,12 @@ function render() {
           const u = w0*uv0[0] + w1*uv1[0] + w2*uv2[0];
           const vc = w0*uv0[1] + w1*uv1[1] + w2*uv2[1];
           [r,g,b,a] = sample(tex, u, vc);
+          const tint = matTint[mat];
+          if (tint) {
+            // ضرب رنگ (multiply) دقیقاً همون کاری که ماینکرافت با تکسچرهای
+            // خاکستریِ tintindex‌دار (چمن، برگ، آب و...) انجام می‌ده
+            r *= tint[0]; g *= tint[1]; b *= tint[2];
+          }
         }
         if (a < 10) continue;
         zbuf[zi] = depth;
