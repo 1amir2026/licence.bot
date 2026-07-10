@@ -2630,12 +2630,28 @@ async def resolve_block_cube_faces(session: aiohttp.ClientSession, block_name: s
             return resolve_var(merged.get(val[1:]), depth + 1)
         return val.replace("minecraft:", "")
 
+    # بعضی وجه‌ها (مثلاً "up" برای grass_block) توی مدل JSON فیلد "tintindex"
+    # دارن — یعنی ماینکرافت رنگ اون وجه رو بر اساس رنگ بایوم (چمن/برگ/آب و...)
+    # ضرب می‌کنه، و تکسچر خام‌اش (مثل grass_block_top.png) عمداً خاکستریِ
+    # بی‌رنگه. قبلاً این تینت اصلاً اعمال نمی‌شد و همون خاکستری خام رندر
+    # می‌شد (باگی که باعث می‌شد روی grass_block بجای سبز، خاکستری دیده بشه).
+    # این‌جا وجه‌هایی که tintindex دارن رو جدا نگه می‌داریم تا build_block_cube_obj
+    # بتونه موقع ساخت متریال، یک تینت پیش‌فرض (سبز) روش اعمال کنه.
     result = {}
+    tint_faces = set()
     for face in needed:
-        resolved = resolve_var(faces_def[face].get("texture"))
+        face_obj = faces_def[face]
+        resolved = resolve_var(face_obj.get("texture"))
         if not resolved:
             return None
         result[face] = resolved.split("/")[-1] + ".png"  # فقط اسم فایل، پوشه‌ش همیشه textures/block هست
+        if "tintindex" in face_obj:
+            tint_faces.add(face)
+
+    if tint_faces:
+        # کلید مخصوص که اسم وجه واقعی نیست، پس تو حلقه‌های face_defs.items() نادیده
+        # گرفته می‌شه؛ فقط توی build_block_cube_obj و فیلترهای FACE_KEYS خونده می‌شه.
+        result["_tint"] = ",".join(sorted(tint_faces))
 
     return result
 
@@ -2660,6 +2676,16 @@ async def download_block_textures(session: aiohttp.ClientSession, texture_files:
 
     await asyncio.gather(*[_dl(f) for f in texture_files])
     return local_paths
+
+
+# اسم ۶ وجه واقعی مکعب — برای فیلتر کردن کلیدهای کمکی مثل "_tint" که واقعی نیستن
+FACE_KEYS = ("up", "down", "north", "south", "east", "west")
+
+# رنگ پیش‌فرض تینت چمن/بایوم (نزدیک به رنگ پیش‌فرض بایوم Plains در ماینکرافت).
+# دقیق‌ترین رنگ واقعی بسته به بایومه، ولی چون این‌جا بایوم واقعی نداریم همین
+# یک رنگ ثابت و معقول رو برای هر وجهی که tintindex داره (فعلاً فقط بالای
+# grass_block) استفاده می‌کنیم.
+GRASS_TINT_RGB = (124, 189, 107)
 
 
 def build_block_cube_obj(faces: dict, texture_local_paths: dict, out_dir: str, base_name: str):
@@ -2697,18 +2723,26 @@ def build_block_cube_obj(faces: dict, texture_local_paths: dict, out_dir: str, b
     for u, v in uv_quad:
         lines_obj.append(f"vt {u:.6f} {v:.6f}")
 
-    mat_texfile = {}  # matName -> texture filename (used to build the mtl)
-    seen_mats = {}     # texfile -> matName (reuse material if two faces share the exact same texture)
+    # وجه‌هایی که resolve_block_cube_faces علامت‌شون زده (مثلاً "up" برای
+    # grass_block) — باید متریال جدا (تینت‌دار) بگیرن، نه اینکه با وجه‌های
+    # دیگه‌ای که از همون فایل تکسچر استفاده می‌کنن یکی بشن.
+    tint_faces = set(faces.get("_tint", "").split(",")) if faces.get("_tint") else set()
+
+    mat_texfile = {}  # matName -> (texture filename, is_tinted)
+    seen_mats = {}     # (texfile, is_tinted) -> matName (reuse material اگر دقیقاً همون ترکیب تکرار شد)
 
     for face_name, vidx in face_defs.items():
         tex_file = faces.get(face_name)
         if not tex_file or tex_file not in texture_local_paths:
             continue  # اگر تکسچر این وجه دانلود نشد، وجه رد میشه (به‌جای کرش کردن)
-        mat_name = seen_mats.get(tex_file)
+        is_tinted = face_name in tint_faces
+        dedup_key = (tex_file, is_tinted)
+        mat_name = seen_mats.get(dedup_key)
         if not mat_name:
-            mat_name = f"mat_{len(seen_mats) + 1}_{os.path.splitext(tex_file)[0]}"
-            seen_mats[tex_file] = mat_name
-            mat_texfile[mat_name] = tex_file
+            suffix = "_tint" if is_tinted else ""
+            mat_name = f"mat_{len(seen_mats) + 1}_{os.path.splitext(tex_file)[0]}{suffix}"
+            seen_mats[dedup_key] = mat_name
+            mat_texfile[mat_name] = (tex_file, is_tinted)
         lines_obj.append(f"usemtl {mat_name}")
         i1, i2, i3, i4 = [i + 1 for i in vidx]
         lines_obj.append(f"f {i1}/1 {i2}/2 {i3}/3")
@@ -2718,11 +2752,16 @@ def build_block_cube_obj(faces: dict, texture_local_paths: dict, out_dir: str, b
         f.write("\n".join(lines_obj) + "\n")
 
     lines_mtl = []
-    for mat_name, tex_file in mat_texfile.items():
+    for mat_name, (tex_file, is_tinted) in mat_texfile.items():
         lines_mtl.append(f"newmtl {mat_name}")
         lines_mtl.append("Ka 1.000 1.000 1.000")
         lines_mtl.append("Kd 1.000 1.000 1.000")
         lines_mtl.append(f"map_Kd {tex_file}")
+        if is_tinted:
+            # خط غیراستاندارد (مای‌تی‌ال معمولی همچین چیزی نداره) که فقط
+            # block_render.mjs می‌خونتش تا رنگ این وجه رو با تینت ضرب کنه.
+            tr, tg, tb = GRASS_TINT_RGB
+            lines_mtl.append(f"# tint {tr} {tg} {tb}")
         lines_mtl.append("")
     with open(mtl_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines_mtl))
@@ -3064,7 +3103,8 @@ async def build_asset_3d(callback: types.CallbackQuery):
 
     try:
         async with aiohttp.ClientSession() as session:
-            texture_files = set(faces.values())
+            # "_tint" یک کلید کمکیه (نه اسم وجه واقعی)، نباید به‌عنوان فایل تکسچر دانلود بشه
+            texture_files = {v for k, v in faces.items() if k in FACE_KEYS}
             local_textures = await download_block_textures(session, texture_files, work_dir)
 
         missing = texture_files - set(local_textures.keys())
@@ -3088,7 +3128,7 @@ async def build_asset_3d(callback: types.CallbackQuery):
             for fname, fpath in local_textures.items():
                 zf.write(fpath, fname)
 
-        unique_faces = len(set(faces.values()))
+        unique_faces = len({v for k, v in faces.items() if k in FACE_KEYS})
         face_info = (
             "یک تکسچر روی هر ۶ وجه (بلاک ساده)"
             if unique_faces == 1 else
