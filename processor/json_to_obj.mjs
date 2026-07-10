@@ -271,18 +271,29 @@ function addCube(origin, size, uvData, transformSteps, groupName, defaultMateria
   const NIDX = {};
   FACE_ORDER.forEach((f, i) => { NIDX[f] = nBase + i + 1; });
 
+  // uo (uv-order): برای هر فیس، این‌که کدام گوشه‌ی uvCorners (که همیشه به ترتیب
+  // ثابت bl,br,tr,tl یعنی [0,1,2,3] ساخته می‌شود) به کدام رأس در آرایه‌ی vi همان
+  // فیس می‌خورد. باگ اصلی این بود که همه‌ی فیس‌ها فرض می‌کردند vi هم دقیقاً به
+  // همان ترتیب bl,br,tr,tl است، در حالی که برای north/east/up این‌طور نیست
+  // (rawVerts طوری تعریف شده که فقط south/west/down با این فرض جور در می‌آیند)
+  // → نتیجه: تکسچر روی نیمی از فیس‌های هر مکعب (از جمله فیس روبه‌روی دوربین،
+  // "north") به‌صورت عمودی/قطری برعکس نگاشت می‌شد.
+  // مقادیر uo با تطبیق مستقیم عددی (raw vertex به raw vertex) در برابر خروجی
+  // رسمی Blockbench برای هر ۶ فیس به‌دست آمده (نه با فرض دستی) — چون فرمول
+  // ساده‌ی «همیشه bl,br,tr,tl» فقط برای north/east/up/down درست بود و برای
+  // south/west هم در عمل یک الگوی متفاوت (نه identity) لازم بود.
   const FACE_DEFS = [
-    { key: "north",  vi: [3, 2, 1, 0], nk: "north" },
-    { key: "south",  vi: [4, 5, 6, 7], nk: "south" },
-    { key: "west",   vi: [0, 4, 7, 3], nk: "west"  },
-    { key: "east",   vi: [1, 2, 6, 5], nk: "east"  },
-    { key: "down",   vi: [0, 1, 5, 4], nk: "down"  },
-    { key: "up",     vi: [3, 7, 6, 2], nk: "up"    },
+    { key: "north",  vi: [3, 2, 1, 0], nk: "north", uo: [3, 2, 1, 0] },
+    { key: "south",  vi: [4, 5, 6, 7], nk: "south", uo: [1, 0, 3, 2] },
+    { key: "west",   vi: [0, 4, 7, 3], nk: "west",  uo: [1, 0, 3, 2] },
+    { key: "east",   vi: [1, 2, 6, 5], nk: "east",  uo: [0, 3, 2, 1] },
+    { key: "down",   vi: [0, 1, 5, 4], nk: "down",  uo: [0, 1, 2, 3] },
+    { key: "up",     vi: [3, 7, 6, 2], nk: "up",    uo: [0, 3, 2, 1] },
   ];
 
   faces_out.push(`g ${groupName || "cube_" + groupCounter++}`);
 
-  FACE_DEFS.forEach(({ key, vi, nk }) => {
+  FACE_DEFS.forEach(({ key, vi, nk, uo }) => {
     // uvData از boxUVFaces با کلیدهای "top"/"bottom" پر می‌شود (نه up/down)،
     // پس هر دو نام معادل را برای هر فیس امتحان می‌کنیم تا هیچ فیسی گم نشود
     // (باگ قبلی: فیس‌های up/down هر مکعب همیشه حذف می‌شدند چون کلیدشان با
@@ -291,11 +302,20 @@ function addCube(origin, size, uvData, transformSteps, groupName, defaultMateria
     let uv = uvData[key] || uvData[nk] || uvData[altKey];
     if (!uv) return;
 
-    // mirror: در حالت box-uv، ستون east و west جابه‌جا می‌شود (رفتار واقعی Bedrock)
-    if (mirror && (nk === "east" || nk === "west") && Array.isArray(uv) && !Array.isArray(uv[0])) {
-      const otherKey = nk === "east" ? "west" : "east";
-      const otherUV = uvData[otherKey];
-      if (otherUV) uv = otherUV;
+    // mirror (رفتار واقعی Bedrock روی box-uv):
+    //   • east/west کل بلوک UV‌شان با هم جابه‌جا می‌شود (قبلاً پوشش داده شده بود)
+    //   • north/south علاوه بر آن، به‌صورت افقی (محور U) هم آینه می‌شوند —
+    //     همین بخش قبلاً جا افتاده بود و باعث می‌شد در کیوب‌های mirror:true
+    //     (مثل rightSideFin_alph) لبه‌ی داخلی/بیرونی باله برعکس بافت بگیرد.
+    let uMirrorFlip = false;
+    if (mirror && Array.isArray(uv) && !Array.isArray(uv[0])) {
+      if (nk === "east" || nk === "west") {
+        const otherKey = nk === "east" ? "west" : "east";
+        const otherUV = uvData[otherKey];
+        if (otherUV) uv = otherUV;
+      } else if (nk === "north" || nk === "south") {
+        uMirrorFlip = true;
+      }
     }
 
     let uvCorners, material;
@@ -307,7 +327,9 @@ function addCube(origin, size, uvData, transformSteps, groupName, defaultMateria
       material  = defaultMaterial;
     } else {
       const [u1, v1, u2, v2] = uv;
-      uvCorners = [[u1, v1], [u2, v1], [u2, v2], [u1, v2]];
+      uvCorners = uMirrorFlip
+        ? [[u2, v1], [u1, v1], [u1, v2], [u2, v2]]
+        : [[u1, v1], [u2, v1], [u2, v2], [u1, v2]];
       material  = defaultMaterial;
     }
 
@@ -317,7 +339,9 @@ function addCube(origin, size, uvData, transformSteps, groupName, defaultMateria
     }
 
     const uBase = vOffset_u + 1;
-    uvCorners.forEach(([u, v]) => uvCoords.push([u, v]));
+    // گوشه‌ها را به همان ترتیبی که با vi (رأس‌های واقعی این فیس) جور در می‌آید
+    // پوش می‌کنیم (uo)، نه به ترتیب ثابت قبلی — همان رفع باگ فلیپ عمودی/قطری.
+    uo.forEach(idx => uvCoords.push(uvCorners[idx]));
     vOffset_u += 4;
 
     const nIdx = NIDX[nk];
