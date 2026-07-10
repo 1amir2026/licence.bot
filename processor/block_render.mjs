@@ -89,7 +89,22 @@ async function loadTexture(fileName) {
   const fullPath = path.join(dir, fileName);
   try {
     const { data, info } = await sharp(fullPath).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    const tex = { width: info.width, height: info.height, data };
+    let { width, height } = info;
+    let pixels = data;
+
+    // بعضی تکسچرها (مثل command_block_front.png یا observer_front.png) در واقع
+    // یک نوار عمودیِ چند فریمِ انیمیشن‌ان (مثلاً 16x64 یعنی ۴ فریم پشت‌سرهم).
+    // اگر همه‌ی نوار رو روی یک وجه بکشیم، الگو چندبار تکرار/فشرده به‌نظر می‌رسه.
+    // پس فقط فریم اول (مربعِ بالای تصویر) رو نگه می‌داریم.
+    if (height > width && width > 0 && height % width === 0) {
+      const frameHeight = width;
+      const frameBytes = width * frameHeight * 4;
+      pixels = Buffer.from(data.subarray(0, frameBytes));
+      height = frameHeight;
+      console.log(`🎞  تکسچر انیمیت تشخیص داده شد: ${fileName} (${info.width}x${info.height}) → فریم اول (${width}x${height})`);
+    }
+
+    const tex = { width, height, data: pixels };
     textureCache.set(fileName, tex);
     return tex;
   } catch (e) {
