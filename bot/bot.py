@@ -2823,7 +2823,7 @@ async def search_mc_assets(names: list[str]) -> tuple[list[dict], dict]:
     seen_urls_model = {f["url"] for f in found}
     async with aiohttp.ClientSession() as session:
         for name in names:
-            name_clean = name.strip().lower().replace(".png", "").replace(".json", "")
+            name_clean = name.strip().lower().replace(".png", "").replace(".json", "").replace(" ", "_")
             if "/" in name_clean:
                 continue  # فرمت armor (humanoid/...) اینجا معنی نداره
             faces = await resolve_block_cube_faces(session, name_clean)
