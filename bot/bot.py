@@ -112,6 +112,11 @@ user_modes = {}
 user_data = {}  # برای ذخیره اطلاعات بین دو مرحله JSON و Texture
 user_selections = {}  # برای ذخیره انتخاب‌های کاربر در جستجوی asset
 
+# ====================== 3D BLOCK ITEM BUILDER (state) ======================
+_block_model_cache = {}       # model_path ("block/xxx") -> parsed JSON یا None (کش برای جلوگیری از فچ تکراری)
+block3d_last_use = {}         # user_id -> datetime آخرین باری که "ساخت آیتم سه‌بعدی" استفاده شده
+BLOCK3D_COOLDOWN_MINUTES = 10  # هر کاربر فقط هر ۱۰ دقیقه یک‌بار می‌تونه بسازه
+
 # ====================== PATHS ======================
 BASE_DIR = Path(__file__).resolve().parent.parent    # ← تغییر به parent.parent
 
@@ -121,6 +126,7 @@ NODE_SCRIPT = os.path.join(PROCESSOR_DIR, "processor.mjs")
 ITEM3D_SCRIPT = os.path.join(PROCESSOR_DIR, "item3d.mjs")
 JSON_TO_OBJ_SCRIPT = os.path.join(PROCESSOR_DIR, "json_to_obj.mjs")
 OBJ_PREVIEW_SCRIPT = os.path.join(PROCESSOR_DIR, "obj_preview.mjs")
+BLOCK_RENDER_SCRIPT = os.path.join(PROCESSOR_DIR, "block_render.mjs")
 
 INPUT_DIR = os.path.join(PROCESSOR_DIR, "input")
 OUTPUT_DIR = os.path.join(PROCESSOR_DIR, "output")
@@ -320,6 +326,27 @@ async def run_obj_preview(obj_path: str, texture_path: str, preview_path: str):
         raise RuntimeError(f"Preview file not created: {preview_path}")
 
     return preview_path
+
+
+async def run_block_render(obj_path: str, out_png: str, size: int = 512):
+    """اجرای block_render.mjs برای ساخت آیکون ایزومتریک (مثل اینونتوری) از یک OBJ چندمتریالی."""
+    os.makedirs(os.path.dirname(out_png), exist_ok=True)
+
+    proc = await asyncio.create_subprocess_exec(
+        "node", BLOCK_RENDER_SCRIPT, obj_path, out_png, str(size),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=PROCESSOR_DIR
+    )
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"Block render failed:\n{stderr.decode()}")
+
+    if not os.path.exists(out_png):
+        raise RuntimeError(f"Render file not created: {out_png}")
+
+    return out_png
 
 
 def create_zip_with_texture(base_name: str, obj_path: str, texture_path: str):
@@ -2507,7 +2534,211 @@ def resolve_names(raw: str) -> list[str]:
     # 5 – literal fallback (try both forms)
     return list(dict.fromkeys([underscore_key, space_key.replace(" ", "_")]))
 
-async def search_mc_assets(names: list[str]) -> list[dict]:
+# ─────────────────────────────────────────────────────────────────────────────
+# BLOCK MODEL RESOLVER — پیدا کردن تکسچرِ واقعیِ هر وجه از روی مدل بلاک
+#
+# خیلی از بلاک‌ها (مثل Command Block, Furnace, Crafting Table) اصلاً فایل
+# «block_name.png» ندارن؛ تکسچرشون توی چند فایل جدا (مثل command_block_front.png،
+# command_block_side.png، command_block_back.png) هست و این‌که کدوم فایل روی
+# کدوم وجه (up/down/north/south/east/west) میره، توی JSON مدل بلاک
+# (assets/minecraft/models/block/<name>.json) مشخص شده. این تابع همون زنجیره‌ی
+# parent → parent → ... رو دنبال می‌کنه (دقیقاً کاری که خود ماینکرافت انجام
+# می‌ده) تا وجه‌ها رو resolve کنه. برای بلاک‌های ساده (مثل dirt که پرنتش
+# block/cube_all هست) هر ۶ وجه به یک فایل ختم می‌شن؛ برای بلاک‌های جهت‌دار
+# (مثل command_block که پرنتش block/cube_directional/orientable هست) هر وجه
+# ممکنه فایل جدا داشته باشه.
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _fetch_model_json(session: aiohttp.ClientSession, model_path: str):
+    """model_path مثل 'block/dirt' — کش می‌شه که برای درخواست‌های بعدی دوباره فچ نشه."""
+    if model_path in _block_model_cache:
+        return _block_model_cache[model_path]
+    url = f"{MC_ASSETS_BASE}/models/{model_path}.json"
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as resp:
+            if resp.status != 200:
+                _block_model_cache[model_path] = None
+                return None
+            data = await resp.json(content_type=None)
+            _block_model_cache[model_path] = data
+            return data
+    except Exception:
+        _block_model_cache[model_path] = None
+        return None
+
+
+async def resolve_block_cube_faces(session: aiohttp.ClientSession, block_name: str):
+    """
+    اگر block_name یک بلاک مکعبیِ ساده (۶ وجه، from=[0,0,0] to=[16,16,16]) باشه،
+    دیکشنری {"up":file.png,"down":...,"north":...,"south":...,"east":...,"west":...}
+    برمی‌گردونه. برای بلاک‌های شکل‌خاص (پله، اسلب، نرده و ...) None برمی‌گردونه،
+    چون هندسه‌شون مکعب ساده نیست و ساخت آیتم سه‌بعدی مکعبی براشون معنی نداره.
+    """
+    chain = []
+    current = f"block/{block_name}"
+    seen = set()
+    for _ in range(12):
+        if current in seen:
+            break
+        seen.add(current)
+        data = await _fetch_model_json(session, current)
+        if not data:
+            break
+        chain.append(data)
+        parent = data.get("parent")
+        if not parent:
+            break
+        current = parent.replace("minecraft:", "")
+
+    if not chain:
+        return None
+
+    # اولین مدل (از برگ به‌سمت ریشه) که "elements" داره، هندسه‌ی واقعی بلاکه
+    elements = None
+    for m in chain:
+        if "elements" in m:
+            elements = m["elements"]
+            break
+
+    if not elements:
+        return None  # مدل بلاک هندسه‌ی صریح نداره
+
+    # بعضی بلاک‌ها (مثل grass_block) چند element دارن (مثلاً یک لایه‌ی overlay
+    # نیمه‌شفاف رنگی روی مکعب اصلی) — element اصلیِ تمام‌مکعب (۶ وجه کامل، از
+    # ۰,۰,۰ تا ۱۶,۱۶,۱۶) رو انتخاب می‌کنیم و overlayها رو نادیده می‌گیریم.
+    needed = ("up", "down", "north", "south", "east", "west")
+    elem = None
+    for e in elements:
+        if e.get("from") == [0, 0, 0] and e.get("to") == [16, 16, 16] and all(f in e.get("faces", {}) for f in needed):
+            elem = e
+            break
+
+    if not elem:
+        return None  # بلاک تمام‌مکعب نیست (پله/اسلب/نرده/...) → مکعب ساده معنی نداره
+
+    faces_def = elem.get("faces", {})
+
+    # ادغام «textures» از ریشه به‌سمت برگ (برگ مقدارهای دقیق‌تر رو override می‌کنه)
+    merged = {}
+    for m in reversed(chain):
+        merged.update(m.get("textures", {}))
+
+    def resolve_var(val, depth=0):
+        if depth > 10 or not isinstance(val, str):
+            return None
+        if val.startswith("#"):
+            return resolve_var(merged.get(val[1:]), depth + 1)
+        return val.replace("minecraft:", "")
+
+    result = {}
+    for face in needed:
+        resolved = resolve_var(faces_def[face].get("texture"))
+        if not resolved:
+            return None
+        result[face] = resolved.split("/")[-1] + ".png"  # فقط اسم فایل، پوشه‌ش همیشه textures/block هست
+
+    return result
+
+
+async def download_block_textures(session: aiohttp.ClientSession, texture_files: set, dest_dir: str) -> dict:
+    """تکسچرهای لازم رو از ریپو دانلود می‌کنه. خروجی: {filename: local_path} فقط برای اونایی که موفق بودن."""
+    os.makedirs(dest_dir, exist_ok=True)
+    local_paths = {}
+
+    async def _dl(fname):
+        url = f"{MC_ASSETS_BASE}/textures/block/{fname}"
+        local_path = os.path.join(dest_dir, fname)
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status == 200:
+                    data = await resp.read()
+                    with open(local_path, "wb") as f:
+                        f.write(data)
+                    local_paths[fname] = local_path
+        except Exception:
+            pass
+
+    await asyncio.gather(*[_dl(f) for f in texture_files])
+    return local_paths
+
+
+def build_block_cube_obj(faces: dict, texture_local_paths: dict, out_dir: str, base_name: str):
+    """
+    یک OBJ مکعبیِ استاندارد (واحد ۱×۱×۱) می‌سازه که هر کدوم از ۶ وجهش یک متریال
+    جدا داره (usemtl جدا برای هر وجه) و یک MTL که هر متریال رو به فایل تکسچر
+    درستش (map_Kd) وصل می‌کنه. برای بلاک‌هایی مثل dirt که هر ۶ متریال به یک
+    فایل ختم می‌شن هم همین ساختار کار می‌کنه (فقط نتیجه یک تکسچر یکسان رو نشون
+    می‌ده)، پس نیازی به مسیر جدا برای «بلاک ساده» نیست.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    obj_path = os.path.join(out_dir, f"{base_name}.obj")
+    mtl_path = os.path.join(out_dir, f"{base_name}.mtl")
+
+    # هشت رأس مکعب واحد، مرکز روی مبدأ
+    verts = [
+        (-0.5, -0.5, -0.5), (0.5, -0.5, -0.5), (0.5, 0.5, -0.5), (-0.5, 0.5, -0.5),  # back  (0-3)
+        (-0.5, -0.5, 0.5), (0.5, -0.5, 0.5), (0.5, 0.5, 0.5), (-0.5, 0.5, 0.5),      # front (4-7)
+    ]
+    # هر وجه: نام متریال، ایندکس ۴ رأس (پادساعت‌گرد از بیرون)، UV استاندارد
+    uv_quad = [(0, 0), (1, 0), (1, 1), (0, 1)]
+    face_defs = {
+        "north": [1, 0, 3, 2],  # -Z را می‌بینیم از -Z به سمت +Z... (north = -Z در نگاشت ماینکرافت)
+        "south": [4, 5, 6, 7],
+        "west":  [0, 4, 7, 3],
+        "east":  [5, 1, 2, 6],
+        "up":    [3, 7, 6, 2],
+        "down":  [4, 0, 1, 5],
+    }
+
+    lines_obj = ["# generated by bot.py – block cube (multi-material)"]
+    lines_obj.append(f"mtllib {base_name}.mtl")
+    for x, y, z in verts:
+        lines_obj.append(f"v {x:.6f} {y:.6f} {z:.6f}")
+    for u, v in uv_quad:
+        lines_obj.append(f"vt {u:.6f} {v:.6f}")
+
+    mat_texfile = {}  # matName -> texture filename (used to build the mtl)
+    seen_mats = {}     # texfile -> matName (reuse material if two faces share the exact same texture)
+
+    for face_name, vidx in face_defs.items():
+        tex_file = faces.get(face_name)
+        if not tex_file or tex_file not in texture_local_paths:
+            continue  # اگر تکسچر این وجه دانلود نشد، وجه رد میشه (به‌جای کرش کردن)
+        mat_name = seen_mats.get(tex_file)
+        if not mat_name:
+            mat_name = f"mat_{len(seen_mats) + 1}_{os.path.splitext(tex_file)[0]}"
+            seen_mats[tex_file] = mat_name
+            mat_texfile[mat_name] = tex_file
+        lines_obj.append(f"usemtl {mat_name}")
+        i1, i2, i3, i4 = [i + 1 for i in vidx]
+        lines_obj.append(f"f {i1}/1 {i2}/2 {i3}/3")
+        lines_obj.append(f"f {i1}/1 {i3}/3 {i4}/4")
+
+    with open(obj_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines_obj) + "\n")
+
+    lines_mtl = []
+    for mat_name, tex_file in mat_texfile.items():
+        lines_mtl.append(f"newmtl {mat_name}")
+        lines_mtl.append("Ka 1.000 1.000 1.000")
+        lines_mtl.append("Kd 1.000 1.000 1.000")
+        lines_mtl.append(f"map_Kd {tex_file}")
+        lines_mtl.append("")
+    with open(mtl_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines_mtl))
+
+    # کپی تکسچرها کنار OBJ (block_render.mjs انتظار داره تکسچرها هم‌پوشه‌ی OBJ باشن)
+    for tex_file, local_path in texture_local_paths.items():
+        dest = os.path.join(out_dir, tex_file)
+        if os.path.abspath(dest) != os.path.abspath(local_path):
+            with open(local_path, "rb") as src, open(dest, "wb") as dst:
+                dst.write(src.read())
+
+    return obj_path, mtl_path
+
+
+async def search_mc_assets(names: list[str]) -> tuple[list[dict], dict]:
+    """خروجی: (لیست فایل‌های پیداشده, دیکشنری block_models برای دکمه‌ی ساخت سه‌بعدی)"""
     found = []
     seen = set()
 
@@ -2584,10 +2815,37 @@ async def search_mc_assets(names: list[str]) -> list[dict]:
             results = await asyncio.gather(*[check_url(*t) for t in tasks])
             found.extend([r for r in results if r is not None])
 
-    return found
+    # ── جستجوی بر پایه‌ی مدل بلاک (برای بلاک‌های چندتکسچره مثل Command Block) ──
+    # خیلی از بلاک‌ها فایل «block_name.png» ندارن (تکسچرشون چندتاست: front/side/back/…)
+    # پس جدا از HEAD-check بالا، مدل بلاک رو resolve می‌کنیم تا اسم واقعی فایل‌ها
+    # پیدا بشه و هم به لیست جستجو اضافه بشن، هم برای دکمه‌ی «ساخت آیتم سه‌بعدی» ذخیره بشن.
+    block_models: dict[str, dict] = {}  # block_name -> {"up":file, "down":file, ...}
+    seen_urls_model = {f["url"] for f in found}
+    async with aiohttp.ClientSession() as session:
+        for name in names:
+            name_clean = name.strip().lower().replace(".png", "").replace(".json", "")
+            if "/" in name_clean:
+                continue  # فرمت armor (humanoid/...) اینجا معنی نداره
+            faces = await resolve_block_cube_faces(session, name_clean)
+            if not faces:
+                continue
+            block_models[name_clean] = faces
+            for face, tex_file in faces.items():
+                url = f"{MC_ASSETS_BASE}/textures/block/{tex_file}"
+                if url in seen_urls_model:
+                    continue
+                seen_urls_model.add(url)
+                found.append({
+                    "name": tex_file,
+                    "url": url,
+                    "ext": ".png",
+                    "label": f"🖼 [block] {tex_file}"
+                })
+
+    return found, block_models
     
-def build_asset_keyboard(files: list, selected: list) -> InlineKeyboardMarkup:
-    """ساخت کیبورد با دکمه‌های سبز برای موارد انتخاب‌شده"""
+def build_asset_keyboard(files: list, selected: list, block_models: dict | None = None) -> InlineKeyboardMarkup:
+    """ساخت کیبورد با دکمه‌های سبز برای موارد انتخاب‌شده + دکمه‌ی «ساخت آیتم سه‌بعدی» برای بلاک‌های resolve‌شده"""
     selected_urls = {f["url"] for f in selected}
     kb_rows = []
     for i, file in enumerate(files):
@@ -2607,6 +2865,16 @@ def build_asset_keyboard(files: list, selected: list) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="📤 ارسال انتخاب‌ها (حداکثر ۵)", callback_data="asset_send"),
         InlineKeyboardButton(text="✅ ارسال همه", callback_data="asset_send_all"),
     ])
+
+    # دکمه‌ی «ساخت آیتم سه‌بعدی» — یک دکمه به‌ازای هر بلاکِ قابل‌ساخت (معمولاً یکی)
+    for block_name in (block_models or {}):
+        kb_rows.append([
+            InlineKeyboardButton(
+                text=f"🧊 ساخت آیتم سه‌بعدی: {block_name}",
+                callback_data=f"asset_build3d:{block_name}"
+            )
+        ])
+
     kb_rows.append([
         InlineKeyboardButton(text="❌ لغو", callback_data="asset_cancel")
     ])
@@ -2628,7 +2896,7 @@ async def handle_minecraft_asset_name(message: types.Message):
     )
 
     names_to_search = resolve_names(raw_input)
-    found_files = await search_mc_assets(names_to_search)
+    found_files, block_models = await search_mc_assets(names_to_search)
 
     if not found_files:
         await message.answer(
@@ -2643,15 +2911,21 @@ async def handle_minecraft_asset_name(message: types.Message):
         return
 
     user_selections[user_id] = []
-    user_data[user_id] = {"files": found_files, "item_name": raw_input}
+    user_data[user_id] = {"files": found_files, "item_name": raw_input, "block_models": block_models}
 
     # ساخت کیبورد
-    kb = build_asset_keyboard(found_files, user_selections[user_id])
+    kb = build_asset_keyboard(found_files, user_selections[user_id], block_models)
+
+    block3d_hint = (
+        "\n🧊 <b>این بلاک قابل ساخت به‌صورت آیتم سه‌بعدی (مکعب با تکسچر دقیق هر وجه) هست.</b>"
+        if block_models else ""
+    )
 
     sent = await message.answer(
         f"✅ <b>{len(found_files)} فایل پیدا شد!</b>\n"
         f"(جستجو در {len(names_to_search)} نام: {', '.join(names_to_search[:5])}{'...' if len(names_to_search) > 5 else ''})\n\n"
-        "🔘 <b>۰ از ۵ فایل انتخاب شده</b>\n\n"
+        "🔘 <b>۰ از ۵ فایل انتخاب شده</b>\n"
+        f"{block3d_hint}\n\n"
         "<blockquote>💡 فایل‌های مورد نظرتو با دکمه‌ها انتخاب کن (حداکثر ۵تا)، بعد «ارسال انتخاب‌ها» یا «ارسال همه» رو بزن.</blockquote>",
         reply_markup=kb,
         parse_mode="HTML"
@@ -2701,7 +2975,7 @@ async def select_asset(callback: types.CallbackQuery):
         f"{'📋 انتخاب‌ها: ' + selected_names if count > 0 else '🔘 هنوز چیزی انتخاب نشده'}\n\n"
         "<blockquote>💡 فایل‌های مورد نظرتو با دکمه‌ها انتخاب کن، بعد «ارسال انتخاب‌ها» یا «ارسال همه» رو بزن.</blockquote>"
     )
-    new_kb = build_asset_keyboard(files, user_selections[user_id])
+    new_kb = build_asset_keyboard(files, user_selections[user_id], user_data[user_id].get("block_models"))
 
     try:
         await callback.message.edit_text(new_text, reply_markup=new_kb, parse_mode="HTML")
@@ -2742,6 +3016,115 @@ async def cancel_asset(callback: types.CallbackQuery):
     user_data.pop(user_id, None)
     user_modes.pop(user_id, None)
     await callback.message.edit_text("❌ عملیات لغو شد.")
+
+@dp.callback_query(F.data.startswith("asset_build3d:"))
+async def build_asset_3d(callback: types.CallbackQuery):
+    """
+    ساخت آیتم سه‌بعدیِ یک بلاک: مکعبی که هر وجهش تکسچر درست خودش رو داره (مثل
+    Command Block که هر جهتش یک تکسچر جداست) یا برای بلاک‌های ساده مثل Dirt
+    هر ۶ وجه یک تکسچر یکسان. فقط هر ۱۰ دقیقه یک‌بار برای هر کاربر مجازه.
+    """
+    user_id = callback.from_user.id
+    block_msg = get_access_block_message(user_id)
+    if block_msg:
+        await callback.answer(strip_html_tags(block_msg), show_alert=True)
+        return
+
+    block_name = callback.data.split(":", 1)[1]
+    block_models = user_data.get(user_id, {}).get("block_models", {})
+    faces = block_models.get(block_name)
+    if not faces:
+        await callback.answer("❌ اطلاعات این بلاک منقضی شده، دوباره جستجو کن.", show_alert=True)
+        return
+
+    # ── چک لیمیت ۱۰ دقیقه‌ای ──
+    now = datetime.utcnow()
+    last = block3d_last_use.get(user_id)
+    if last and (now - last) < timedelta(minutes=BLOCK3D_COOLDOWN_MINUTES):
+        remaining = timedelta(minutes=BLOCK3D_COOLDOWN_MINUTES) - (now - last)
+        remaining_min = int(remaining.total_seconds() // 60) + 1
+        await callback.answer(
+            f"⏳ فقط هر {BLOCK3D_COOLDOWN_MINUTES} دقیقه یک‌بار می‌تونی آیتم سه‌بعدی بسازی.\n"
+            f"~{remaining_min} دقیقه‌ی دیگه دوباره امتحان کن.",
+            show_alert=True
+        )
+        return
+
+    block3d_last_use[user_id] = now  # همین الان قفل می‌کنیم که کلیک‌های موازی هم مسدود بشن
+    await callback.answer()
+
+    status_msg = await callback.message.answer(
+        f"🧊 <b>در حال ساخت آیتم سه‌بعدی «{block_name}»...</b>\n\n"
+        "<blockquote>⏱ چند ثانیه صبر کن، دانلود تکسچرها + رندر انجام میشه.</blockquote>",
+        parse_mode="HTML"
+    )
+
+    work_id = uuid.uuid4().hex[:10]
+    work_dir = os.path.join(OUTPUT_DIR, "block3d", work_id)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            texture_files = set(faces.values())
+            local_textures = await download_block_textures(session, texture_files, work_dir)
+
+        missing = texture_files - set(local_textures.keys())
+        if missing:
+            await status_msg.edit_text(
+                f"❌ <b>دانلود تکسچر ناموفق:</b> {', '.join(missing)}\n"
+                "دوباره امتحان کن.",
+                parse_mode="HTML"
+            )
+            return
+
+        obj_path, mtl_path = build_block_cube_obj(faces, local_textures, work_dir, block_name)
+        icon_path = os.path.join(work_dir, f"{block_name}_icon.png")
+        await run_block_render(obj_path, icon_path, size=512)
+
+        zip_path = os.path.join(OUTPUT_DIR, f"{block_name}_3d.zip")
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.write(obj_path, os.path.basename(obj_path))
+            zf.write(mtl_path, os.path.basename(mtl_path))
+            zf.write(icon_path, os.path.basename(icon_path))
+            for fname, fpath in local_textures.items():
+                zf.write(fpath, fname)
+
+        unique_faces = len(set(faces.values()))
+        face_info = (
+            "یک تکسچر روی هر ۶ وجه (بلاک ساده)"
+            if unique_faces == 1 else
+            f"{unique_faces} تکسچر مختلف روی وجه‌های مختلف (بلاک جهت‌دار)"
+        )
+
+        await callback.message.answer_photo(
+            FSInputFile(icon_path),
+            caption=(
+                f"🧊 <b>{block_name}</b>\n"
+                f"📐 {face_info}\n"
+                f"⏳ ساخت بعدی: {BLOCK3D_COOLDOWN_MINUTES} دقیقه‌ی دیگه"
+            ),
+            parse_mode="HTML"
+        )
+        await callback.message.answer_document(
+            FSInputFile(zip_path),
+            caption=f"📦 فایل OBJ + MTL + تکسچرها برای {block_name}"
+        )
+        await status_msg.delete()
+
+    except Exception as e:
+        print(f"[block3d] failed for {block_name!r} (user={user_id}):\n{e}", flush=True)
+        await status_msg.edit_text(
+            f"❌ خطا در ساخت آیتم سه‌بعدی:\n<code>{str(e)[:300]}</code>",
+            parse_mode="HTML"
+        )
+    finally:
+        try:
+            if os.path.isdir(work_dir):
+                for f in os.listdir(work_dir):
+                    os.remove(os.path.join(work_dir, f))
+                os.rmdir(work_dir)
+        except Exception:
+            pass
+
 
 async def _send_asset_files(callback: types.CallbackQuery, files: list, user_id: int):
     """هلپر ارسال فایل‌ها با فرمت دلخواه"""
