@@ -157,8 +157,8 @@ function boxUVFaces(sx, sy, sz, uOffset, vOffset, textureW, textureH) {
   const u0 = uOffset, v0 = vOffset;
 
   const faces = {
-    bottom: [u0 + sz,           v0,                u0 + sz + sx,     v0 + sz        ],
-    top:    [u0 + sz + sx,      v0,                u0 + sz + sx*2,   v0 + sz        ],
+    top:    [u0 + sz,           v0,                u0 + sz + sx,     v0 + sz        ],
+    bottom: [u0 + sz + sx,      v0,                u0 + sz + sx*2,   v0 + sz        ],
     north:  [u0 + sz,           v0 + sz,           u0 + sz + sx,     v0 + sz + sy   ],
     south:  [u0 + sz + sx + sz, v0 + sz,           u0 + sz*2 + sx*2, v0 + sz + sy   ],
     west:   [u0,                v0 + sz,           u0 + sz,          v0 + sz + sy   ],
